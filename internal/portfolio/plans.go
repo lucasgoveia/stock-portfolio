@@ -77,10 +77,16 @@ func (s *Service) PlanContribution(ctx context.Context, amount decimal.Decimal) 
 	return ContributionPlan{Plan: p.PlanContribution(in), Amount: amount, Tickers: tickers(snap)}, nil
 }
 
-// TrimsResult is an engine trim plan plus ticker lookup.
+// TrimsResult is an engine trim plan plus ticker lookup and, for B3 trims,
+// the tax effect of selling this month (spec §11.2).
 type TrimsResult struct {
 	engine.TrimPlan
 	Tickers map[string]string `json:"tickers"`
+	// Tax holds one entry per B3 asset with a suggested trim.
+	Tax []engine.TrimTax `json:"tax"`
+	// PoolConflict is true when this month's tactical exits use exemption
+	// room the core trims need (tax_pool_conflict).
+	PoolConflict bool `json:"pool_conflict"`
 }
 
 // Trims evaluates every sell trigger (spec §9).
@@ -93,7 +99,48 @@ func (s *Service) Trims(ctx context.Context) (TrimsResult, error) {
 	if err != nil {
 		return TrimsResult{}, err
 	}
-	return TrimsResult{TrimPlan: p.PlanTrims(s.trimInput(snap, p)), Tickers: tickers(snap)}, nil
+	r := TrimsResult{TrimPlan: p.PlanTrims(s.trimInput(snap, p)), Tickers: tickers(snap), Tax: []engine.TrimTax{}}
+	if err := s.addTrimTax(ctx, snap, &r); err != nil {
+		return TrimsResult{}, err
+	}
+	return r, nil
+}
+
+// addTrimTax estimates each B3 trim's tax against this month's sales so far
+// and flags a tax pool conflict.
+func (s *Service) addTrimTax(ctx context.Context, snap Snapshot, r *TrimsResult) error {
+	if s.d.Tax == nil {
+		return nil
+	}
+	mtd, err := s.d.Tax.Current(ctx)
+	if err != nil {
+		return err
+	}
+	tp := s.d.Tax.Params()
+	byID := map[string]Position{}
+	for _, x := range snap.Holdings {
+		byID[key(x.AssetID)] = x
+	}
+	seen := map[string]bool{}
+	coreStock := decimal.Zero
+	for _, list := range [][]engine.TrimSuggestion{r.Suggestions, r.RaiseCash, r.Swaps} {
+		for _, sug := range list {
+			x, ok := byID[sug.AssetID]
+			if !ok || x.Market != assets.MarketB3 || seen[sug.AssetID] {
+				continue
+			}
+			seen[sug.AssetID] = true
+			r.Tax = append(r.Tax, tp.TrimTaxImpact(sug.AssetID, x.Kind, sug.Quantity, sug.Price, x.AvgCost, mtd.StockSales, mtd.StockGains))
+			if x.Sleeve == assets.SleeveCore && x.Kind == "stock" {
+				coreStock = coreStock.Add(sug.Amount)
+			}
+		}
+	}
+	limit := tp.ExemptionLimit
+	r.PoolConflict = mtd.TacticalSales.IsPositive() && coreStock.IsPositive() &&
+		mtd.StockSales.Add(coreStock).GreaterThan(limit) &&
+		mtd.StockSales.Sub(mtd.TacticalSales).Add(coreStock).LessThanOrEqual(limit)
+	return nil
 }
 
 func (s *Service) trimInput(snap Snapshot, p engine.Params) engine.TrimInput {
@@ -154,6 +201,7 @@ var evaluatedTypes = []string{
 	"overweight", "overvalued", "raise_cash", "deploy_cash", "better_opportunity",
 	"below_floor", "undeployed_budget", "too_many_positions", "opportunity",
 	string(engine.TacticalTargetHit), string(engine.TacticalStopHit), string(engine.TacticalExpired), "tactical_count",
+	"tax_pool_conflict",
 }
 
 // Evaluate raises the portfolio alerts and resolves cleared ones. Run it from
@@ -188,14 +236,29 @@ func (s *Service) Evaluate(ctx context.Context) error {
 	}
 
 	plan := p.PlanTrims(s.trimInput(snap, p))
+	tr := TrimsResult{TrimPlan: plan, Tax: []engine.TrimTax{}}
+	if err := s.addTrimTax(ctx, snap, &tr); err != nil {
+		return err
+	}
+	taxOf := map[string]engine.TrimTax{}
+	for _, x := range tr.Tax {
+		taxOf[x.AssetID] = x
+	}
+	if tr.PoolConflict {
+		if err := up("tax_pool_conflict", nil, map[string]any{"tax": tr.Tax}); err != nil {
+			return err
+		}
+	}
 	for _, sug := range plan.Suggestions {
 		for _, r := range sug.Reasons {
 			if r != engine.ReasonOverweight && r != engine.ReasonOvervalued {
 				continue // thesis_broken is raised by the thesis service
 			}
-			if err := up(string(r), idOf(sug.AssetID), map[string]any{
-				"ticker": tk[sug.AssetID], "suggestion": sug,
-			}); err != nil {
+			payload := map[string]any{"ticker": tk[sug.AssetID], "suggestion": sug}
+			if t, ok := taxOf[sug.AssetID]; ok {
+				payload["tax"] = t
+			}
+			if err := up(string(r), idOf(sug.AssetID), payload); err != nil {
 				return err
 			}
 		}

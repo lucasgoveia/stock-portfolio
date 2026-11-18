@@ -752,6 +752,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/taxes/b3": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Monthly B3 tax: exemption, gains, carried losses and DARF */
+        get: operations["b3Taxes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/trades/{id}": {
         parameters: {
             query?: never;
@@ -868,6 +885,10 @@ export interface components {
             benchmark?: string;
             name?: string;
             sleeve?: string;
+        };
+        B3Taxes: {
+            months: components["schemas"]["TaxMonth"][] | null;
+            params: components["schemas"]["TaxParams"];
         };
         Beta: {
             /** Format: int64 */
@@ -1078,6 +1099,7 @@ export interface components {
             fair_value_date?: string;
             gate?: components["schemas"]["GateResult"];
             gate_error?: string;
+            kind: string;
             last_sell?: string;
             market: string;
             overvalued: boolean;
@@ -1294,6 +1316,42 @@ export interface components {
             upper: string;
             weight: string;
         };
+        TaxMonth: {
+            carried_in: string;
+            darf: string;
+            darf_code: string;
+            day_trade_loss_in: string;
+            day_trade_loss_out: string;
+            day_trade_result: string;
+            day_trade_taxable: string;
+            due_date: string;
+            exempt: boolean;
+            exempt_gain: string;
+            month: string;
+            sales: components["schemas"]["TaxSale"][] | null;
+            stock_sales: string;
+            swing_loss_in: string;
+            swing_loss_out: string;
+            swing_result: string;
+            swing_taxable: string;
+            tax: string;
+        };
+        TaxParams: {
+            darf_code: string;
+            darf_min: string;
+            day_trade_rate: string;
+            exemption_limit: string;
+            swing_rate: string;
+        };
+        TaxSale: {
+            asset_id: string;
+            date: string;
+            day_trade: boolean;
+            gain: string;
+            kind: string;
+            proceeds: string;
+            tactical: boolean;
+        };
         Thesis: {
             /** Format: int64 */
             asset_id: number;
@@ -1378,12 +1436,22 @@ export interface components {
             reason: string;
             reasons: string[] | null;
         };
+        TrimTax: {
+            asset_id: string;
+            estimated_tax: string;
+            exceeds_exemption: boolean;
+            fit_quantity: string;
+            month_sales: string;
+            month_sales_after: string;
+        };
         TrimsResult: {
+            pool_conflict: boolean;
             raise_cash: components["schemas"]["TrimSuggestion"][] | null;
             raise_cash_shortfall: string;
             skipped: components["schemas"]["TrimSkip"][] | null;
             suggestions: components["schemas"]["TrimSuggestion"][] | null;
             swaps: components["schemas"]["TrimSuggestion"][] | null;
+            tax: components["schemas"]["TrimTax"][] | null;
             tickers: {
                 [key: string]: string;
             };
@@ -3366,6 +3434,35 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["WeightsInput"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    b3Taxes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["B3Taxes"];
                 };
             };
             /** @description Error */

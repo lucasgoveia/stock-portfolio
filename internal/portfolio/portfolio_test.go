@@ -19,6 +19,7 @@ import (
 	"github.com/lucasgoveia/stock-portfolio/internal/research"
 	"github.com/lucasgoveia/stock-portfolio/internal/store"
 	"github.com/lucasgoveia/stock-portfolio/internal/tactical"
+	"github.com/lucasgoveia/stock-portfolio/internal/tax"
 	"github.com/lucasgoveia/stock-portfolio/internal/thesis"
 	"github.com/lucasgoveia/stock-portfolio/internal/trades"
 	"github.com/lucasgoveia/stock-portfolio/internal/valuation"
@@ -110,7 +111,7 @@ func setup(t *testing.T) *env {
 	rn := research.NewService(conn, as, clock)
 	e.research, e.tactical = rn, tactical.NewService(conn, as, rn)
 	e.svc = NewService(Deps{Conn: conn, Assets: as, Trades: tr, Cash: cs, Rates: rs, Ratings: rt, Valuation: va,
-		Thesis: th, Research: rn, Alerts: al, Tactical: e.tactical, Now: clock})
+		Thesis: th, Research: rn, Alerts: al, Tactical: e.tactical, Tax: tax.NewService(as, tr, clock), Now: clock})
 	return e
 }
 

@@ -25,6 +25,7 @@ import (
 	"github.com/lucasgoveia/stock-portfolio/internal/research"
 	"github.com/lucasgoveia/stock-portfolio/internal/store"
 	"github.com/lucasgoveia/stock-portfolio/internal/tactical"
+	"github.com/lucasgoveia/stock-portfolio/internal/tax"
 	"github.com/lucasgoveia/stock-portfolio/internal/thesis"
 	"github.com/lucasgoveia/stock-portfolio/internal/trades"
 	"github.com/lucasgoveia/stock-portfolio/internal/valuation"
@@ -76,9 +77,10 @@ func run() error {
 	cashSvc := cash.NewService(conn, rateStore, nil)
 	researchSvc := research.NewService(conn, assetSvc, nil)
 	tacticalSvc := tactical.NewService(conn, assetSvc, researchSvc)
+	taxSvc := tax.NewService(assetSvc, tradeSvc, nil)
 	portfolioSvc := portfolio.NewService(portfolio.Deps{
 		Conn: conn, Assets: assetSvc, Trades: tradeSvc, Cash: cashSvc, Rates: rateStore, Ratings: ratingSvc,
-		Valuation: valuationSvc, Thesis: thesisSvc, Research: researchSvc, Alerts: alertSvc, Tactical: tacticalSvc,
+		Valuation: valuationSvc, Thesis: thesisSvc, Research: researchSvc, Alerts: alertSvc, Tactical: tacticalSvc, Tax: taxSvc,
 	})
 	deps.Evaluators = []jobs.Evaluator{
 		{Name: "thesis", Run: thesisSvc.Evaluate},
@@ -114,6 +116,7 @@ func run() error {
 		api.WithPortfolio(portfolioSvc),
 		api.WithJobs(runner),
 		api.WithTactical(tacticalSvc, portfolioSvc),
+		api.WithTaxes(taxSvc),
 		api.WithUI(web.Dist()),
 	), ReadHeaderTimeout: 10 * time.Second}
 	go func() {

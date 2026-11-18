@@ -22,6 +22,7 @@ import (
 	"github.com/lucasgoveia/stock-portfolio/internal/research"
 	"github.com/lucasgoveia/stock-portfolio/internal/store/db"
 	"github.com/lucasgoveia/stock-portfolio/internal/tactical"
+	"github.com/lucasgoveia/stock-portfolio/internal/tax"
 	"github.com/lucasgoveia/stock-portfolio/internal/thesis"
 	"github.com/lucasgoveia/stock-portfolio/internal/trades"
 	"github.com/lucasgoveia/stock-portfolio/internal/valuation"
@@ -51,6 +52,7 @@ type Deps struct {
 	Research  *research.Service
 	Alerts    *alerts.Service
 	Tactical  *tactical.Service // optional: tactical setups (spec §10)
+	Tax       *tax.Service      // optional: B3 tax impact of trims (spec §11.2)
 	Params    engine.Params
 	Now       func() time.Time
 }
@@ -79,6 +81,7 @@ type Position struct {
 	AssetID   int64  `json:"asset_id"`
 	Ticker    string `json:"ticker"`
 	Market    string `json:"market"`
+	Kind      string `json:"kind"`
 	Currency  string `json:"currency"`
 	Sleeve    string `json:"sleeve"`
 	Status    string `json:"status"`
@@ -253,7 +256,7 @@ func (s *Service) Snapshot(ctx context.Context) (Snapshot, error) {
 
 	all := make([]*Position, 0, len(list))
 	for _, a := range list {
-		x := &Position{AssetID: a.ID, Ticker: a.Ticker, Market: a.Market, Currency: a.Currency, Sleeve: a.Sleeve,
+		x := &Position{AssetID: a.ID, Ticker: a.Ticker, Market: a.Market, Kind: a.Kind, Currency: a.Currency, Sleeve: a.Sleeve,
 			Status: a.Status, Benchmark: a.Benchmark, Quantity: decimal.Zero, AvgCost: decimal.Zero,
 			PriceBRL: decimal.Zero, ValueBRL: decimal.Zero, Weight: decimal.Zero, Catalyst: catalyst[a.ID]}
 		if ps, ok := pos[a.ID]; ok {

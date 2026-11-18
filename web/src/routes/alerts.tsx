@@ -55,6 +55,7 @@ const SEVERITY: Record<string, number> = {
   opportunity: 10,
   deploy_cash: 11,
   tactical_count: 12,
+  tax_pool_conflict: 4.5,
 }
 
 const SEVERE = new Set(['tactical_stop_hit', 'thesis_broken', 'raise_cash', 'overweight', 'below_floor', 'data_fetch_failed'])
@@ -190,8 +191,13 @@ function describe(a: Alert): string {
   const sug = p.suggestion as Suggestion | undefined
   switch (a.type) {
     case 'overweight':
-    case 'overvalued':
-      return sug ? `Trim ${qty(sug.quantity)} shares at about ${money(sug.price)} (${money(sug.amount)}).` : ''
+    case 'overvalued': {
+      if (!sug) return ''
+      const tax = p.tax as Schemas['TrimTax'] | undefined
+      const base = `Trim ${qty(sug.quantity)} shares at about ${money(sug.price)} (${money(sug.amount)}).`
+      if (!tax?.exceeds_exemption) return base
+      return `${base} Selling it all this month passes the R$ 20.000 exemption: about ${money(tax.estimated_tax)} in tax. ${qty(tax.fit_quantity)} shares fit this month; sell the rest next month to stay exempt.`
+    }
     case 'better_opportunity':
       return sug
         ? `${str(p.candidate)} scores and prices better. ${sug.full_exit ? 'Exit' : 'Trim'} ${qty(sug.quantity)} shares (${money(sug.amount)}) to fund it.`
@@ -228,6 +234,8 @@ function describe(a: Alert): string {
       return `The setup expired on ${str(p.expires_on)} without the catalyst. Exit, or extend the setup.`
     case 'tactical_count':
       return `${str(p.open)} open tactical positions; the rules allow ${str(p.max)}.`
+    case 'tax_pool_conflict':
+      return 'Tactical exits this month used exemption room the core trims need. Delay the trims to next month or accept the tax.'
     case 'data_fetch_failed':
       return `Step "${str(p.step)}" failed: ${str(p.error)}`
     default:
