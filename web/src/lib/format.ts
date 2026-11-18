@@ -57,3 +57,33 @@ export function decimalInput(v: string): string | null {
   const normalized = s.includes(',') ? s.replace(/\./g, '').replace(',', '.') : s
   return /^-?\d+(\.\d+)?$/.test(normalized) ? normalized : null
 }
+
+/** Percent input ("12.5") to a fraction string ("0.125") without floats. */
+export function percentToFraction(v: string): string | null {
+  const d = decimalInput(v)
+  if (d == null) return null
+  const neg = d.startsWith('-')
+  const [int = '0', dec = ''] = (neg ? d.slice(1) : d).split('.')
+  const digits = int.padStart(3, '0') + dec
+  const point = digits.length - dec.length - 2
+  const out = `${digits.slice(0, point)}.${digits.slice(point)}`.replace(/^0+(?=\d)/, '').replace(/\.?0+$/, '')
+  return (neg ? '-' : '') + (out === '' ? '0' : out)
+}
+
+/** Fraction string ("0.125") to a percent input ("12.5") without floats. */
+export function fractionToPercent(v: string): string {
+  const neg = v.startsWith('-')
+  const [int = '0', dec = ''] = (neg ? v.slice(1) : v).split('.')
+  const d = dec.padEnd(2, '0')
+  const out = `${int}${d.slice(0, 2)}.${d.slice(2)}`.replace(/^0+(?=\d)/, '').replace(/\.?0+$/, '').replace(/\.$/, '')
+  return (neg ? '-' : '') + (out === '' ? '0' : out)
+}
+
+/** A decimal string scaled to an integer with `places` decimals (truncated), for exact sums. */
+export function scaled(v: string, places: number): number {
+  const d = decimalInput(v) ?? '0'
+  const neg = d.startsWith('-')
+  const [int = '0', dec = ''] = (neg ? d.slice(1) : d).split('.')
+  const n = Number(int + dec.padEnd(places, '0').slice(0, places))
+  return neg ? -n : n
+}
