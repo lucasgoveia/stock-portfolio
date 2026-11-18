@@ -34,6 +34,11 @@ func (s *Service) params(ctx context.Context) (engine.Params, error) {
 		return engine.Params{}, err
 	}
 	p := s.d.Params
+	if s.d.Settings != nil {
+		if p, err = s.d.Settings.Params(ctx); err != nil {
+			return engine.Params{}, err
+		}
+	}
 	p.Weights = w
 	return p, nil
 }
@@ -128,7 +133,10 @@ func (s *Service) addTrimTax(ctx context.Context, snap Snapshot, r *TrimsResult)
 	if err != nil {
 		return err
 	}
-	tp := s.d.Tax.Params()
+	tp, err := s.d.Tax.Params(ctx)
+	if err != nil {
+		return err
+	}
 	byID := map[string]Position{}
 	for _, x := range snap.Holdings {
 		byID[key(x.AssetID)] = x

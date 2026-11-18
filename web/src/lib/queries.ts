@@ -53,3 +53,18 @@ export const trimsQuery = queryOptions({
   queryKey: qk.trims,
   queryFn: () => unwrap(api.GET('/api/trims')),
 })
+
+export const settingsQuery = queryOptions({
+  queryKey: ['settings'] as const,
+  queryFn: () => unwrap(api.GET('/api/settings')),
+})
+
+export const settingsStatusQuery = queryOptions({
+  queryKey: ['settings', 'status'] as const,
+  queryFn: () => unwrap(api.GET('/api/settings/status')),
+})
+
+export const ratingWeightsQuery = queryOptions({
+  queryKey: ['settings', 'rating-weights'] as const,
+  queryFn: () => unwrap(api.GET('/api/settings/rating-weights')),
+})

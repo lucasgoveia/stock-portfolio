@@ -1,6 +1,24 @@
 {
   "components": {
     "schemas": {
+      "AI": {
+        "additionalProperties": false,
+        "properties": {
+          "model": {
+            "description": "Model used by the AI analyst",
+            "type": "string"
+          },
+          "monthly_cap_usd": {
+            "description": "Spending cap per month (USD)",
+            "type": "string"
+          }
+        },
+        "required": [
+          "model",
+          "monthly_cap_usd"
+        ],
+        "type": "object"
+      },
       "Action": {
         "additionalProperties": false,
         "properties": {
@@ -195,6 +213,127 @@
         },
         "required": [
           "alerts"
+        ],
+        "type": "object"
+      },
+      "Allocation": {
+        "additionalProperties": false,
+        "properties": {
+          "band_lower_mult": {
+            "description": "Lower band as a multiple of target",
+            "type": "string"
+          },
+          "band_upper_cap": {
+            "description": "Upper band ceiling (fraction)",
+            "type": "string"
+          },
+          "band_upper_mult": {
+            "description": "Upper band as a multiple of target",
+            "type": "string"
+          },
+          "better_score_delta": {
+            "description": "Score lead a better alternative needs",
+            "type": "string"
+          },
+          "better_upside_delta": {
+            "description": "Upside lead (fraction) a better alternative needs",
+            "type": "string"
+          },
+          "cash_band_max": {
+            "description": "Highest cash target (fraction)",
+            "type": "string"
+          },
+          "cash_band_min": {
+            "description": "Lowest cash target (fraction)",
+            "type": "string"
+          },
+          "cash_base": {
+            "description": "Cash target at the lowest overvaluation (fraction)",
+            "type": "string"
+          },
+          "cash_span": {
+            "description": "Cash target added across the overvaluation range (fraction)",
+            "type": "string"
+          },
+          "clamp_max": {
+            "description": "Highest target weight (fraction)",
+            "type": "string"
+          },
+          "clamp_min": {
+            "description": "Lowest target weight (fraction)",
+            "type": "string"
+          },
+          "cooldown_days": {
+            "description": "Days between trims of the same asset",
+            "format": "int64",
+            "type": "integer"
+          },
+          "fair_value_max_months": {
+            "description": "Buy gate: fair value older than this blocks buys",
+            "format": "int64",
+            "type": "integer"
+          },
+          "hard_cap": {
+            "description": "Weight above which a position is flagged (fraction)",
+            "type": "string"
+          },
+          "hard_floor": {
+            "description": "Weight under which a position is flagged (fraction)",
+            "type": "string"
+          },
+          "min_score": {
+            "description": "Buy gate: minimum weighted score",
+            "type": "string"
+          },
+          "opportunity_mult": {
+            "description": "Price / fair value at or below which an opportunity opens",
+            "type": "string"
+          },
+          "overvalued_mult": {
+            "description": "Price / fair value above which an asset counts as overvalued",
+            "type": "string"
+          },
+          "ramp_stages": {
+            "description": "Tranches a new position is built in",
+            "format": "int64",
+            "type": "integer"
+          },
+          "raw_base": {
+            "description": "Raw target weight at score 1 (fraction)",
+            "type": "string"
+          },
+          "raw_slope": {
+            "description": "Raw weight added per score point (fraction)",
+            "type": "string"
+          },
+          "trim_fraction": {
+            "description": "Share of the excess sold per trim step (fraction)",
+            "type": "string"
+          }
+        },
+        "required": [
+          "raw_base",
+          "raw_slope",
+          "clamp_min",
+          "clamp_max",
+          "band_lower_mult",
+          "band_upper_mult",
+          "band_upper_cap",
+          "hard_floor",
+          "hard_cap",
+          "cash_base",
+          "cash_span",
+          "overvalued_mult",
+          "cash_band_min",
+          "cash_band_max",
+          "min_score",
+          "fair_value_max_months",
+          "opportunity_mult",
+          "ramp_stages",
+          "trim_fraction",
+          "cooldown_days",
+          "better_score_delta",
+          "better_upside_delta"
         ],
         "type": "object"
       },
@@ -1088,6 +1227,86 @@
         ],
         "type": "object"
       },
+      "GroupAI": {
+        "additionalProperties": false,
+        "properties": {
+          "defaults": {
+            "$ref": "#/components/schemas/AI"
+          },
+          "values": {
+            "$ref": "#/components/schemas/AI"
+          }
+        },
+        "required": [
+          "values",
+          "defaults"
+        ],
+        "type": "object"
+      },
+      "GroupAllocation": {
+        "additionalProperties": false,
+        "properties": {
+          "defaults": {
+            "$ref": "#/components/schemas/Allocation"
+          },
+          "values": {
+            "$ref": "#/components/schemas/Allocation"
+          }
+        },
+        "required": [
+          "values",
+          "defaults"
+        ],
+        "type": "object"
+      },
+      "GroupPlanner": {
+        "additionalProperties": false,
+        "properties": {
+          "defaults": {
+            "$ref": "#/components/schemas/Planner"
+          },
+          "values": {
+            "$ref": "#/components/schemas/Planner"
+          }
+        },
+        "required": [
+          "values",
+          "defaults"
+        ],
+        "type": "object"
+      },
+      "GroupTactical": {
+        "additionalProperties": false,
+        "properties": {
+          "defaults": {
+            "$ref": "#/components/schemas/Tactical"
+          },
+          "values": {
+            "$ref": "#/components/schemas/Tactical"
+          }
+        },
+        "required": [
+          "values",
+          "defaults"
+        ],
+        "type": "object"
+      },
+      "GroupTax": {
+        "additionalProperties": false,
+        "properties": {
+          "defaults": {
+            "$ref": "#/components/schemas/Tax"
+          },
+          "values": {
+            "$ref": "#/components/schemas/Tax"
+          }
+        },
+        "required": [
+          "values",
+          "defaults"
+        ],
+        "type": "object"
+      },
       "Health": {
         "additionalProperties": false,
         "properties": {
@@ -1191,6 +1410,30 @@
         "required": [
           "kind",
           "name"
+        ],
+        "type": "object"
+      },
+      "KeyStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "configured": {
+            "type": "boolean"
+          },
+          "label": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "label",
+          "configured",
+          "source"
         ],
         "type": "object"
       },
@@ -1461,6 +1704,57 @@
         },
         "required": [
           "status"
+        ],
+        "type": "object"
+      },
+      "Overview": {
+        "additionalProperties": false,
+        "properties": {
+          "ai": {
+            "$ref": "#/components/schemas/GroupAI"
+          },
+          "allocation": {
+            "$ref": "#/components/schemas/GroupAllocation"
+          },
+          "planner": {
+            "$ref": "#/components/schemas/GroupPlanner"
+          },
+          "tactical": {
+            "$ref": "#/components/schemas/GroupTactical"
+          },
+          "tax": {
+            "$ref": "#/components/schemas/GroupTax"
+          }
+        },
+        "required": [
+          "allocation",
+          "planner",
+          "tax",
+          "tactical",
+          "ai"
+        ],
+        "type": "object"
+      },
+      "Planner": {
+        "additionalProperties": false,
+        "properties": {
+          "bootstrap_below": {
+            "description": "Portfolio value (BRL) below which bootstrap mode applies",
+            "type": "string"
+          },
+          "min_order_b3": {
+            "description": "Smallest B3 order (BRL); smaller ones are skipped",
+            "type": "string"
+          },
+          "us_batch_min": {
+            "description": "BRL accumulated before a US purchase is proposed",
+            "type": "string"
+          }
+        },
+        "required": [
+          "bootstrap_below",
+          "min_order_b3",
+          "us_batch_min"
         ],
         "type": "object"
       },
@@ -2295,6 +2589,28 @@
         ],
         "type": "object"
       },
+      "StatusReport": {
+        "additionalProperties": false,
+        "properties": {
+          "ai_usage_usd": {
+            "type": "string"
+          },
+          "keys": {
+            "items": {
+              "$ref": "#/components/schemas/KeyStatus"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "keys",
+          "ai_usage_usd"
+        ],
+        "type": "object"
+      },
       "StepResult": {
         "additionalProperties": false,
         "properties": {
@@ -2361,6 +2677,35 @@
           "usd_balance",
           "usd_share",
           "instruments"
+        ],
+        "type": "object"
+      },
+      "Tactical": {
+        "additionalProperties": false,
+        "properties": {
+          "max_loss": {
+            "description": "Portfolio fraction lost at the stop",
+            "type": "string"
+          },
+          "max_open": {
+            "description": "Open tactical positions before a warning",
+            "format": "int64",
+            "type": "integer"
+          },
+          "max_size": {
+            "description": "Largest position (fraction)",
+            "type": "string"
+          },
+          "min_size": {
+            "description": "Smallest position (fraction)",
+            "type": "string"
+          }
+        },
+        "required": [
+          "max_loss",
+          "min_size",
+          "max_size",
+          "max_open"
         ],
         "type": "object"
       },
@@ -2475,6 +2820,69 @@
           "lower",
           "upper",
           "clamped"
+        ],
+        "type": "object"
+      },
+      "Tax": {
+        "additionalProperties": false,
+        "properties": {
+          "darf_code": {
+            "description": "Swing trade DARF code",
+            "type": "string"
+          },
+          "darf_min": {
+            "description": "Smaller DARF amounts roll into the next month (BRL)",
+            "type": "string"
+          },
+          "day_trade_darf_code": {
+            "description": "Day trade DARF code",
+            "type": "string"
+          },
+          "day_trade_darf_code_confirmed": {
+            "description": "True once a contador confirmed the day trade code",
+            "type": "boolean"
+          },
+          "day_trade_rate": {
+            "description": "Day trade rate (fraction)",
+            "type": "string"
+          },
+          "dividend_monthly": {
+            "description": "Monthly dividends from one payer above which IRRF applies (BRL)",
+            "type": "string"
+          },
+          "dividend_rate": {
+            "description": "IRRF on dividends above the monthly limit (fraction)",
+            "type": "string"
+          },
+          "exemption_limit": {
+            "description": "Monthly stock sales exempt from tax (BRL)",
+            "type": "string"
+          },
+          "jcp_rate": {
+            "description": "IRRF on JCP (fraction)",
+            "type": "string"
+          },
+          "swing_rate": {
+            "description": "Swing trade rate (fraction)",
+            "type": "string"
+          },
+          "us_rate": {
+            "description": "US dividend withholding (fraction)",
+            "type": "string"
+          }
+        },
+        "required": [
+          "exemption_limit",
+          "swing_rate",
+          "day_trade_rate",
+          "darf_min",
+          "darf_code",
+          "day_trade_darf_code",
+          "day_trade_darf_code_confirmed",
+          "jcp_rate",
+          "dividend_rate",
+          "dividend_monthly",
+          "us_rate"
         ],
         "type": "object"
       },
@@ -6462,6 +6870,160 @@
         ]
       }
     },
+    "/api/settings": {
+      "get": {
+        "operationId": "getSettings",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Overview"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Every settings group: current values and defaults",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
+    "/api/settings/ai": {
+      "put": {
+        "operationId": "setAISettings",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AI"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AI"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Replace the ai settings",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
+    "/api/settings/allocation": {
+      "put": {
+        "operationId": "setAllocationSettings",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Allocation"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Allocation"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Replace the allocation settings",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
+    "/api/settings/planner": {
+      "put": {
+        "operationId": "setPlannerSettings",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Planner"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Planner"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Replace the planner settings",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
     "/api/settings/rating-weights": {
       "get": {
         "operationId": "getRatingWeights",
@@ -6529,6 +7091,162 @@
         "summary": "Replace factor weights",
         "tags": [
           "ratings"
+        ]
+      }
+    },
+    "/api/settings/status": {
+      "get": {
+        "operationId": "getSettingsStatus",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusReport"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "API key status (never the values) and AI usage",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
+    "/api/settings/tactical": {
+      "put": {
+        "operationId": "setTacticalSettings",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Tactical"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Tactical"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Replace the tactical settings",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
+    "/api/settings/tax": {
+      "put": {
+        "operationId": "setTaxSettings",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Tax"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Tax"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Replace the tax settings",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
+    "/api/settings/{group}/reset": {
+      "post": {
+        "operationId": "resetSettings",
+        "parameters": [
+          {
+            "description": "Settings group",
+            "in": "path",
+            "name": "group",
+            "required": true,
+            "schema": {
+              "description": "Settings group",
+              "enum": [
+                "allocation",
+                "planner",
+                "tax",
+                "tactical",
+                "ai"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Restore a group's defaults",
+        "tags": [
+          "settings"
         ]
       }
     },

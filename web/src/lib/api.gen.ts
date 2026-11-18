@@ -938,6 +938,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Every settings group: current values and defaults */
+        get: operations["getSettings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/ai": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Replace the ai settings */
+        put: operations["setAISettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/allocation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Replace the allocation settings */
+        put: operations["setAllocationSettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/planner": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Replace the planner settings */
+        put: operations["setPlannerSettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/settings/rating-weights": {
         parameters: {
             query?: never;
@@ -950,6 +1018,74 @@ export interface paths {
         /** Replace factor weights */
         put: operations["setRatingWeights"];
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** API key status (never the values) and AI usage */
+        get: operations["getSettingsStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/tactical": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Replace the tactical settings */
+        put: operations["setTacticalSettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/tax": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Replace the tax settings */
+        put: operations["setTaxSettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/{group}/reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Restore a group's defaults */
+        post: operations["resetSettings"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1062,6 +1198,12 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        AI: {
+            /** @description Model used by the AI analyst */
+            model: string;
+            /** @description Spending cap per month (USD) */
+            monthly_cap_usd: string;
+        };
         Action: {
             /** Format: int64 */
             asset_id: number;
@@ -1115,6 +1257,61 @@ export interface components {
         };
         AlertList: {
             alerts: components["schemas"]["Alert"][] | null;
+        };
+        Allocation: {
+            /** @description Lower band as a multiple of target */
+            band_lower_mult: string;
+            /** @description Upper band ceiling (fraction) */
+            band_upper_cap: string;
+            /** @description Upper band as a multiple of target */
+            band_upper_mult: string;
+            /** @description Score lead a better alternative needs */
+            better_score_delta: string;
+            /** @description Upside lead (fraction) a better alternative needs */
+            better_upside_delta: string;
+            /** @description Highest cash target (fraction) */
+            cash_band_max: string;
+            /** @description Lowest cash target (fraction) */
+            cash_band_min: string;
+            /** @description Cash target at the lowest overvaluation (fraction) */
+            cash_base: string;
+            /** @description Cash target added across the overvaluation range (fraction) */
+            cash_span: string;
+            /** @description Highest target weight (fraction) */
+            clamp_max: string;
+            /** @description Lowest target weight (fraction) */
+            clamp_min: string;
+            /**
+             * Format: int64
+             * @description Days between trims of the same asset
+             */
+            cooldown_days: number;
+            /**
+             * Format: int64
+             * @description Buy gate: fair value older than this blocks buys
+             */
+            fair_value_max_months: number;
+            /** @description Weight above which a position is flagged (fraction) */
+            hard_cap: string;
+            /** @description Weight under which a position is flagged (fraction) */
+            hard_floor: string;
+            /** @description Buy gate: minimum weighted score */
+            min_score: string;
+            /** @description Price / fair value at or below which an opportunity opens */
+            opportunity_mult: string;
+            /** @description Price / fair value above which an asset counts as overvalued */
+            overvalued_mult: string;
+            /**
+             * Format: int64
+             * @description Tranches a new position is built in
+             */
+            ramp_stages: number;
+            /** @description Raw target weight at score 1 (fraction) */
+            raw_base: string;
+            /** @description Raw weight added per score point (fraction) */
+            raw_slope: string;
+            /** @description Share of the excess sold per trim step (fraction) */
+            trim_fraction: string;
         };
         Amount: {
             /** @description BRL */
@@ -1355,6 +1552,26 @@ export interface components {
             thesis_ok: boolean;
             upside: string;
         };
+        GroupAI: {
+            defaults: components["schemas"]["AI"];
+            values: components["schemas"]["AI"];
+        };
+        GroupAllocation: {
+            defaults: components["schemas"]["Allocation"];
+            values: components["schemas"]["Allocation"];
+        };
+        GroupPlanner: {
+            defaults: components["schemas"]["Planner"];
+            values: components["schemas"]["Planner"];
+        };
+        GroupTactical: {
+            defaults: components["schemas"]["Tactical"];
+            values: components["schemas"]["Tactical"];
+        };
+        GroupTax: {
+            defaults: components["schemas"]["Tax"];
+            values: components["schemas"]["Tax"];
+        };
         Health: {
             /** @example ok */
             status: string;
@@ -1384,6 +1601,12 @@ export interface components {
             name: string;
             /** @description Percent of CDI (cdi kind only, default 100) */
             pct_cdi?: string;
+        };
+        KeyStatus: {
+            configured: boolean;
+            label: string;
+            name: string;
+            source: string;
         };
         Movement: {
             amount: string;
@@ -1462,6 +1685,21 @@ export interface components {
              * @description The buy trade that executed this order
              */
             trade_id?: number;
+        };
+        Overview: {
+            ai: components["schemas"]["GroupAI"];
+            allocation: components["schemas"]["GroupAllocation"];
+            planner: components["schemas"]["GroupPlanner"];
+            tactical: components["schemas"]["GroupTactical"];
+            tax: components["schemas"]["GroupTax"];
+        };
+        Planner: {
+            /** @description Portfolio value (BRL) below which bootstrap mode applies */
+            bootstrap_below: string;
+            /** @description Smallest B3 order (BRL); smaller ones are skipped */
+            min_order_b3: string;
+            /** @description BRL accumulated before a US purchase is proposed */
+            us_batch_min: string;
         };
         PortfolioPosition: {
             /** Format: int64 */
@@ -1678,6 +1916,10 @@ export interface components {
         StatusChange: {
             status: string;
         };
+        StatusReport: {
+            ai_usage_usd: string;
+            keys: components["schemas"]["KeyStatus"][] | null;
+        };
         StepResult: {
             /** Format: int64 */
             duration_ms: number;
@@ -1694,6 +1936,19 @@ export interface components {
             usd_balance: string;
             usd_in_brl: string;
             usd_share: string;
+        };
+        Tactical: {
+            /** @description Portfolio fraction lost at the stop */
+            max_loss: string;
+            /**
+             * Format: int64
+             * @description Open tactical positions before a warning
+             */
+            max_open: number;
+            /** @description Largest position (fraction) */
+            max_size: string;
+            /** @description Smallest position (fraction) */
+            min_size: string;
         };
         TacticalPut: {
             entry_price: string;
@@ -1726,6 +1981,30 @@ export interface components {
             score: string;
             upper: string;
             weight: string;
+        };
+        Tax: {
+            /** @description Swing trade DARF code */
+            darf_code: string;
+            /** @description Smaller DARF amounts roll into the next month (BRL) */
+            darf_min: string;
+            /** @description Day trade DARF code */
+            day_trade_darf_code: string;
+            /** @description True once a contador confirmed the day trade code */
+            day_trade_darf_code_confirmed: boolean;
+            /** @description Day trade rate (fraction) */
+            day_trade_rate: string;
+            /** @description Monthly dividends from one payer above which IRRF applies (BRL) */
+            dividend_monthly: string;
+            /** @description IRRF on dividends above the monthly limit (fraction) */
+            dividend_rate: string;
+            /** @description Monthly stock sales exempt from tax (BRL) */
+            exemption_limit: string;
+            /** @description IRRF on JCP (fraction) */
+            jcp_rate: string;
+            /** @description Swing trade rate (fraction) */
+            swing_rate: string;
+            /** @description US dividend withholding (fraction) */
+            us_rate: string;
         };
         TaxMonth: {
             carried_in: string;
@@ -4204,6 +4483,134 @@ export interface operations {
             };
         };
     };
+    getSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Overview"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    setAISettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AI"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AI"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    setAllocationSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Allocation"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Allocation"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    setPlannerSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Planner"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Planner"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     getRatingWeights: {
         parameters: {
             query?: never;
@@ -4254,6 +4661,131 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["WeightsInput"];
                 };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getSettingsStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StatusReport"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    setTacticalSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Tactical"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Tactical"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    setTaxSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Tax"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Tax"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    resetSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Settings group */
+                group: "allocation" | "planner" | "tax" | "tactical" | "ai";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Error */
             default: {

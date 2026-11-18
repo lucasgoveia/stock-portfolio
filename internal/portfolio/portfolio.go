@@ -55,8 +55,17 @@ type Deps struct {
 	Tactical  *tactical.Service  // optional: tactical setups (spec §10)
 	Tax       *tax.Service       // optional: B3 tax impact of trims (spec §11.2)
 	Dividends *dividends.Service // optional: undeployed dividends and yield on cost (spec §8.5)
-	Params    engine.Params
-	Now       func() time.Time
+	// Params are the rules used when Settings is nil.
+	Params engine.Params
+	// Settings (optional) supplies the rules at call time, so an edit applies
+	// to the next evaluation or plan.
+	Settings ParamsSource
+	Now      func() time.Time
+}
+
+// ParamsSource supplies the editable rule parameters (internal/settings).
+type ParamsSource interface {
+	Params(ctx context.Context) (engine.Params, error)
 }
 
 // Service builds snapshots and plans.
@@ -184,7 +193,11 @@ func (s *Service) Snapshot(ctx context.Context) (Snapshot, error) {
 	today := s.d.Now().Format(dateLayout)
 	snap := Snapshot{AsOf: today, Unpriced: []string{}, Unrated: []string{}, Holdings: []Position{}, Watchlist: []Position{}}
 	snap.PendingUS = s.setting(ctx, SettingPendingUS)
-	snap.TacticalMaxOpen = s.d.Params.TacticalMaxOpen
+	p, err := s.params(ctx)
+	if err != nil {
+		return snap, err
+	}
+	snap.TacticalMaxOpen = p.TacticalMaxOpen
 	if s.d.Dividends != nil {
 		u, err := s.d.Dividends.Undeployed(ctx)
 		if err != nil {
@@ -192,13 +205,6 @@ func (s *Service) Snapshot(ctx context.Context) (Snapshot, error) {
 		}
 		snap.UndeployedDividends = u
 	}
-
-	weights, err := s.d.Ratings.Weights(ctx)
-	if err != nil {
-		return snap, err
-	}
-	p := s.d.Params
-	p.Weights = weights
 
 	var list []db.Asset
 	for _, st := range []string{assets.StatusHolding, assets.StatusWatchlist} {

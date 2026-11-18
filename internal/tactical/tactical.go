@@ -58,6 +58,22 @@ type Service struct {
 	assets   *assets.Service
 	research *research.Service
 	params   engine.Params
+	source   ParamsSource
+}
+
+// ParamsSource supplies the editable rule parameters (internal/settings).
+type ParamsSource interface {
+	Params(ctx context.Context) (engine.Params, error)
+}
+
+// UseParams makes the service read its rules from src at call time.
+func (s *Service) UseParams(src ParamsSource) { s.source = src }
+
+func (s *Service) rules(ctx context.Context) (engine.Params, error) {
+	if s.source != nil {
+		return s.source.Params(ctx)
+	}
+	return s.params, nil
 }
 
 // NewService builds a Service with the default rule params.
@@ -65,7 +81,7 @@ func NewService(conn db.DBTX, a *assets.Service, r *research.Service) *Service {
 	return &Service{q: db.New(conn), assets: a, research: r, params: engine.DefaultParams()}
 }
 
-func (s *Service) convert(r db.TacticalSetup) (Setup, error) {
+func (s *Service) convert(ctx context.Context, r db.TacticalSetup) (Setup, error) {
 	out := Setup{AssetID: r.AssetID, NoteID: r.NoteID, ExpiresOn: r.ExpiresOn, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt}
 	for _, f := range []struct {
 		dst *money.Decimal
@@ -77,7 +93,11 @@ func (s *Service) convert(r db.TacticalSetup) (Setup, error) {
 		}
 		*f.dst = v
 	}
-	sz, err := s.params.TacticalSize(out.EntryPrice.Decimal, out.StopPrice.Decimal)
+	rules, err := s.rules(ctx)
+	if err != nil {
+		return Setup{}, err
+	}
+	sz, err := rules.TacticalSize(out.EntryPrice.Decimal, out.StopPrice.Decimal)
 	if err != nil {
 		return Setup{}, err
 	}
@@ -120,7 +140,7 @@ func (s *Service) Put(ctx context.Context, assetID int64, in Input) (Setup, erro
 	if err != nil {
 		return Setup{}, err
 	}
-	return s.convert(row)
+	return s.convert(ctx, row)
 }
 
 // Get returns an asset's setup.
@@ -132,7 +152,7 @@ func (s *Service) Get(ctx context.Context, assetID int64) (Setup, error) {
 	if err != nil {
 		return Setup{}, err
 	}
-	return s.convert(row)
+	return s.convert(ctx, row)
 }
 
 // All returns every setup by asset id.
@@ -143,7 +163,7 @@ func (s *Service) All(ctx context.Context) (map[int64]Setup, error) {
 	}
 	out := make(map[int64]Setup, len(rows))
 	for _, r := range rows {
-		st, err := s.convert(r)
+		st, err := s.convert(ctx, r)
 		if err != nil {
 			return nil, err
 		}

@@ -22,6 +22,7 @@ type Service struct {
 	trades    *trades.Service
 	dividends *dividends.Service
 	params    engine.TaxParams
+	source    ParamsSource
 	now       func() time.Time
 }
 
@@ -34,8 +35,21 @@ func NewService(a *assets.Service, t *trades.Service, d *dividends.Service, cloc
 	return &Service{assets: a, trades: t, dividends: d, params: engine.DefaultTaxParams(), now: clock}
 }
 
+// ParamsSource supplies the editable tax rules (internal/settings).
+type ParamsSource interface {
+	TaxParams(ctx context.Context) (engine.TaxParams, error)
+}
+
+// UseParams makes the service read its rules from src at call time.
+func (s *Service) UseParams(src ParamsSource) { s.source = src }
+
 // Params returns the tax rules in use.
-func (s *Service) Params() engine.TaxParams { return s.params }
+func (s *Service) Params(ctx context.Context) (engine.TaxParams, error) {
+	if s.source != nil {
+		return s.source.TaxParams(ctx)
+	}
+	return s.params, nil
+}
 
 // Sales returns every realized B3 sale, oldest first. The part of a sale matched against
 // same-day buys is a day trade at those buys' cost (spec §11.2); the rest is
@@ -78,7 +92,11 @@ func (s *Service) Months(ctx context.Context) ([]engine.TaxMonth, error) {
 	if err != nil {
 		return nil, err
 	}
-	return s.params.TaxMonths(sales), nil
+	p, err := s.Params(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return p.TaxMonths(sales), nil
 }
 
 // MonthToDate sums this month's swing-trade stock sales: proceeds, gains,

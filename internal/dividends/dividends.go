@@ -70,6 +70,7 @@ type Service struct {
 	trades *trades.Service
 	cash   *cash.Service
 	params engine.DividendParams
+	source ParamsSource
 	now    func() time.Time
 }
 
@@ -79,6 +80,21 @@ func NewService(conn db.DBTX, a *assets.Service, t *trades.Service, c *cash.Serv
 		clock = time.Now
 	}
 	return &Service{q: db.New(conn), assets: a, trades: t, cash: c, params: engine.DefaultDividendParams(), now: clock}
+}
+
+// ParamsSource supplies the editable withholding rules (internal/settings).
+type ParamsSource interface {
+	DividendParams(ctx context.Context) (engine.DividendParams, error)
+}
+
+// UseParams makes the service read its rules from src at call time.
+func (s *Service) UseParams(src ParamsSource) { s.source = src }
+
+func (s *Service) withholdingParams(ctx context.Context) (engine.DividendParams, error) {
+	if s.source != nil {
+		return s.source.DividendParams(ctx)
+	}
+	return s.params, nil
 }
 
 func dec(s string) money.Decimal {
@@ -239,7 +255,11 @@ func (s *Service) amounts(ctx context.Context, a db.Asset, kind, payDate string,
 	if err != nil {
 		return fxRate, fxRate, err
 	}
-	return fxRate, s.params.Withholding(kind, a.Currency, gross, before), nil
+	wp, err := s.withholdingParams(ctx)
+	if err != nil {
+		return fxRate, fxRate, err
+	}
+	return fxRate, wp.Withholding(kind, a.Currency, gross, before), nil
 }
 
 // credit deposits net into a cash instrument of the asset's currency.
@@ -279,7 +299,11 @@ func (s *Service) Detect(ctx context.Context, assetID int64, kind, recordDate, p
 		return false, err
 	}
 	gross := qty.Mul(perShare).Round(2)
-	wh := s.params.Withholding(kind, a.Currency, gross, decimal.Zero)
+	wp, err := s.withholdingParams(ctx)
+	if err != nil {
+		return false, err
+	}
+	wh := wp.Withholding(kind, a.Currency, gross, decimal.Zero)
 	n, err := s.q.InsertDetectedDividend(ctx, db.InsertDetectedDividendParams{
 		AssetID: assetID, Kind: kind, RecordDate: recordDate, PayDate: nullStr(payDate), Quantity: qty.String(),
 		PerShare: perShare.String(), Gross: gross.String(), Withholding: wh.String(), Net: gross.Sub(wh).String(),

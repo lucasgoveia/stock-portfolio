@@ -26,6 +26,7 @@ import (
 	"github.com/lucasgoveia/stock-portfolio/internal/portfolio"
 	"github.com/lucasgoveia/stock-portfolio/internal/ratings"
 	"github.com/lucasgoveia/stock-portfolio/internal/research"
+	"github.com/lucasgoveia/stock-portfolio/internal/settings"
 	"github.com/lucasgoveia/stock-portfolio/internal/store"
 	"github.com/lucasgoveia/stock-portfolio/internal/tactical"
 	"github.com/lucasgoveia/stock-portfolio/internal/tax"
@@ -82,6 +83,10 @@ func run() error {
 	tacticalSvc := tactical.NewService(conn, assetSvc, researchSvc)
 	dividendSvc := dividends.NewService(conn, assetSvc, tradeSvc, cashSvc, nil)
 	taxSvc := tax.NewService(assetSvc, tradeSvc, dividendSvc, nil)
+	settingsSvc := settings.NewService(conn, cfg.KeyStatuses())
+	tacticalSvc.UseParams(settingsSvc)
+	dividendSvc.UseParams(settingsSvc)
+	taxSvc.UseParams(settingsSvc)
 	deps.Dividends = dividendSvc
 	actionSvc := corpactions.NewService(conn, assetSvc, tradeSvc, alertSvc, nil)
 	deps.Actions = actionSvc
@@ -90,6 +95,7 @@ func run() error {
 	portfolioSvc := portfolio.NewService(portfolio.Deps{
 		Conn: conn, Assets: assetSvc, Trades: tradeSvc, Cash: cashSvc, Rates: rateStore, Ratings: ratingSvc,
 		Valuation: valuationSvc, Thesis: thesisSvc, Research: researchSvc, Alerts: alertSvc, Tactical: tacticalSvc, Tax: taxSvc, Dividends: dividendSvc,
+		Settings: settingsSvc,
 	})
 	deps.Evaluators = []jobs.Evaluator{
 		{Name: "thesis", Run: thesisSvc.Evaluate},
@@ -130,6 +136,7 @@ func run() error {
 		api.WithDividends(dividendSvc),
 		api.WithCorporateActions(actionSvc),
 		api.WithPerformance(perfSvc),
+		api.WithSettings(settingsSvc),
 		api.WithUI(web.Dist()),
 	), ReadHeaderTimeout: 10 * time.Second}
 	go func() {

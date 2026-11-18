@@ -33,7 +33,11 @@ func WithTaxes(svc *tax.Service) Option {
 		huma.Register(s.api, op(http.MethodGet, "/api/taxes/b3", "b3Taxes", "Monthly B3 tax: exemption, gains, carried losses and DARF", "taxes"),
 			func(ctx context.Context, _ *struct{}) (*Body[B3Taxes], error) {
 				months, err := svc.Months(ctx)
-				return ok(B3Taxes{Params: svc.Params(), Months: months}, err)
+				if err != nil {
+					return nil, apiError(err)
+				}
+				params, err := svc.Params(ctx)
+				return ok(B3Taxes{Params: params, Months: months}, err)
 			})
 		huma.Register(s.api, op(http.MethodGet, "/api/taxes/annual/{year}", "annualTaxes", "Annual report: US 15% tax, income and positions at 31/12 for the DIRPF", "taxes"),
 			func(ctx context.Context, in *yearIn) (*Body[tax.AnnualReport], error) {
