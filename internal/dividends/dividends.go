@@ -182,7 +182,7 @@ func (s *Service) Record(ctx context.Context, assetID int64, in RecordInput) (Di
 	if !validDate(in.RecordDate) || !validDate(in.PayDate) {
 		return Dividend{}, validationf("record_date and pay_date must be YYYY-MM-DD")
 	}
-	qty := decimal.Zero
+	var qty decimal.Decimal
 	if in.Quantity != nil {
 		qty = in.Quantity.Decimal
 	} else if qty, err = s.HeldAt(ctx, assetID, in.RecordDate); err != nil {

@@ -47,24 +47,24 @@ type RateWriter interface {
 
 // Deps are the daily pipeline's collaborators. A nil source skips its step.
 type Deps struct {
-	Conn       db.DBTX
-	Assets     *assets.Service
-	Rates      RateWriter
-	FX         marketdata.FXSource
-	CDI        marketdata.CDISource
-	Tesouro    marketdata.TesouroSource
-	Quotes     marketdata.QuoteSource
-	Cotahist   CotahistSource
-	US         marketdata.USPriceSource
-	IBOV       marketdata.IndexSource
-	SP500      marketdata.IndexSource
-	Betas      BetaWriter
+	Conn     db.DBTX
+	Assets   *assets.Service
+	Rates    RateWriter
+	FX       marketdata.FXSource
+	CDI      marketdata.CDISource
+	Tesouro  marketdata.TesouroSource
+	Quotes   marketdata.QuoteSource
+	Cotahist CotahistSource
+	US       marketdata.USPriceSource
+	IBOV     marketdata.IndexSource
+	SP500    marketdata.IndexSource
+	Betas    BetaWriter
 	// DividendFeed announces B3 dividends and JCP; Dividends queues them for
 	// confirmation (spec §8.5). Either nil skips the step.
 	DividendFeed marketdata.DividendSource
 	Dividends    DividendSink
 	Evaluators   []Evaluator
-	Now        func() time.Time
+	Now          func() time.Time
 }
 
 // DividendSink queues detected payments (dividends.Service).
