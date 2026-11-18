@@ -20,6 +20,7 @@ import (
 	"github.com/lucasgoveia/stock-portfolio/internal/config"
 	"github.com/lucasgoveia/stock-portfolio/internal/jobs"
 	"github.com/lucasgoveia/stock-portfolio/internal/marketdata"
+	"github.com/lucasgoveia/stock-portfolio/internal/portfolio"
 	"github.com/lucasgoveia/stock-portfolio/internal/ratings"
 	"github.com/lucasgoveia/stock-portfolio/internal/research"
 	"github.com/lucasgoveia/stock-portfolio/internal/store"
@@ -70,9 +71,17 @@ func run() error {
 	ratingSvc := ratings.NewService(conn, assetSvc, nil)
 	deps := marketDeps(cfg, conn, assetSvc, rateStore)
 	deps.Betas = ratingSvc
+	tradeSvc := trades.NewService(conn, assetSvc)
+	cashSvc := cash.NewService(conn, rateStore, nil)
+	researchSvc := research.NewService(conn, assetSvc, nil)
+	portfolioSvc := portfolio.NewService(portfolio.Deps{
+		Conn: conn, Assets: assetSvc, Trades: tradeSvc, Cash: cashSvc, Rates: rateStore, Ratings: ratingSvc,
+		Valuation: valuationSvc, Thesis: thesisSvc, Research: researchSvc, Alerts: alertSvc,
+	})
 	deps.Evaluators = []jobs.Evaluator{
 		{Name: "thesis", Run: thesisSvc.Evaluate},
 		{Name: "fair_value", Run: valuationSvc.Evaluate},
+		{Name: "portfolio", Run: portfolioSvc.Evaluate},
 	}
 
 	if cmd == "backfill" {
@@ -93,13 +102,14 @@ func run() error {
 
 	srv := &http.Server{Addr: cfg.ListenAddr, Handler: api.NewRouter(
 		api.WithAssets(assetSvc),
-		api.WithCash(cash.NewService(conn, rateStore, nil)),
+		api.WithCash(cashSvc),
 		api.WithRatings(ratingSvc),
-		api.WithResearch(research.NewService(conn, assetSvc, nil)),
-		api.WithTrades(trades.NewService(conn, assetSvc)),
+		api.WithResearch(researchSvc),
+		api.WithTrades(tradeSvc),
 		api.WithAlerts(alertSvc),
 		api.WithThesis(thesisSvc),
 		api.WithValuation(valuationSvc),
+		api.WithPortfolio(portfolioSvc),
 		api.WithJobs(runner),
 		api.WithUI(web.Dist()),
 	), ReadHeaderTimeout: 10 * time.Second}

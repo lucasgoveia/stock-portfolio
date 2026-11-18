@@ -59,33 +59,33 @@ type TrimInput struct {
 
 // TrimSuggestion is a suggested sell.
 type TrimSuggestion struct {
-	AssetID  string
-	Reason   TrimReason   // primary (largest amount)
-	Reasons  []TrimReason // all triggers that fired
-	Quantity decimal.Decimal
-	Price    decimal.Decimal
-	Amount   decimal.Decimal
-	FullExit bool
+	AssetID  string          `json:"asset_id"`
+	Reason   TrimReason      `json:"reason"`  // primary (largest amount)
+	Reasons  []TrimReason    `json:"reasons"` // all triggers that fired
+	Quantity decimal.Decimal `json:"quantity"`
+	Price    decimal.Decimal `json:"price"`
+	Amount   decimal.Decimal `json:"amount"`
+	FullExit bool            `json:"full_exit"`
 	// PairedCandidate is set for better_opportunity swaps.
-	PairedCandidate string
+	PairedCandidate string `json:"paired_candidate"`
 }
 
 // TrimSkip records a suppressed suggestion (cooldown).
 type TrimSkip struct {
-	AssetID string
-	Reason  TrimReason
-	Until   time.Time
+	AssetID string     `json:"asset_id"`
+	Reason  TrimReason `json:"reason"`
+	Until   time.Time  `json:"until"`
 }
 
 // TrimPlan is the output of PlanTrims.
 type TrimPlan struct {
-	Suggestions []TrimSuggestion // overweight / overvalued / thesis_broken
-	RaiseCash   []TrimSuggestion // ordered: overweight, overvalued, lowest score
+	Suggestions []TrimSuggestion `json:"suggestions"` // overweight / overvalued / thesis_broken
+	RaiseCash   []TrimSuggestion `json:"raise_cash"`  // ordered: overweight, overvalued, lowest score
 	// RaiseCashShortfall is the part of the needed cash the suggestions do
 	// not cover.
-	RaiseCashShortfall decimal.Decimal
-	Swaps              []TrimSuggestion // better opportunity
-	Skipped            []TrimSkip
+	RaiseCashShortfall decimal.Decimal  `json:"raise_cash_shortfall"`
+	Swaps              []TrimSuggestion `json:"swaps"` // better opportunity
+	Skipped            []TrimSkip       `json:"skipped"`
 }
 
 func (p Params) inCooldown(h TrimHolding, now time.Time) (time.Time, bool) {

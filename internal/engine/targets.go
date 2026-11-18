@@ -40,25 +40,25 @@ type TargetInput struct {
 // In bootstrap Lower is 0 and Upper equals Weight (no bands; the planner then
 // funds up to the target).
 type Target struct {
-	ID      string
-	Score   decimal.Decimal
-	Raw     decimal.Decimal
-	Weight  decimal.Decimal
-	Lower   decimal.Decimal
-	Upper   decimal.Decimal
-	Clamped bool // frozen at 2% or 10%
+	ID      string          `json:"id"`
+	Score   decimal.Decimal `json:"score"`
+	Raw     decimal.Decimal `json:"raw"`
+	Weight  decimal.Decimal `json:"weight"`
+	Lower   decimal.Decimal `json:"lower"`
+	Upper   decimal.Decimal `json:"upper"`
+	Clamped bool            `json:"clamped"` // frozen at 2% or 10%
 }
 
 // TargetResult is the output of ComputeTargets. Targets are sorted by ID.
 type TargetResult struct {
-	Bootstrap  bool
-	CoreBudget decimal.Decimal
+	Bootstrap  bool            `json:"bootstrap"`
+	CoreBudget decimal.Decimal `json:"core_budget"`
 	// Undeployed is budget not placeable because every stock is at 10%
 	// (too few stocks); the planner routes it to cash.
-	Undeployed decimal.Decimal
-	TooFew     bool // n x 10% < budget
-	TooMany    bool // n x 2% > budget; all at 2%
-	Targets    []Target
+	Undeployed decimal.Decimal `json:"undeployed"`
+	TooFew     bool            `json:"too_few"`  // n x 10% < budget
+	TooMany    bool            `json:"too_many"` // n x 2% > budget; all at 2%
+	Targets    []Target        `json:"targets"`
 }
 
 // ComputeTargets implements spec §6.1-§6.4.
@@ -185,10 +185,10 @@ func (p Params) clampRedistribute(ts []Target, budget decimal.Decimal) {
 
 // PositionStatus flags band violations of one actual weight.
 type PositionStatus struct {
-	BelowFloor bool // < 1.5%: "top up or exit"
-	AboveCap   bool // > 12%: trim regardless of target
-	BelowLower bool
-	AboveUpper bool
+	BelowFloor bool `json:"below_floor"` // < 1.5%: "top up or exit"
+	AboveCap   bool `json:"above_cap"`   // > 12%: trim regardless of target
+	BelowLower bool `json:"below_lower"`
+	AboveUpper bool `json:"above_upper"`
 }
 
 // Status evaluates an actual weight against a target. Everything is false in

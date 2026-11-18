@@ -65,35 +65,35 @@ const (
 
 // Order is one plan line, in execution order.
 type Order struct {
-	Seq      int
-	Kind     OrderKind
-	AssetID  string
-	Market   Market
-	Step     string // "opportunity" or "gap" for buys/cash
-	Quantity decimal.Decimal
-	Price    decimal.Decimal
-	Amount   decimal.Decimal
+	Seq      int             `json:"seq"`
+	Kind     OrderKind       `json:"kind"`
+	AssetID  string          `json:"asset_id"`
+	Market   Market          `json:"market"`
+	Step     string          `json:"step"` // "opportunity" or "gap" for buys/cash
+	Quantity decimal.Decimal `json:"quantity"`
+	Price    decimal.Decimal `json:"price"`
+	Amount   decimal.Decimal `json:"amount"`
 	// RampStageAfter is the ramp stage once this order is executed. The
 	// caller advances stored ramp state only after the trade is recorded.
-	RampStageAfter int
+	RampStageAfter int `json:"ramp_stage_after"`
 }
 
 // Skip documents why an asset got nothing.
 type Skip struct {
-	AssetID string
-	Reason  string // "below_min_order", "below_one_share", "no_room"
+	AssetID string `json:"asset_id"`
+	Reason  string `json:"reason"` // "below_min_order", "below_one_share", "no_room"
 }
 
 // Plan is the planner output.
 type Plan struct {
-	Orders []Order
+	Orders []Order `json:"orders"`
 	// NewMoney is what this plan places out of Amount (orders plus held US
 	// money). Always <= Amount. Remittance top-up from the existing pending
 	// bucket is on top of it.
-	NewMoney       decimal.Decimal
-	Unallocated    decimal.Decimal // Amount - NewMoney, stays as cash
-	PendingUSAfter decimal.Decimal
-	Skipped        []Skip
+	NewMoney       decimal.Decimal `json:"new_money"`
+	Unallocated    decimal.Decimal `json:"unallocated"` // Amount - NewMoney, stays as cash
+	PendingUSAfter decimal.Decimal `json:"pending_us_after"`
+	Skipped        []Skip          `json:"skipped"`
 }
 
 type planState struct {

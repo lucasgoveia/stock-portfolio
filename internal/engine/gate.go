@@ -22,19 +22,19 @@ type GateInput struct {
 
 // GateResult reports each check individually for the UI checklist.
 type GateResult struct {
-	Score decimal.Decimal
+	Score decimal.Decimal `json:"score"`
 
-	ScoreOK        bool // score >= 2.5
-	ThesisOK       bool // >= 1 break condition
-	FairValueSet   bool
-	FairValueFresh bool            // set and not older than 12 months
-	PriceOK        bool            // price <= fair value (false when no fair value)
-	Passed         bool            // all four checks
-	Opportunity    bool            // Passed and (price <= FV x 0.8 or active catalyst)
-	DeepDiscount   bool            // price <= FV x 0.8
-	CatalystOnly   bool            // opportunity solely through the catalyst
-	Discount       decimal.Decimal // (FV-price)/FV, 0 when no fair value
-	Upside         decimal.Decimal // (FV-price)/price, 0 when no fair value
+	ScoreOK        bool            `json:"score_ok"`  // score >= 2.5
+	ThesisOK       bool            `json:"thesis_ok"` // >= 1 break condition
+	FairValueSet   bool            `json:"fair_value_set"`
+	FairValueFresh bool            `json:"fair_value_fresh"` // set and not older than 12 months
+	PriceOK        bool            `json:"price_ok"`         // price <= fair value (false when no fair value)
+	Passed         bool            `json:"passed"`           // all four checks
+	Opportunity    bool            `json:"opportunity"`      // Passed and (price <= FV x 0.8 or active catalyst)
+	DeepDiscount   bool            `json:"deep_discount"`    // price <= FV x 0.8
+	CatalystOnly   bool            `json:"catalyst_only"`    // opportunity solely through the catalyst
+	Discount       decimal.Decimal `json:"discount"`         // (FV-price)/FV, 0 when no fair value
+	Upside         decimal.Decimal `json:"upside"`           // (FV-price)/price, 0 when no fair value
 }
 
 // EvaluateGate runs the buy gate (spec §8.1, §10.1) and the opportunity test

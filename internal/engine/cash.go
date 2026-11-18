@@ -18,9 +18,9 @@ func (p Params) Overvalued(price decimal.Decimal, fv *decimal.Decimal) bool {
 
 // CashResult is the dynamic cash target (spec §7).
 type CashResult struct {
-	OvervaluedShare  decimal.Decimal
-	Target           decimal.Decimal
-	MissingFairValue []string // holdings to raise "missing_fair_value" for
+	OvervaluedShare  decimal.Decimal `json:"overvalued_share"`
+	Target           decimal.Decimal `json:"target"`
+	MissingFairValue []string        `json:"missing_fair_value"` // holdings to raise "missing_fair_value" for
 }
 
 // CashTarget = 4% + 16% x overvalued_share, where overvalued_share is the sum
