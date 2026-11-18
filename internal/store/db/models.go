@@ -100,6 +100,34 @@ type TesouroSelicPrice struct {
 	Price   string
 }
 
+type Thesis struct {
+	ID           int64
+	AssetID      int64
+	Body         string
+	Status       string
+	NextReviewOn sql.NullString
+	CreatedAt    string
+	UpdatedAt    string
+}
+
+type ThesisBreakCondition struct {
+	ID        int64
+	ThesisID  int64
+	Body      string
+	CreatedAt string
+	UpdatedAt string
+}
+
+type ThesisReview struct {
+	ID           int64
+	ThesisID     int64
+	ReviewedOn   string
+	Note         string
+	StatusAfter  string
+	NextReviewOn sql.NullString
+	CreatedAt    string
+}
+
 type Trade struct {
 	ID        int64
 	AssetID   int64

@@ -20,6 +20,7 @@ import (
 	"github.com/lucasgoveia/stock-portfolio/internal/ratings"
 	"github.com/lucasgoveia/stock-portfolio/internal/research"
 	"github.com/lucasgoveia/stock-portfolio/internal/store"
+	"github.com/lucasgoveia/stock-portfolio/internal/thesis"
 	"github.com/lucasgoveia/stock-portfolio/internal/trades"
 	"github.com/lucasgoveia/stock-portfolio/web"
 )
@@ -46,13 +47,15 @@ func run() error {
 	defer func() { _ = conn.Close() }()
 
 	assetSvc := assets.NewService(conn)
+	alertSvc := alerts.New(conn, nil)
 	srv := &http.Server{Addr: cfg.ListenAddr, Handler: api.NewRouter(
 		api.WithAssets(assetSvc),
 		api.WithCash(cash.NewService(conn, cash.NewRateStore(conn), nil)),
 		api.WithRatings(ratings.NewService(conn, assetSvc, nil)),
 		api.WithResearch(research.NewService(conn, assetSvc, nil)),
 		api.WithTrades(trades.NewService(conn, assetSvc)),
-		api.WithAlerts(alerts.New(conn, nil)),
+		api.WithAlerts(alertSvc),
+		api.WithThesis(thesis.NewService(conn, assetSvc, alertSvc, nil)),
 		api.WithUI(web.Dist()),
 	), ReadHeaderTimeout: 10 * time.Second}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
