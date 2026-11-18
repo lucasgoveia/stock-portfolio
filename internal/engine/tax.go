@@ -13,7 +13,12 @@ type TaxParams struct {
 	SwingRate      decimal.Decimal `json:"swing_rate"`      // 15%
 	DayTradeRate   decimal.Decimal `json:"day_trade_rate"`  // 20%
 	DARFMin        decimal.Decimal `json:"darf_min"`        // R$10: smaller amounts roll into the next month
-	DARFCode       string          `json:"darf_code"`       // 6015
+	DARFCode       string          `json:"darf_code"`       // 6015 (swing trade)
+	// DayTradeDARFCode is the day-trade DARF code, a setting. It defaults to
+	// 6015 but 6047 is also cited (docs/data-sources.md §8), so it stays
+	// unconfirmed until a contador confirms it.
+	DayTradeDARFCode          string `json:"day_trade_darf_code"`
+	DayTradeDARFCodeConfirmed bool   `json:"day_trade_darf_code_confirmed"`
 }
 
 // DefaultTaxParams returns the spec defaults.
@@ -24,6 +29,8 @@ func DefaultTaxParams() TaxParams {
 		DayTradeRate:   mustDec("0.20"),
 		DARFMin:        mustDec("10"),
 		DARFCode:       "6015",
+
+		DayTradeDARFCode: "6015", DayTradeDARFCodeConfirmed: false,
 	}
 }
 
@@ -139,14 +146,14 @@ func offset(result, lossIn decimal.Decimal) (taxable, lossOut decimal.Decimal) {
 }
 
 // DARFDueDate is the last business day (Monday to Friday) of the month after
-// month (YYYY-MM). Bank holidays are not modelled.
+// month (YYYY-MM): not a weekend and not a national bank holiday.
 func DARFDueDate(month string) string {
 	t, err := time.Parse("2006-01", month)
 	if err != nil {
 		return ""
 	}
 	d := t.AddDate(0, 2, -1) // last day of the following month
-	for d.Weekday() == time.Saturday || d.Weekday() == time.Sunday {
+	for !IsBusinessDay(d) {
 		d = d.AddDate(0, 0, -1)
 	}
 	return d.Format("2006-01-02")

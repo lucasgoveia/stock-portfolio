@@ -2573,6 +2573,12 @@
           "darf_min": {
             "type": "string"
           },
+          "day_trade_darf_code": {
+            "type": "string"
+          },
+          "day_trade_darf_code_confirmed": {
+            "type": "boolean"
+          },
           "day_trade_rate": {
             "type": "string"
           },
@@ -2588,7 +2594,9 @@
           "swing_rate",
           "day_trade_rate",
           "darf_min",
-          "darf_code"
+          "darf_code",
+          "day_trade_darf_code",
+          "day_trade_darf_code_confirmed"
         ],
         "type": "object"
       },

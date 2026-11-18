@@ -106,6 +106,9 @@ func TestDARFDueDate(t *testing.T) {
 		"2026-04": "2026-05-29", // May 31 is a Sunday
 		"2026-11": "2026-12-31", // Thursday
 		"2026-12": "2027-01-29", // Jan 31 2027 is a Sunday
+		"2024-02": "2024-03-28", // Mar 31 is a Sunday, Good Friday Mar 29 is a holiday
+		"2025-10": "2025-11-28", // Nov 30 is a Sunday
+		"2024-10": "2024-11-29", // Nov 30 is a Saturday
 	} {
 		if got := DARFDueDate(month); got != want {
 			t.Errorf("%s: got %s want %s", month, got, want)

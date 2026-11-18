@@ -1750,6 +1750,8 @@ export interface components {
         TaxParams: {
             darf_code: string;
             darf_min: string;
+            day_trade_darf_code: string;
+            day_trade_darf_code_confirmed: boolean;
             day_trade_rate: string;
             exemption_limit: string;
             swing_rate: string;

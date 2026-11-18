@@ -261,7 +261,7 @@ All rates and limits are settings; verify current law before release (see §17).
 - Above that, gains taxed 15%; DARF code 6015 due by last business day of the following month. Losses carried forward.
 - Trim planning: when a suggested trim would push the month's sales above R$20,000, the system offers (a) split across months, (b) proceed with estimated tax shown.
 - Core and tactical sales share the same monthly pool; warn when a tactical exit consumes room needed by planned core trims.
-- Day trades (buy and sell same asset same day) are flagged; 20% rate shown. DARF code for day trade (6015 vs 6047) unconfirmed.
+- Day trades (buy and sell same asset same day) are flagged; 20% rate shown. DARF code for day trade (6015 vs 6047) unconfirmed; it is a setting (`day_trade_darf_code`) flagged unconfirmed in the API and UI.
 
 ### 11.3 US assets
 

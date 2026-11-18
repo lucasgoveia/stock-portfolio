@@ -82,8 +82,14 @@ function Monthly() {
           <p className="text-muted-foreground text-xs">
             Rates: {pct(params?.swing_rate, 0)} swing, {pct(params?.day_trade_rate, 0)} day trade; DARF code{' '}
             {params?.darf_code}; amounts under {money(params?.darf_min)} roll into the next month. Due dates skip weekends
-            but not bank holidays. Day-trade DARF code (6015 vs 6047) is unconfirmed: check in Sicalc.
+            and national bank holidays.
           </p>
+          {params && !params.day_trade_darf_code_confirmed && (
+            <p className="text-destructive text-xs" role="note">
+              Day-trade DARF code {params.day_trade_darf_code} is unconfirmed (6015 vs 6047): check in Sicalc or with your
+              contador before paying.
+            </p>
+          )}
         </div>
       )}
     </>
