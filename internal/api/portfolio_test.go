@@ -51,4 +51,30 @@ func TestPortfolioAPI(t *testing.T) {
 	if code, _, _ := do(t, h, "PUT", "/api/portfolio/pending-us", `{"amount":"150"}`); code != 204 {
 		t.Fatalf("pending: %d", code)
 	}
+
+	code, c, _ := do(t, h, "POST", "/api/contributions", `{"amount":"1000"}`)
+	if code != 201 || c["status"] == nil || c["amount"] != "1000" {
+		t.Fatalf("create contribution: %d %v", code, c)
+	}
+	orders, _ := c["orders"].([]any)
+	if len(orders) > 0 {
+		if code, c, _ = do(t, h, "POST", "/api/contributions/1/orders/1", `{"status":"skipped"}`); code != 200 {
+			t.Fatalf("skip order: %d %v", code, c)
+		}
+	}
+	if code, _, _ := do(t, h, "POST", "/api/contributions/1/orders/1", `{"status":"nope"}`); code != 400 {
+		t.Fatalf("bad order status: %d", code)
+	}
+	if code, _, list := do(t, h, "GET", "/api/contributions", ""); code != 200 || len(list) != 1 {
+		t.Fatalf("list contributions: %d %v", code, list)
+	}
+	if code, c, _ = do(t, h, "POST", "/api/contributions/1/discard", ""); code != 200 || c["status"] != "discarded" {
+		t.Fatalf("discard: %d %v", code, c)
+	}
+	if code, _, _ := do(t, h, "POST", "/api/contributions/1/orders/1", `{"status":"done"}`); code != 409 && len(orders) > 0 {
+		t.Fatalf("change discarded: %d", code)
+	}
+	if code, _, _ := do(t, h, "GET", "/api/contributions/9", ""); code != 404 {
+		t.Fatalf("missing contribution: %d", code)
+	}
 }

@@ -85,6 +85,7 @@ export function RatingsTab({ assetId }: { assetId: number }) {
     const missing = FACTORS.filter((f) => f.key !== 'volatility' && !values[f.key])
     if (missing.length) return setError(`Rate ${missing.map((f) => f.label.toLowerCase()).join(', ')} from 1 to 5.`)
     if (!values.volatility && !beta.data) return setError('No beta yet (needs a year of history): rate volatility by hand.')
+    if (!reason.trim()) return setError('Say why, e.g. "initial rating" or "moat weaker after new entrant".')
     add.mutate()
   }
 

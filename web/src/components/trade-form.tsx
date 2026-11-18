@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { api, errorMessage, unwrap, type Schemas } from '@/lib/api'
 import { decimalInput, qty, today } from '@/lib/format'
 import { qk } from '@/lib/queries'
+import { cn } from '@/lib/utils'
 
 export interface TradeDraft {
   asset?: number
@@ -81,7 +82,11 @@ export function TradeForm({ assets, initial, lockAsset, submitLabel, onRecorded 
   const held = position.data && Number(position.data.quantity) > 0 ? position.data : null
 
   return (
-    <form onSubmit={submit} className="grid grid-cols-2 gap-3 sm:grid-cols-6" noValidate>
+    <form
+      onSubmit={submit}
+      className={cn('grid grid-cols-2 gap-3', lockAsset ? 'sm:grid-cols-3 xl:grid-cols-5' : 'sm:grid-cols-6')}
+      noValidate
+    >
       {!lockAsset && (
         <Field label="Asset" className="col-span-2 sm:col-span-2">
           {(id) => (
@@ -113,7 +118,6 @@ export function TradeForm({ assets, initial, lockAsset, submitLabel, onRecorded 
       </Field>
       <Field
         label="Quantity"
-        className={lockAsset ? 'sm:col-span-2' : undefined}
         hint={held && side === 'sell' ? `Held: ${qty(held.quantity)}` : undefined}
       >
         {(id) => (
@@ -137,7 +141,7 @@ export function TradeForm({ assets, initial, lockAsset, submitLabel, onRecorded 
           {(id) => <Input id={id} inputMode="decimal" value={fx} onChange={(e) => setFx(e.target.value)} placeholder="5.80" />}
         </Field>
       )}
-      <div className="col-span-2 flex flex-wrap items-center gap-3 sm:col-span-6">
+      <div className="col-span-full flex flex-wrap items-center gap-3">
         <Button type="submit" disabled={record.isPending}>
           {record.isPending ? 'Recording…' : (submitLabel ?? `Record ${side}`)}
         </Button>

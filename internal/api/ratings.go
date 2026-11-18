@@ -27,7 +27,7 @@ type RatingCreate struct {
 	Moat           int    `json:"moat"`
 	Predictability int    `json:"predictability"`
 	Horizon        int    `json:"horizon"`
-	Reason         string `json:"reason" required:"false"`
+	Reason         string `json:"reason" doc:"Why the rating changed"`
 }
 
 // WithRatings mounts rating history and factor weight routes.

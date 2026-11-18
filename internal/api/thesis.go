@@ -18,7 +18,7 @@ type ThesisPut struct {
 // ThesisReview is the body of POST /api/assets/{id}/thesis/review.
 type ThesisReview struct {
 	ReviewedOn   string  `json:"reviewed_on" required:"false" doc:"YYYY-MM-DD; defaults to today"`
-	Note         string  `json:"note" required:"false"`
+	Note         string  `json:"note" doc:"What the review found"`
 	Status       string  `json:"status" required:"false" doc:"New status; empty returns under_review to active"`
 	NextReviewOn *string `json:"next_review_on,omitempty" doc:"YYYY-MM-DD"`
 }

@@ -457,6 +457,75 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/contributions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Stored contribution plans, newest first */
+        get: operations["listContributions"];
+        put?: never;
+        /** Plan a contribution and store it for execution */
+        post: operations["createContribution"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/contributions/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A stored contribution plan */
+        get: operations["getContribution"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/contributions/{id}/discard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Discard a stored plan */
+        post: operations["discardContribution"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/contributions/{id}/orders/{seq}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Mark a plan order done, skipped or open */
+        post: operations["setContributionOrder"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/fair-values/{id}": {
         parameters: {
             query?: never;
@@ -570,7 +639,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Plan a contribution */
+        /** Preview a contribution plan without storing it */
         post: operations["planContribution"];
         delete?: never;
         options?: never;
@@ -785,6 +854,17 @@ export interface components {
         ConditionText: {
             text: string;
         };
+        Contribution: {
+            amount: string;
+            created_at: string;
+            discarded_at: string | null;
+            /** Format: int64 */
+            id: number;
+            orders: components["schemas"]["OrderState"][] | null;
+            plan: components["schemas"]["ContributionPlan"];
+            /** @enum {string} */
+            status: "planned" | "partial" | "executed" | "discarded";
+        };
         ContributionPlan: {
             amount: string;
             new_money: string;
@@ -933,6 +1013,23 @@ export interface components {
             seq: number;
             step: string;
         };
+        OrderState: {
+            /** Format: int64 */
+            seq: number;
+            /** @enum {string} */
+            status: "open" | "done" | "skipped";
+            /** Format: int64 */
+            trade_id: number | null;
+        };
+        OrderUpdate: {
+            /** @enum {string} */
+            status: "open" | "done" | "skipped";
+            /**
+             * Format: int64
+             * @description The buy trade that executed this order
+             */
+            trade_id?: number;
+        };
         PortfolioPosition: {
             /** Format: int64 */
             asset_id: number;
@@ -999,7 +1096,8 @@ export interface components {
             predictability: number;
             /** @description YYYY-MM-DD; defaults to today */
             rated_on?: string;
-            reason?: string;
+            /** @description Why the rating changed */
+            reason: string;
             /** Format: int64 */
             understanding: number;
             /**
@@ -1139,7 +1237,8 @@ export interface components {
         ThesisReview: {
             /** @description YYYY-MM-DD */
             next_review_on?: string;
-            note?: string;
+            /** @description What the review found */
+            note: string;
             /** @description YYYY-MM-DD; defaults to today */
             reviewed_on?: string;
             /** @description New status; empty returns under_review to active */
@@ -2461,6 +2560,172 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Summary"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listContributions: {
+        parameters: {
+            query?: {
+                /** @description Default 50 */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Contribution"][] | null;
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    createContribution: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Amount"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Contribution"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getContribution: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Resource id */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Contribution"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    discardContribution: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Resource id */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Contribution"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    setContributionOrder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Resource id */
+                id: number;
+                seq: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OrderUpdate"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Contribution"];
                 };
             };
             /** @description Error */

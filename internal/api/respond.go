@@ -63,12 +63,13 @@ func apiError(err error) error {
 		errors.Is(err, trades.ErrNotFound), errors.Is(err, cash.ErrNotFound),
 		errors.Is(err, ratings.ErrNotFound), errors.Is(err, research.ErrNotFound),
 		errors.Is(err, thesis.ErrNotFound), errors.Is(err, valuation.ErrNotFound),
-		errors.Is(err, jobs.ErrNoRuns):
+		errors.Is(err, jobs.ErrNoRuns), errors.Is(err, portfolio.ErrNotFound):
 		status = http.StatusNotFound
 	case errors.Is(err, assets.ErrDuplicate), errors.Is(err, assets.ErrInvalidTransition),
 		errors.Is(err, alerts.ErrResolved), errors.Is(err, trades.ErrInsufficientQuantity),
 		errors.Is(err, cash.ErrInsufficientBalance), errors.Is(err, cash.ErrNoRate),
-		errors.Is(err, portfolio.ErrNoFX), errors.Is(err, jobs.ErrRunning):
+		errors.Is(err, portfolio.ErrNoFX), errors.Is(err, jobs.ErrRunning),
+		errors.Is(err, portfolio.ErrConflict):
 		status = http.StatusConflict
 	}
 	msg := err.Error()

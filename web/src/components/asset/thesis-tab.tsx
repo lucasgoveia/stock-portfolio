@@ -272,6 +272,7 @@ function ReviewForm({ assetId, thesis }: { assetId: number; thesis: Thesis }) {
       <form
         onSubmit={(e) => {
           e.preventDefault()
+          if (!note.trim()) return setError('Write what the review found, condition by condition.')
           review.mutate()
         }}
         className="grid grid-cols-2 gap-3"

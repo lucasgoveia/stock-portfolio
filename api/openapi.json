@@ -287,6 +287,58 @@
         ],
         "type": "object"
       },
+      "Contribution": {
+        "additionalProperties": false,
+        "properties": {
+          "amount": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "discarded_at": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "orders": {
+            "items": {
+              "$ref": "#/components/schemas/OrderState"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "plan": {
+            "$ref": "#/components/schemas/ContributionPlan"
+          },
+          "status": {
+            "enum": [
+              "planned",
+              "partial",
+              "executed",
+              "discarded"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "amount",
+          "status",
+          "created_at",
+          "discarded_at",
+          "plan",
+          "orders"
+        ],
+        "type": "object"
+      },
       "ContributionPlan": {
         "additionalProperties": false,
         "properties": {
@@ -840,6 +892,58 @@
         ],
         "type": "object"
       },
+      "OrderState": {
+        "additionalProperties": false,
+        "properties": {
+          "seq": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "open",
+              "done",
+              "skipped"
+            ],
+            "type": "string"
+          },
+          "trade_id": {
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "seq",
+          "status",
+          "trade_id"
+        ],
+        "type": "object"
+      },
+      "OrderUpdate": {
+        "additionalProperties": false,
+        "properties": {
+          "status": {
+            "enum": [
+              "open",
+              "done",
+              "skipped"
+            ],
+            "type": "string"
+          },
+          "trade_id": {
+            "description": "The buy trade that executed this order",
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "type": "object"
+      },
       "PortfolioPosition": {
         "additionalProperties": false,
         "properties": {
@@ -1063,6 +1167,7 @@
             "type": "string"
           },
           "reason": {
+            "description": "Why the rating changed",
             "type": "string"
           },
           "understanding": {
@@ -1079,7 +1184,8 @@
           "understanding",
           "moat",
           "predictability",
-          "horizon"
+          "horizon",
+          "reason"
         ],
         "type": "object"
       },
@@ -1616,6 +1722,7 @@
             "type": "string"
           },
           "note": {
+            "description": "What the review found",
             "type": "string"
           },
           "reviewed_on": {
@@ -1627,6 +1734,9 @@
             "type": "string"
           }
         },
+        "required": [
+          "note"
+        ],
         "type": "object"
       },
       "Trade": {
@@ -3786,6 +3896,252 @@
         ]
       }
     },
+    "/api/contributions": {
+      "get": {
+        "operationId": "listContributions",
+        "parameters": [
+          {
+            "description": "Default 50",
+            "explode": false,
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "description": "Default 50",
+              "format": "int64",
+              "maximum": 200,
+              "minimum": 0,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Contribution"
+                  },
+                  "type": [
+                    "array",
+                    "null"
+                  ]
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Stored contribution plans, newest first",
+        "tags": [
+          "portfolio"
+        ]
+      },
+      "post": {
+        "operationId": "createContribution",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Amount"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Contribution"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Plan a contribution and store it for execution",
+        "tags": [
+          "portfolio"
+        ]
+      }
+    },
+    "/api/contributions/{id}": {
+      "get": {
+        "operationId": "getContribution",
+        "parameters": [
+          {
+            "description": "Resource id",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Resource id",
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Contribution"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "A stored contribution plan",
+        "tags": [
+          "portfolio"
+        ]
+      }
+    },
+    "/api/contributions/{id}/discard": {
+      "post": {
+        "operationId": "discardContribution",
+        "parameters": [
+          {
+            "description": "Resource id",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Resource id",
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Contribution"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Discard a stored plan",
+        "tags": [
+          "portfolio"
+        ]
+      }
+    },
+    "/api/contributions/{id}/orders/{seq}": {
+      "post": {
+        "operationId": "setContributionOrder",
+        "parameters": [
+          {
+            "description": "Resource id",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Resource id",
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "seq",
+            "required": true,
+            "schema": {
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrderUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Contribution"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Mark a plan order done, skipped or open",
+        "tags": [
+          "portfolio"
+        ]
+      }
+    },
     "/api/fair-values/{id}": {
       "delete": {
         "operationId": "deleteFairValue",
@@ -4147,7 +4503,7 @@
             "description": "Error"
           }
         },
-        "summary": "Plan a contribution",
+        "summary": "Preview a contribution plan without storing it",
         "tags": [
           "portfolio"
         ]

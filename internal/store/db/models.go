@@ -76,6 +76,22 @@ type CdiRate struct {
 	RatePct string
 }
 
+type Contribution struct {
+	ID          int64
+	Amount      string
+	Plan        string
+	CreatedAt   string
+	DiscardedAt sql.NullString
+}
+
+type ContributionOrder struct {
+	ContributionID int64
+	Seq            int64
+	Status         string
+	TradeID        sql.NullInt64
+	UpdatedAt      string
+}
+
 type FairValue struct {
 	ID            int64
 	AssetID       int64
