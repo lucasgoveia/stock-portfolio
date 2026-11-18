@@ -29,6 +29,13 @@ func Backfill(ctx context.Context, d Deps, from time.Time) ([]StepResult, error)
 		{"cotahist", func(ctx context.Context, _ time.Time) (string, error) { return p.cotahistYears(ctx, from, today) }},
 		{"us_prices", func(ctx context.Context, _ time.Time) (string, error) { return p.usRange(ctx, from, today) }},
 		{"indices", func(ctx context.Context, _ time.Time) (string, error) { return p.indices(ctx, from.AddDate(0, 0, 14)) }},
+		{"snapshots", func(ctx context.Context, _ time.Time) (string, error) {
+			if d.Snapshots == nil {
+				return "", ErrSkipped
+			}
+			n, err := d.Snapshots.Backfill(ctx, from, today)
+			return fmt.Sprintf("%d days", n), err
+		}},
 	}
 	var out []StepResult
 	for _, st := range steps {

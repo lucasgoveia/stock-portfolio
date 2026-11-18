@@ -13,6 +13,7 @@ import (
 	"github.com/lucasgoveia/stock-portfolio/internal/corpactions"
 	"github.com/lucasgoveia/stock-portfolio/internal/dividends"
 	"github.com/lucasgoveia/stock-portfolio/internal/jobs"
+	"github.com/lucasgoveia/stock-portfolio/internal/performance"
 	"github.com/lucasgoveia/stock-portfolio/internal/portfolio"
 	"github.com/lucasgoveia/stock-portfolio/internal/ratings"
 	"github.com/lucasgoveia/stock-portfolio/internal/research"
@@ -61,7 +62,8 @@ func apiError(err error) error {
 		errors.Is(err, ratings.ErrValidation), errors.Is(err, research.ErrValidation),
 		errors.Is(err, thesis.ErrValidation), errors.Is(err, valuation.ErrValidation),
 		errors.Is(err, portfolio.ErrValidation), errors.Is(err, tactical.ErrValidation),
-		errors.Is(err, dividends.ErrValidation), errors.Is(err, corpactions.ErrValidation):
+		errors.Is(err, dividends.ErrValidation), errors.Is(err, corpactions.ErrValidation),
+		errors.Is(err, performance.ErrValidation):
 		status = http.StatusBadRequest
 	case errors.Is(err, assets.ErrNotFound), errors.Is(err, alerts.ErrNotFound),
 		errors.Is(err, trades.ErrNotFound), errors.Is(err, cash.ErrNotFound),

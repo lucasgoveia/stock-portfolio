@@ -161,6 +161,13 @@ type JobRun struct {
 	Steps      string
 }
 
+type PerformanceSnapshot struct {
+	RefDate string
+	Segment string
+	Value   string
+	Flow    string
+}
+
 type Rating struct {
 	ID             int64
 	AssetID        int64

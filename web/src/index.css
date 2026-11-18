@@ -84,6 +84,11 @@
     --chart-3: #9a6a0f;
     --chart-4: #6b5aa6;
     --chart-5: #b4232f;
+    /* Performance series, validated with the dataviz palette checker. */
+    --series-1: #1baf7a;
+    --series-2: #2a78d6;
+    --series-3: #eb6834;
+    --series-4: #6250d6;
     --radius: 0.5rem;
     --sidebar: #e9eee9;
     --sidebar-foreground: #14211d;
@@ -123,6 +128,10 @@
     --chart-3: #d9a441;
     --chart-4: #a194d6;
     --chart-5: #e5636b;
+    --series-1: #199e70;
+    --series-2: #3987e5;
+    --series-3: #d95926;
+    --series-4: #9085e9;
     --sidebar: #111a16;
     --sidebar-foreground: #e3ebe6;
     --sidebar-primary: #4fb98e;

@@ -414,6 +414,19 @@
         ],
         "type": "object"
       },
+      "BackfillResult": {
+        "additionalProperties": false,
+        "properties": {
+          "days": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "days"
+        ],
+        "type": "object"
+      },
       "Beta": {
         "additionalProperties": false,
         "properties": {
@@ -1715,6 +1728,75 @@
         ],
         "type": "object"
       },
+      "Report": {
+        "additionalProperties": false,
+        "properties": {
+          "benchmarks": {
+            "$ref": "#/components/schemas/ReportBenchmarksStruct"
+          },
+          "from": {
+            "type": "string"
+          },
+          "segments": {
+            "items": {
+              "$ref": "#/components/schemas/Segment"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "series": {
+            "items": {
+              "$ref": "#/components/schemas/SeriesPoint"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "to": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "from",
+          "to",
+          "series",
+          "segments",
+          "benchmarks"
+        ],
+        "type": "object"
+      },
+      "ReportBenchmarksStruct": {
+        "additionalProperties": false,
+        "properties": {
+          "cdi": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "ibov": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sp500_brl": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "cdi",
+          "ibov",
+          "sp500_brl"
+        ],
+        "type": "object"
+      },
       "Review": {
         "additionalProperties": false,
         "properties": {
@@ -1904,6 +1986,79 @@
           "terminal_value",
           "present_value",
           "value_per_share"
+        ],
+        "type": "object"
+      },
+      "Segment": {
+        "additionalProperties": false,
+        "properties": {
+          "end_value": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "net_flows": {
+            "type": "string"
+          },
+          "segment": {
+            "type": "string"
+          },
+          "start_value": {
+            "type": "string"
+          },
+          "twr": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "segment",
+          "label",
+          "start_value",
+          "end_value",
+          "net_flows",
+          "twr"
+        ],
+        "type": "object"
+      },
+      "SeriesPoint": {
+        "additionalProperties": false,
+        "properties": {
+          "cdi": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "date": {
+            "type": "string"
+          },
+          "ibov": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sp500_brl": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "total": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "date",
+          "total",
+          "value",
+          "cdi",
+          "ibov",
+          "sp500_brl"
         ],
         "type": "object"
       },
@@ -6057,6 +6212,90 @@
         "summary": "Active opportunity notes",
         "tags": [
           "research"
+        ]
+      }
+    },
+    "/api/performance": {
+      "get": {
+        "operationId": "getPerformance",
+        "parameters": [
+          {
+            "description": "YYYY-MM-DD; default one year before to",
+            "explode": false,
+            "in": "query",
+            "name": "from",
+            "schema": {
+              "description": "YYYY-MM-DD; default one year before to",
+              "type": "string"
+            }
+          },
+          {
+            "description": "YYYY-MM-DD; default today",
+            "explode": false,
+            "in": "query",
+            "name": "to",
+            "schema": {
+              "description": "YYYY-MM-DD; default today",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Report"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Time-weighted returns per segment and vs CDI, IBOV and S\u0026P 500 in BRL",
+        "tags": [
+          "performance"
+        ]
+      }
+    },
+    "/api/performance/backfill": {
+      "post": {
+        "operationId": "backfillPerformance",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackfillResult"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Rebuild daily snapshots from trades, cash and stored prices",
+        "tags": [
+          "performance"
         ]
       }
     },

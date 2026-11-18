@@ -200,7 +200,7 @@ func TestDailyRunPersistsAndIsIdempotent(t *testing.T) {
 		t.Fatalf("evaluators ran %d times", *e.evals)
 	}
 	last, err := e.runner.Last(ctx)
-	if err != nil || last.Status != RunOK || len(last.Steps) != 11 || last.FinishedAt == "" {
+	if err != nil || last.Status != RunOK || len(last.Steps) != 12 || last.FinishedAt == "" {
 		t.Fatalf("last = %+v, %v", last, err)
 	}
 }

@@ -65,7 +65,9 @@ type Deps struct {
 	DividendFeed marketdata.DividendSource
 	Dividends    DividendSink
 	// Actions queues splits, reverse splits and bonificações from the same feed.
-	Actions    ActionSink
+	Actions ActionSink
+	// Snapshots writes the daily performance snapshot (last step, spec §16.1).
+	Snapshots  SnapshotWriter
 	Evaluators []Evaluator
 	Now        func() time.Time
 }
@@ -78,6 +80,12 @@ type DividendSink interface {
 // ActionSink queues detected corporate actions (corpactions.Service).
 type ActionSink interface {
 	Detect(ctx context.Context, assetID int64, kind, exDate string, factor decimal.Decimal, source, note string) (bool, error)
+}
+
+// SnapshotWriter stores daily values for performance (performance.Service).
+type SnapshotWriter interface {
+	SnapshotToday(ctx context.Context, day time.Time) (string, error)
+	Backfill(ctx context.Context, from, to time.Time) (int, error)
 }
 
 // BetaWriter stores computed betas (ratings.Service).
@@ -113,6 +121,7 @@ func DailySteps(d Deps) []Step {
 		{"corporate_actions", p.corporateActions},
 		{"beta", p.beta},
 		{"evaluate", p.evaluate},
+		{"snapshot", p.snapshot},
 	}
 }
 
@@ -283,6 +292,13 @@ func (p *pipeline) dividends(ctx context.Context, day time.Time) (string, error)
 		return note, errors.New(strings.Join(failed, "; "))
 	}
 	return note, nil
+}
+
+func (p *pipeline) snapshot(ctx context.Context, day time.Time) (string, error) {
+	if p.d.Snapshots == nil {
+		return "", ErrSkipped
+	}
+	return p.d.Snapshots.SnapshotToday(ctx, day)
 }
 
 // corporateActions queues share events announced for B3 holdings. brapi

@@ -22,6 +22,7 @@ import (
 	"github.com/lucasgoveia/stock-portfolio/internal/dividends"
 	"github.com/lucasgoveia/stock-portfolio/internal/jobs"
 	"github.com/lucasgoveia/stock-portfolio/internal/marketdata"
+	"github.com/lucasgoveia/stock-portfolio/internal/performance"
 	"github.com/lucasgoveia/stock-portfolio/internal/portfolio"
 	"github.com/lucasgoveia/stock-portfolio/internal/ratings"
 	"github.com/lucasgoveia/stock-portfolio/internal/research"
@@ -84,6 +85,8 @@ func run() error {
 	deps.Dividends = dividendSvc
 	actionSvc := corpactions.NewService(conn, assetSvc, tradeSvc, alertSvc, nil)
 	deps.Actions = actionSvc
+	perfSvc := performance.NewService(conn, assetSvc, tradeSvc, cashSvc, nil)
+	deps.Snapshots = perfSvc
 	portfolioSvc := portfolio.NewService(portfolio.Deps{
 		Conn: conn, Assets: assetSvc, Trades: tradeSvc, Cash: cashSvc, Rates: rateStore, Ratings: ratingSvc,
 		Valuation: valuationSvc, Thesis: thesisSvc, Research: researchSvc, Alerts: alertSvc, Tactical: tacticalSvc, Tax: taxSvc, Dividends: dividendSvc,
@@ -126,6 +129,7 @@ func run() error {
 		api.WithTaxes(taxSvc),
 		api.WithDividends(dividendSvc),
 		api.WithCorporateActions(actionSvc),
+		api.WithPerformance(perfSvc),
 		api.WithUI(web.Dist()),
 	), ReadHeaderTimeout: 10 * time.Second}
 	go func() {

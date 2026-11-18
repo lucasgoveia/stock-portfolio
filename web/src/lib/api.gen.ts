@@ -836,6 +836,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/performance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Time-weighted returns per segment and vs CDI, IBOV and S&P 500 in BRL */
+        get: operations["getPerformance"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/performance/backfill": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Rebuild daily snapshots from trades, cash and stored prices */
+        post: operations["backfillPerformance"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/plans/contribution": {
         parameters: {
             query?: never;
@@ -1137,6 +1171,10 @@ export interface components {
         B3Taxes: {
             months: components["schemas"]["TaxMonth"][] | null;
             params: components["schemas"]["TaxParams"];
+        };
+        BackfillResult: {
+            /** Format: int64 */
+            days: number;
         };
         Beta: {
             /** Format: int64 */
@@ -1506,6 +1544,18 @@ export interface components {
              */
             volatility?: number;
         };
+        Report: {
+            benchmarks: components["schemas"]["ReportBenchmarksStruct"];
+            from: string;
+            segments: components["schemas"]["Segment"][] | null;
+            series: components["schemas"]["SeriesPoint"][] | null;
+            to: string;
+        };
+        ReportBenchmarksStruct: {
+            cdi: string | null;
+            ibov: string | null;
+            sp500_brl: string | null;
+        };
         Review: {
             created_at: string;
             /** Format: int64 */
@@ -1552,6 +1602,22 @@ export interface components {
             revenue_year5: string;
             terminal_value: string;
             value_per_share: string;
+        };
+        Segment: {
+            end_value: string;
+            label: string;
+            net_flows: string;
+            segment: string;
+            start_value: string;
+            twr: string;
+        };
+        SeriesPoint: {
+            cdi: string | null;
+            date: string;
+            ibov: string | null;
+            sp500_brl: string | null;
+            total: string;
+            value: string;
         };
         Setup: {
             /** Format: int64 */
@@ -3935,6 +4001,69 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Note"][] | null;
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getPerformance: {
+        parameters: {
+            query?: {
+                /** @description YYYY-MM-DD; default one year before to */
+                from?: string;
+                /** @description YYYY-MM-DD; default today */
+                to?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Report"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    backfillPerformance: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BackfillResult"];
                 };
             };
             /** @description Error */
