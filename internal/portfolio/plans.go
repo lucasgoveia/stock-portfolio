@@ -83,7 +83,9 @@ func (s *Service) PlanContribution(ctx context.Context, amount decimal.Decimal) 
 		}
 		in.Assets = append(in.Assets, pa)
 	}
-	return ContributionPlan{Plan: p.PlanContribution(in), Amount: amount, Dividends: div, Tickers: tickers(snap)}, nil
+	plan := ContributionPlan{Plan: p.PlanContribution(in), Amount: amount, Dividends: div, Tickers: tickers(snap)}
+	capAll(&plan)
+	return plan, nil
 }
 
 // TrimsResult is an engine trim plan plus ticker lookup and, for B3 trims,
@@ -112,6 +114,7 @@ func (s *Service) Trims(ctx context.Context) (TrimsResult, error) {
 	if err := s.addTrimTax(ctx, snap, &r); err != nil {
 		return TrimsResult{}, err
 	}
+	capAll(&r)
 	return r, nil
 }
 

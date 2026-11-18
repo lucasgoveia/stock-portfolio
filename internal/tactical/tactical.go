@@ -81,6 +81,7 @@ func (s *Service) convert(r db.TacticalSetup) (Setup, error) {
 	if err != nil {
 		return Setup{}, err
 	}
+	sz.StopDistance, sz.Size, sz.LossAtStop = sz.StopDistance.Round(8), sz.Size.Round(8), sz.LossAtStop.Round(8)
 	out.Sizing = sz
 	return out, nil
 }

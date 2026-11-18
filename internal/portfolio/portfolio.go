@@ -426,6 +426,7 @@ func (s *Service) Snapshot(ctx context.Context) (Snapshot, error) {
 			snap.Watchlist = append(snap.Watchlist, *x)
 		}
 	}
+	roundSnapshot(&snap)
 	return snap, nil
 }
 
