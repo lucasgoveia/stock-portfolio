@@ -1,4 +1,4 @@
-.PHONY: run dev build build-web test lint generate
+.PHONY: run dev build build-web test lint generate migration migrate-check
 
 run:
 	go run ./cmd/stockportfolio
@@ -27,3 +27,13 @@ lint:
 
 generate:
 	sqlc generate
+
+# Schema changes: edit internal/store/schema, then `make migration name=<desc>`.
+migration:
+	atlas migrate diff $(name) --env local
+	atlas migrate lint --env local --latest 1 || true
+	sqlc generate
+
+migrate-check:
+	atlas migrate validate --env local
+	atlas migrate diff check --env local | grep -q "synced with the desired state"

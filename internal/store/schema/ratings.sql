@@ -1,4 +1,3 @@
--- +goose Up
 -- Append-only: rows are never updated or deleted; the latest (rated_on, id) wins.
 CREATE TABLE ratings (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -13,6 +12,3 @@ CREATE TABLE ratings (
     created_at   TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 );
 CREATE INDEX ratings_asset_date ON ratings (asset_id, rated_on, id);
-
--- +goose Down
-DROP TABLE ratings;

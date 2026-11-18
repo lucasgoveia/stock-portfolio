@@ -1,4 +1,3 @@
--- +goose Up
 CREATE TABLE research_notes (
     id                     INTEGER PRIMARY KEY AUTOINCREMENT,
     asset_id               INTEGER NOT NULL REFERENCES assets (id) ON DELETE CASCADE,
@@ -14,6 +13,3 @@ CREATE TABLE research_notes (
     CHECK (opportunity = 0 OR opportunity_expires_on IS NOT NULL)
 );
 CREATE INDEX research_notes_asset ON research_notes (asset_id, id);
-
--- +goose Down
-DROP TABLE research_notes;

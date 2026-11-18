@@ -35,6 +35,15 @@ type Asset struct {
 	UpdatedAt string
 }
 
+type AssetPrice struct {
+	AssetID   int64
+	RefDate   string
+	Source    string
+	Close     string
+	AdjClose  sql.NullString
+	FetchedAt string
+}
+
 type CashInstrument struct {
 	ID        int64
 	Kind      string
@@ -76,6 +85,22 @@ type FxRate struct {
 	Pair    string
 	RefDate string
 	Rate    string
+}
+
+type IndexPoint struct {
+	IndexCode string
+	RefDate   string
+	Close     string
+}
+
+type JobRun struct {
+	ID         int64
+	Job        string
+	RunDate    string
+	StartedAt  string
+	FinishedAt sql.NullString
+	Status     string
+	Steps      string
 }
 
 type Rating struct {

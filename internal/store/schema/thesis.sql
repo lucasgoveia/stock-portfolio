@@ -1,4 +1,3 @@
--- +goose Up
 CREATE TABLE theses (
     id             INTEGER PRIMARY KEY AUTOINCREMENT,
     asset_id       INTEGER NOT NULL UNIQUE REFERENCES assets (id) ON DELETE CASCADE,
@@ -28,8 +27,3 @@ CREATE TABLE thesis_reviews (
     created_at     TEXT    NOT NULL
 );
 CREATE INDEX thesis_reviews_thesis ON thesis_reviews (thesis_id, reviewed_on, id);
-
--- +goose Down
-DROP TABLE thesis_reviews;
-DROP TABLE thesis_break_conditions;
-DROP TABLE theses;

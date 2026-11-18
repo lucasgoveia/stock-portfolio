@@ -2,3 +2,11 @@
 # STOCKPORTFOLIO_LISTEN_ADDR, STOCKPORTFOLIO_DB_PATH
 listen_addr = "127.0.0.1:8080"
 db_path = "stockportfolio.db"
+
+# brapi.dev token (free plan). Env: STOCKPORTFOLIO_BRAPI_TOKEN
+brapi_token = ""
+# Tiingo token for US prices; the US step is skipped when empty. Env: STOCKPORTFOLIO_TIINGO_TOKEN
+tiingo_token = ""
+# Daily job wall time in America/Sao_Paulo.
+daily_job_at = "19:00"
+disable_scheduler = false

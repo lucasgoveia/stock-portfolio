@@ -1,4 +1,3 @@
--- +goose Up
 CREATE TABLE assets (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     ticker     TEXT NOT NULL,
@@ -13,6 +12,3 @@ CREATE TABLE assets (
     updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
     UNIQUE (market, ticker)
 );
-
--- +goose Down
-DROP TABLE assets;

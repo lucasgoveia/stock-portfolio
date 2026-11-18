@@ -1,4 +1,3 @@
--- +goose Up
 CREATE TABLE cash_instruments (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     kind       TEXT NOT NULL CHECK (kind IN ('tesouro_selic', 'cdi', 'usd_cash')),
@@ -43,10 +42,3 @@ CREATE TABLE fx_rates (
     rate     TEXT NOT NULL,
     PRIMARY KEY (pair, ref_date)
 );
-
--- +goose Down
-DROP TABLE fx_rates;
-DROP TABLE tesouro_selic_prices;
-DROP TABLE cdi_rates;
-DROP TABLE cash_movements;
-DROP TABLE cash_instruments;

@@ -1,0 +1,32 @@
+-- Daily closes per asset and source. COTAHIST and Tiingo closes are raw
+-- (unadjusted); brapi quotes are the latest price of the day.
+CREATE TABLE asset_prices (
+    asset_id   INTEGER NOT NULL REFERENCES assets (id) ON DELETE CASCADE,
+    ref_date   TEXT    NOT NULL,
+    source     TEXT    NOT NULL CHECK (source IN ('cotahist', 'brapi', 'tiingo', 'manual')),
+    close      TEXT    NOT NULL,
+    -- Adjusted close when the source provides one (Tiingo).
+    adj_close  TEXT,
+    fetched_at TEXT    NOT NULL,
+    PRIMARY KEY (asset_id, ref_date, source)
+);
+
+-- Daily index closes ('IBOV', 'SP500').
+CREATE TABLE index_points (
+    index_code TEXT NOT NULL,
+    ref_date   TEXT NOT NULL,
+    close      TEXT NOT NULL,
+    PRIMARY KEY (index_code, ref_date)
+);
+
+-- One row per job execution; steps is a JSON array of step results.
+CREATE TABLE job_runs (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    job         TEXT NOT NULL,
+    run_date    TEXT NOT NULL,
+    started_at  TEXT NOT NULL,
+    finished_at TEXT,
+    status      TEXT NOT NULL CHECK (status IN ('running', 'ok', 'partial', 'failed')),
+    steps       TEXT NOT NULL DEFAULT '[]'
+);
+CREATE INDEX job_runs_job ON job_runs (job, id);

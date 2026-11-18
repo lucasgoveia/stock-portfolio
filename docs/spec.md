@@ -37,7 +37,7 @@ The user starts with **zero capital**; all money enters through contributions.
 
 ## 3. Architecture
 
-- **Backend:** Go, single binary. `net/http` + chi, SQLite via `modernc.org/sqlite` (pure Go), sqlc for queries, goose for migrations. Monetary and quantity values use `shopspring/decimal`, stored as TEXT.
+- **Backend:** Go, single binary. `net/http` + chi, SQLite via `modernc.org/sqlite` (pure Go), sqlc for queries, Atlas versioned migrations (`YYYYMMDDHHmmSS_desc.sql`, generated from the declarative schema in `internal/store/schema` with `atlas migrate diff`, checksum-verified via `atlas.sum`, applied by the binary on startup). Monetary and quantity values use `shopspring/decimal`, stored as TEXT.
 - **Frontend:** React + TypeScript (Vite), shadcn-ui, TanStack Router, TanStack Query. Built assets embedded into the Go binary with `embed`.
 - **API:** JSON REST under `/api`. OpenAPI document maintained alongside handlers; TS client types generated from it.
 - **Scheduler:** in-process daily job at 19:00 America/Sao_Paulo (after B3 close), plus a "run now" button.

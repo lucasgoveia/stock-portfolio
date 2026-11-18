@@ -1,4 +1,3 @@
--- +goose Up
 CREATE TABLE fair_values (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     asset_id        INTEGER NOT NULL REFERENCES assets (id) ON DELETE CASCADE,
@@ -17,6 +16,3 @@ CREATE TABLE fair_values (
     created_at      TEXT    NOT NULL
 );
 CREATE INDEX fair_values_asset ON fair_values (asset_id, as_of, id);
-
--- +goose Down
-DROP TABLE fair_values;

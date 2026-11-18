@@ -1,4 +1,3 @@
--- +goose Up
 CREATE TABLE trades (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     asset_id   INTEGER NOT NULL REFERENCES assets (id) ON DELETE CASCADE,
@@ -14,6 +13,3 @@ CREATE TABLE trades (
 );
 
 CREATE INDEX trades_asset_date ON trades (asset_id, trade_date, id);
-
--- +goose Down
-DROP TABLE trades;

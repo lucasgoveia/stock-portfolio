@@ -1,4 +1,3 @@
--- +goose Up
 CREATE TABLE alerts (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     type          TEXT    NOT NULL,
@@ -16,6 +15,3 @@ CREATE TABLE alerts (
 -- At most one non-resolved alert per dedupe key; resolved ones are history.
 CREATE UNIQUE INDEX alerts_dedupe_active ON alerts (dedupe_key) WHERE state <> 'resolved';
 CREATE INDEX alerts_state ON alerts (state);
-
--- +goose Down
-DROP TABLE alerts;

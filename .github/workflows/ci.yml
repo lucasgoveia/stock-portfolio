@@ -17,6 +17,9 @@ jobs:
       - uses: golangci/golangci-lint-action@v9
         with:
           version: latest
+      - uses: ariga/setup-atlas@v0
+      - name: migrations in sync with schema
+        run: make migrate-check
       - uses: sqlc-dev/setup-sqlc@v4
         with:
           sqlc-version: '1.31.1'
