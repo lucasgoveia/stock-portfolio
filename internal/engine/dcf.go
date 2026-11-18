@@ -132,16 +132,9 @@ func ScenarioDCF(in DCFInput) (DCFResult, error) {
 		return DCFResult{}, err
 	}
 	res := DCFResult{Scenarios: make([]ScenarioValue, 0, len(in.Scenarios))}
-	one := decimal.NewFromInt(1)
 	weighted := decimal.Zero
 	for _, s := range in.Scenarios {
-		rev := in.BaseRevenue
-		for _, g := range s.RevenueGrowth {
-			rev = rev.Mul(one.Add(g))
-		}
-		tv := rev.Mul(s.TerminalMargin).Mul(s.ExitMultiple)
-		pv := tv.Div(one.Add(s.DiscountRate).Pow(decimal.NewFromInt(DCFYears)))
-		vps := pv.Sub(in.NetDebt).Div(in.Shares)
+		rev, tv, pv, vps := scenarioValue(in.BaseRevenue, in.NetDebt, in.Shares, s)
 		weighted = weighted.Add(vps.Mul(s.Probability))
 		res.Scenarios = append(res.Scenarios, ScenarioValue{
 			Name: s.Name, Probability: s.Probability, Revenue5: rev.Round(DCFValuePrecision),
@@ -151,4 +144,19 @@ func ScenarioDCF(in DCFInput) (DCFResult, error) {
 	}
 	res.ValuePerShare = weighted.Round(DCFValuePrecision)
 	return res, nil
+}
+
+// scenarioValue is the single-scenario formula shared by ScenarioDCF and
+// ReverseDCF: it returns year-5 revenue, the undiscounted terminal value, its
+// present value and the unrounded value per share.
+func scenarioValue(baseRevenue, netDebt, shares decimal.Decimal, s Scenario) (rev, tv, pv, vps decimal.Decimal) {
+	one := decimal.NewFromInt(1)
+	rev = baseRevenue
+	for _, g := range s.RevenueGrowth {
+		rev = rev.Mul(one.Add(g))
+	}
+	tv = rev.Mul(s.TerminalMargin).Mul(s.ExitMultiple)
+	pv = tv.Div(one.Add(s.DiscountRate).Pow(decimal.NewFromInt(DCFYears)))
+	vps = pv.Sub(netDebt).Div(shares)
+	return rev, tv, pv, vps
 }

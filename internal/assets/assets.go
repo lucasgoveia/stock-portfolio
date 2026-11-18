@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/lucasgoveia/stock-portfolio/internal/marketdata"
 	"github.com/lucasgoveia/stock-portfolio/internal/store/db"
 )
 
@@ -90,13 +91,17 @@ type CreateInput struct {
 	Kind      string
 	Sleeve    string
 	Benchmark string
+	CNPJ      string // optional, B3 companies
+	CIK       string // optional, US companies
 }
 
-// UpdateInput holds optional field changes.
+// UpdateInput holds optional field changes. An empty CNPJ or CIK clears it.
 type UpdateInput struct {
 	Name      *string
 	Sleeve    *string
 	Benchmark *string
+	CNPJ      *string
+	CIK       *string
 }
 
 // Filter restricts List results; empty fields are ignored.
@@ -161,9 +166,18 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (db.Asset, error) 
 		return db.Asset{}, validationf("benchmark must be IBOV or SP500")
 	}
 
+	cnpj, err := normalizeCNPJ(in.CNPJ)
+	if err != nil {
+		return db.Asset{}, err
+	}
+	cik, err := normalizeCIK(in.CIK)
+	if err != nil {
+		return db.Asset{}, err
+	}
 	a, err := s.q.CreateAsset(ctx, db.CreateAssetParams{
 		Ticker: in.Ticker, Name: in.Name, Market: in.Market, Currency: in.Currency,
 		Kind: in.Kind, Sleeve: in.Sleeve, Status: StatusWatchlist, Benchmark: in.Benchmark,
+		Cnpj: cnpj, Cik: cik,
 	})
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
@@ -218,6 +232,29 @@ func (s *Service) List(ctx context.Context, f Filter) ([]db.Asset, error) {
 	return out, nil
 }
 
+// normalizeCNPJ formats and validates a CNPJ; empty stays empty.
+func normalizeCNPJ(s string) (string, error) {
+	if strings.TrimSpace(s) == "" {
+		return "", nil
+	}
+	if !marketdata.ValidCNPJ(s) {
+		return "", validationf("cnpj is not a valid CNPJ (14 digits with check digits)")
+	}
+	return marketdata.FormatCNPJ(s), nil
+}
+
+// normalizeCIK zero-pads a SEC CIK to 10 digits; empty stays empty.
+func normalizeCIK(s string) (string, error) {
+	if strings.TrimSpace(s) == "" {
+		return "", nil
+	}
+	c := marketdata.FormatCIK(s)
+	if c == "" {
+		return "", validationf("cik must be 1 to 10 digits")
+	}
+	return c, nil
+}
+
 func nullStr(p *string) sql.NullString {
 	if p == nil {
 		return sql.NullString{}
@@ -241,8 +278,24 @@ func (s *Service) Update(ctx context.Context, id int64, in UpdateInput) (db.Asse
 		}
 		in.Benchmark = &v
 	}
+	var cnpj, cik *string
+	if in.CNPJ != nil {
+		v, err := normalizeCNPJ(*in.CNPJ)
+		if err != nil {
+			return db.Asset{}, err
+		}
+		cnpj = &v
+	}
+	if in.CIK != nil {
+		v, err := normalizeCIK(*in.CIK)
+		if err != nil {
+			return db.Asset{}, err
+		}
+		cik = &v
+	}
 	a, err := s.q.UpdateAsset(ctx, db.UpdateAssetParams{
-		Name: nullStr(in.Name), Sleeve: nullStr(in.Sleeve), Benchmark: nullStr(in.Benchmark), ID: id,
+		Name: nullStr(in.Name), Sleeve: nullStr(in.Sleeve), Benchmark: nullStr(in.Benchmark),
+		Cnpj: nullStr(cnpj), Cik: nullStr(cik), ID: id,
 	})
 	if errors.Is(err, sql.ErrNoRows) {
 		return db.Asset{}, ErrNotFound

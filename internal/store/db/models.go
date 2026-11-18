@@ -31,6 +31,8 @@ type Asset struct {
 	Sleeve    string
 	Status    string
 	Benchmark string
+	Cnpj      string
+	Cik       string
 	CreatedAt string
 	UpdatedAt string
 }
@@ -137,6 +139,26 @@ type FairValue struct {
 	Sources       string
 	Note          string
 	CreatedAt     string
+}
+
+type FundamentalFact struct {
+	AssetID    int64
+	PeriodEnd  string
+	PeriodType string
+	Concept    string
+	Value      string
+	Source     string
+	Filed      string
+}
+
+type FundamentalSync struct {
+	AssetID   int64
+	Source    string
+	FetchedAt string
+	AsOf      string
+	Status    string
+	Message   string
+	Notes     string
 }
 
 type FxRate struct {

@@ -66,6 +66,8 @@ type Deps struct {
 	Dividends    DividendSink
 	// Actions queues splits, reverse splits and bonificações from the same feed.
 	Actions ActionSink
+	// Fundamentals refreshes CVM/SEC statements that are over a week old.
+	Fundamentals FundamentalsRefresher
 	// Snapshots writes the daily performance snapshot (last step, spec §16.1).
 	Snapshots  SnapshotWriter
 	Evaluators []Evaluator
@@ -80,6 +82,11 @@ type DividendSink interface {
 // ActionSink queues detected corporate actions (corpactions.Service).
 type ActionSink interface {
 	Detect(ctx context.Context, assetID int64, kind, exDate string, factor decimal.Decimal, source, note string) (bool, error)
+}
+
+// FundamentalsRefresher refreshes stale fundamentals (fundamentals.Service).
+type FundamentalsRefresher interface {
+	RefreshStale(ctx context.Context, now time.Time) (string, error)
 }
 
 // SnapshotWriter stores daily values for performance (performance.Service).
@@ -119,6 +126,7 @@ func DailySteps(d Deps) []Step {
 		{"indices", p.indices},
 		{"dividends", p.dividends},
 		{"corporate_actions", p.corporateActions},
+		{"fundamentals", p.fundamentals},
 		{"beta", p.beta},
 		{"evaluate", p.evaluate},
 		{"snapshot", p.snapshot},
@@ -292,6 +300,13 @@ func (p *pipeline) dividends(ctx context.Context, day time.Time) (string, error)
 		return note, errors.New(strings.Join(failed, "; "))
 	}
 	return note, nil
+}
+
+func (p *pipeline) fundamentals(ctx context.Context, _ time.Time) (string, error) {
+	if p.d.Fundamentals == nil {
+		return "", ErrSkipped
+	}
+	return p.d.Fundamentals.RefreshStale(ctx, p.d.Now())
 }
 
 func (p *pipeline) snapshot(ctx context.Context, day time.Time) (string, error) {

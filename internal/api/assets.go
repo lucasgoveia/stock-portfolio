@@ -21,12 +21,14 @@ type Asset struct {
 	Sleeve    string `json:"sleeve" enum:"core,tactical"`
 	Status    string `json:"status" enum:"watchlist,holding,exited"`
 	Benchmark string `json:"benchmark"`
+	CNPJ      string `json:"cnpj" doc:"B3 company CNPJ used by fundamentals; empty when unset"`
+	CIK       string `json:"cik" doc:"SEC CIK (10 digits) used by fundamentals; empty when unset"`
 	CreatedAt string `json:"created_at"`
 	UpdatedAt string `json:"updated_at"`
 }
 
 func toAsset(a db.Asset) Asset {
-	return Asset{a.ID, a.Ticker, a.Name, a.Market, a.Currency, a.Kind, a.Sleeve, a.Status, a.Benchmark, a.CreatedAt, a.UpdatedAt}
+	return Asset{a.ID, a.Ticker, a.Name, a.Market, a.Currency, a.Kind, a.Sleeve, a.Status, a.Benchmark, a.Cnpj, a.Cik, a.CreatedAt, a.UpdatedAt}
 }
 
 func okAsset(a db.Asset, err error) (*Body[Asset], error) {
@@ -45,6 +47,8 @@ type AssetCreate struct {
 	Kind      string `json:"kind" doc:"stock, bdr or etf"`
 	Sleeve    string `json:"sleeve" required:"false" doc:"core (default) or tactical"`
 	Benchmark string `json:"benchmark" required:"false" doc:"Defaults from market"`
+	CNPJ      string `json:"cnpj" required:"false" doc:"B3 company CNPJ (fundamentals)"`
+	CIK       string `json:"cik" required:"false" doc:"SEC CIK (fundamentals); resolved from the ticker when empty"`
 }
 
 // AssetUpdate is the body of PATCH /api/assets/{id}.
@@ -52,6 +56,8 @@ type AssetUpdate struct {
 	Name      *string `json:"name,omitempty"`
 	Sleeve    *string `json:"sleeve,omitempty"`
 	Benchmark *string `json:"benchmark,omitempty"`
+	CNPJ      *string `json:"cnpj,omitempty" doc:"Empty string clears"`
+	CIK       *string `json:"cik,omitempty" doc:"Empty string clears"`
 }
 
 // StatusChange is a body carrying only a status.
@@ -89,7 +95,7 @@ func WithAssets(svc *assets.Service) Option {
 			func(ctx context.Context, in *IDPath) (*Body[Asset], error) {
 				return okAsset(svc.Get(ctx, in.ID))
 			})
-		huma.Register(s.api, op(http.MethodPatch, "/api/assets/{id}", "updateAsset", "Update name, sleeve or benchmark", tag),
+		huma.Register(s.api, op(http.MethodPatch, "/api/assets/{id}", "updateAsset", "Update name, sleeve, benchmark, CNPJ or CIK", tag),
 			func(ctx context.Context, in *BodyIn[AssetUpdate]) (*Body[Asset], error) {
 				return okAsset(svc.Update(ctx, in.ID, assets.UpdateInput(in.Body)))
 			})

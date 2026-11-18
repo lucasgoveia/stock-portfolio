@@ -200,7 +200,7 @@ func TestDailyRunPersistsAndIsIdempotent(t *testing.T) {
 		t.Fatalf("evaluators ran %d times", *e.evals)
 	}
 	last, err := e.runner.Last(ctx)
-	if err != nil || last.Status != RunOK || len(last.Steps) != 12 || last.FinishedAt == "" {
+	if err != nil || last.Status != RunOK || len(last.Steps) != 13 || last.FinishedAt == "" {
 		t.Fatalf("last = %+v, %v", last, err)
 	}
 }
@@ -419,4 +419,41 @@ func TestCorporateActionStep(t *testing.T) {
 	if len(sink.got) != 1 || !strings.Contains(sink.got[0], "split 2026-10-26 2 brapi DESDOBRAMENTO 2 para 1") {
 		t.Fatalf("detected = %v", sink.got)
 	}
+}
+
+type fakeFundamentals struct {
+	calls int
+	err   error
+}
+
+func (f *fakeFundamentals) RefreshStale(context.Context, time.Time) (string, error) {
+	f.calls++
+	return "1 refreshed, 0 fresh, 0 without CNPJ", f.err
+}
+
+func TestFundamentalsStep(t *testing.T) {
+	e := setup(t)
+	if st := stepStatus(runWith(t, e, nil))["fundamentals"]; st != StepSkipped {
+		t.Fatalf("without a refresher the step is %q", st)
+	}
+	f := &fakeFundamentals{}
+	if st := stepStatus(runWith(t, e, f))["fundamentals"]; st != StepOK || f.calls != 1 {
+		t.Fatalf("step %q after %d calls", st, f.calls)
+	}
+	f.err = errors.New("PETR4: cvm down")
+	res := runWith(t, e, f)
+	if st := stepStatus(res)["fundamentals"]; st != StepFailed || res.Status != RunPartial {
+		t.Fatalf("failed refresh: step %q run %q", st, res.Status)
+	}
+}
+
+func runWith(t *testing.T, e *env, f FundamentalsRefresher) RunResult {
+	t.Helper()
+	e.deps.Fundamentals = f
+	r := NewRunner(e.conn, e.alerts, DailySteps(e.deps), func() time.Time { return now })
+	res, err := r.Run(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return res
 }

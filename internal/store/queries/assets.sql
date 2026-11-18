@@ -1,6 +1,6 @@
 -- name: CreateAsset :one
-INSERT INTO assets (ticker, name, market, currency, kind, sleeve, status, benchmark)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO assets (ticker, name, market, currency, kind, sleeve, status, benchmark, cnpj, cik)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 RETURNING *;
 
 -- name: GetAsset :one
@@ -18,6 +18,8 @@ UPDATE assets SET
     name = COALESCE(sqlc.narg('name'), name),
     sleeve = COALESCE(sqlc.narg('sleeve'), sleeve),
     benchmark = COALESCE(sqlc.narg('benchmark'), benchmark),
+    cnpj = COALESCE(sqlc.narg('cnpj'), cnpj),
+    cik = COALESCE(sqlc.narg('cik'), cik),
     updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
 WHERE id = sqlc.arg('id')
 RETURNING *;

@@ -415,6 +415,14 @@
           "benchmark": {
             "type": "string"
           },
+          "cik": {
+            "description": "SEC CIK (10 digits) used by fundamentals; empty when unset",
+            "type": "string"
+          },
+          "cnpj": {
+            "description": "B3 company CNPJ used by fundamentals; empty when unset",
+            "type": "string"
+          },
           "created_at": {
             "type": "string"
           },
@@ -474,6 +482,8 @@
           "sleeve",
           "status",
           "benchmark",
+          "cnpj",
+          "cik",
           "created_at",
           "updated_at"
         ],
@@ -484,6 +494,14 @@
         "properties": {
           "benchmark": {
             "description": "Defaults from market",
+            "type": "string"
+          },
+          "cik": {
+            "description": "SEC CIK (fundamentals); resolved from the ticker when empty",
+            "type": "string"
+          },
+          "cnpj": {
+            "description": "B3 company CNPJ (fundamentals)",
             "type": "string"
           },
           "currency": {
@@ -520,6 +538,14 @@
         "additionalProperties": false,
         "properties": {
           "benchmark": {
+            "type": "string"
+          },
+          "cik": {
+            "description": "Empty string clears",
+            "type": "string"
+          },
+          "cnpj": {
+            "description": "Empty string clears",
             "type": "string"
           },
           "name": {
@@ -1055,6 +1081,11 @@
             "$ref": "#/components/schemas/DCFInput",
             "description": "Required when method is scenario_dcf"
           },
+          "inputs": {
+            "additionalProperties": {},
+            "description": "How a bazin or graham value was computed (stored with the version)",
+            "type": "object"
+          },
           "method": {
             "description": "scenario_dcf, bazin, graham, manual or target_price",
             "type": "string"
@@ -1078,6 +1109,53 @@
         },
         "required": [
           "method"
+        ],
+        "type": "object"
+      },
+      "FairValueDraft": {
+        "additionalProperties": false,
+        "properties": {
+          "as_of": {
+            "type": "string"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "inputs": {
+            "additionalProperties": {},
+            "type": "object"
+          },
+          "method": {
+            "enum": [
+              "bazin",
+              "graham"
+            ],
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          },
+          "sources": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "value_per_share": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "method",
+          "value_per_share",
+          "currency",
+          "as_of",
+          "inputs",
+          "sources",
+          "note"
         ],
         "type": "object"
       },
@@ -1168,6 +1246,191 @@
           "tax",
           "rate",
           "tax_net_of_withholding"
+        ],
+        "type": "object"
+      },
+      "FundamentalMetrics": {
+        "additionalProperties": false,
+        "properties": {
+          "bvps": {
+            "type": "string"
+          },
+          "dividend_yield": {
+            "description": "Fraction of price",
+            "type": "string"
+          },
+          "dividends_per_share": {
+            "type": "string"
+          },
+          "ebit": {
+            "type": "string"
+          },
+          "ebitda": {
+            "type": "string"
+          },
+          "enterprise_value": {
+            "type": "string"
+          },
+          "eps": {
+            "type": "string"
+          },
+          "ev_ebit": {
+            "type": "string"
+          },
+          "fcf": {
+            "type": "string"
+          },
+          "fcf_yield": {
+            "description": "Fraction of market cap",
+            "type": "string"
+          },
+          "fiscal_year_end": {
+            "description": "Period end of the annual figures used",
+            "type": "string"
+          },
+          "market_cap": {
+            "type": "string"
+          },
+          "net_debt": {
+            "type": "string"
+          },
+          "net_debt_ebitda": {
+            "type": "string"
+          },
+          "net_income": {
+            "type": "string"
+          },
+          "pe": {
+            "type": "string"
+          },
+          "price": {
+            "type": "string"
+          },
+          "price_date": {
+            "type": "string"
+          },
+          "revenue": {
+            "type": "string"
+          },
+          "shares": {
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "FundamentalsPanel": {
+        "additionalProperties": false,
+        "properties": {
+          "as_of": {
+            "description": "Latest period end stored",
+            "type": "string"
+          },
+          "asset_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "currency": {
+            "enum": [
+              "BRL",
+              "USD"
+            ],
+            "type": "string"
+          },
+          "entity": {
+            "type": "string"
+          },
+          "fetched_at": {
+            "type": "string"
+          },
+          "helpers": {
+            "$ref": "#/components/schemas/Helpers"
+          },
+          "history": {
+            "items": {
+              "$ref": "#/components/schemas/HistoryPoint"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "identifier": {
+            "type": "string"
+          },
+          "identifier_kind": {
+            "enum": [
+              "cnpj",
+              "cik"
+            ],
+            "type": "string"
+          },
+          "last_error": {
+            "description": "Outcome of the last failed refresh, if it failed",
+            "type": "string"
+          },
+          "market": {
+            "enum": [
+              "B3",
+              "US"
+            ],
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "metrics": {
+            "$ref": "#/components/schemas/FundamentalMetrics"
+          },
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "ranges": {
+            "$ref": "#/components/schemas/Ranges"
+          },
+          "source": {
+            "description": "cvm or sec; empty before the first fetch",
+            "type": "string"
+          },
+          "source_name": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "needs_identifier",
+              "not_fetched",
+              "unsupported"
+            ],
+            "type": "string"
+          },
+          "ticker": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "asset_id",
+          "ticker",
+          "market",
+          "currency",
+          "status",
+          "identifier_kind",
+          "identifier",
+          "source",
+          "source_name",
+          "as_of",
+          "fetched_at",
+          "message",
+          "metrics",
+          "history",
+          "ranges",
+          "helpers",
+          "notes"
         ],
         "type": "object"
       },
@@ -1319,6 +1582,83 @@
         },
         "required": [
           "status"
+        ],
+        "type": "object"
+      },
+      "HelperValue": {
+        "additionalProperties": false,
+        "properties": {
+          "method": {
+            "enum": [
+              "bazin",
+              "graham"
+            ],
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          },
+          "required_yield": {
+            "description": "Bazin only",
+            "type": "string"
+          },
+          "value": {
+            "description": "Omitted when undefined",
+            "type": "string"
+          }
+        },
+        "required": [
+          "method",
+          "note"
+        ],
+        "type": "object"
+      },
+      "Helpers": {
+        "additionalProperties": false,
+        "properties": {
+          "bazin": {
+            "$ref": "#/components/schemas/HelperValue"
+          },
+          "graham": {
+            "$ref": "#/components/schemas/HelperValue"
+          },
+          "reverse_dcf": {
+            "$ref": "#/components/schemas/ReverseDCF"
+          }
+        },
+        "required": [
+          "bazin",
+          "graham",
+          "reverse_dcf"
+        ],
+        "type": "object"
+      },
+      "HistoryPoint": {
+        "additionalProperties": false,
+        "properties": {
+          "ebit": {
+            "type": "string"
+          },
+          "ebit_margin": {
+            "description": "Fraction of revenue",
+            "type": "string"
+          },
+          "net_income": {
+            "type": "string"
+          },
+          "net_margin": {
+            "description": "Fraction of revenue",
+            "type": "string"
+          },
+          "period_end": {
+            "type": "string"
+          },
+          "revenue": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "period_end"
         ],
         "type": "object"
       },
@@ -1917,6 +2257,64 @@
         ],
         "type": "object"
       },
+      "Range": {
+        "additionalProperties": false,
+        "properties": {
+          "current": {
+            "type": "string"
+          },
+          "max": {
+            "type": "string"
+          },
+          "min": {
+            "type": "string"
+          },
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/RangePoint"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "position": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "points"
+        ],
+        "type": "object"
+      },
+      "RangePoint": {
+        "additionalProperties": false,
+        "properties": {
+          "date": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "date",
+          "value"
+        ],
+        "type": "object"
+      },
+      "Ranges": {
+        "additionalProperties": false,
+        "properties": {
+          "ev_ebit": {
+            "$ref": "#/components/schemas/Range"
+          },
+          "pe": {
+            "$ref": "#/components/schemas/Range"
+          }
+        },
+        "type": "object"
+      },
       "Rating": {
         "additionalProperties": false,
         "properties": {
@@ -2088,6 +2486,44 @@
           "cdi",
           "ibov",
           "sp500_brl"
+        ],
+        "type": "object"
+      },
+      "ReverseDCF": {
+        "additionalProperties": false,
+        "properties": {
+          "discount_rate": {
+            "type": "string"
+          },
+          "exit_multiple": {
+            "type": "string"
+          },
+          "implied_growth": {
+            "description": "Constant yearly revenue growth over 5 years, as a fraction",
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "below_range",
+              "above_range",
+              "unavailable"
+            ],
+            "type": "string"
+          },
+          "terminal_margin": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "terminal_margin",
+          "exit_multiple",
+          "discount_rate",
+          "note"
         ],
         "type": "object"
       },
@@ -3973,7 +4409,7 @@
             "description": "Error"
           }
         },
-        "summary": "Update name, sleeve or benchmark",
+        "summary": "Update name, sleeve, benchmark, CNPJ or CIK",
         "tags": [
           "assets"
         ]
@@ -4280,6 +4716,225 @@
         "summary": "Current fair value",
         "tags": [
           "valuation"
+        ]
+      }
+    },
+    "/api/assets/{id}/fundamentals": {
+      "get": {
+        "operationId": "getFundamentals",
+        "parameters": [
+          {
+            "description": "Resource id",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Resource id",
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Required dividend yield for Bazin (default 0.06)",
+            "explode": false,
+            "in": "query",
+            "name": "bazin_yield",
+            "schema": {
+              "description": "Required dividend yield for Bazin (default 0.06)",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Reverse DCF terminal EBIT margin (default: latest margin)",
+            "explode": false,
+            "in": "query",
+            "name": "terminal_margin",
+            "schema": {
+              "description": "Reverse DCF terminal EBIT margin (default: latest margin)",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Reverse DCF exit EV/EBIT multiple (default 10)",
+            "explode": false,
+            "in": "query",
+            "name": "exit_multiple",
+            "schema": {
+              "description": "Reverse DCF exit EV/EBIT multiple (default 10)",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Reverse DCF discount rate (default 0.14 B3, 0.10 US)",
+            "explode": false,
+            "in": "query",
+            "name": "discount_rate",
+            "schema": {
+              "description": "Reverse DCF discount rate (default 0.14 B3, 0.10 US)",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FundamentalsPanel"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Fundamentals panel: multiples, history, ranges and valuation helpers",
+        "tags": [
+          "fundamentals"
+        ]
+      }
+    },
+    "/api/assets/{id}/fundamentals/fair-value-draft": {
+      "get": {
+        "operationId": "fundamentalsFairValueDraft",
+        "parameters": [
+          {
+            "description": "Resource id",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Resource id",
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "description": "bazin or graham",
+            "explode": false,
+            "in": "query",
+            "name": "method",
+            "schema": {
+              "description": "bazin or graham",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Required dividend yield for Bazin (default 0.06)",
+            "explode": false,
+            "in": "query",
+            "name": "bazin_yield",
+            "schema": {
+              "description": "Required dividend yield for Bazin (default 0.06)",
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "terminal_margin",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "exit_multiple",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "discount_rate",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FairValueDraft"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Fair value version proposed from Bazin or Graham",
+        "tags": [
+          "fundamentals"
+        ]
+      }
+    },
+    "/api/assets/{id}/fundamentals/refresh": {
+      "post": {
+        "operationId": "refreshFundamentals",
+        "parameters": [
+          {
+            "description": "Resource id",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Resource id",
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FundamentalsPanel"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Fetch statements from CVM or SEC now",
+        "tags": [
+          "fundamentals"
         ]
       }
     },

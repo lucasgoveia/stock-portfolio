@@ -12,6 +12,7 @@ import (
 	"github.com/lucasgoveia/stock-portfolio/internal/cash"
 	"github.com/lucasgoveia/stock-portfolio/internal/corpactions"
 	"github.com/lucasgoveia/stock-portfolio/internal/dividends"
+	"github.com/lucasgoveia/stock-portfolio/internal/fundamentals"
 	"github.com/lucasgoveia/stock-portfolio/internal/jobs"
 	"github.com/lucasgoveia/stock-portfolio/internal/performance"
 	"github.com/lucasgoveia/stock-portfolio/internal/portfolio"
@@ -64,7 +65,7 @@ func apiError(err error) error {
 		errors.Is(err, thesis.ErrValidation), errors.Is(err, valuation.ErrValidation),
 		errors.Is(err, portfolio.ErrValidation), errors.Is(err, tactical.ErrValidation),
 		errors.Is(err, dividends.ErrValidation), errors.Is(err, corpactions.ErrValidation),
-		errors.Is(err, performance.ErrValidation), errors.Is(err, settings.ErrValidation):
+		errors.Is(err, performance.ErrValidation), errors.Is(err, settings.ErrValidation), errors.Is(err, fundamentals.ErrValidation):
 		status = http.StatusBadRequest
 	case errors.Is(err, assets.ErrNotFound), errors.Is(err, alerts.ErrNotFound),
 		errors.Is(err, trades.ErrNotFound), errors.Is(err, cash.ErrNotFound),
@@ -81,6 +82,8 @@ func apiError(err error) error {
 		errors.Is(err, portfolio.ErrConflict), errors.Is(err, dividends.ErrConflict),
 		errors.Is(err, corpactions.ErrConflict):
 		status = http.StatusConflict
+	case errors.Is(err, fundamentals.ErrUpstream):
+		status = http.StatusBadGateway
 	}
 	msg := err.Error()
 	if status == http.StatusInternalServerError {

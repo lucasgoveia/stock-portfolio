@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
 import { toast } from 'sonner'
 
+import { FundamentalsTab } from '@/components/asset/fundamentals-tab'
 import { GateChecklist } from '@/components/asset/gate-checklist'
 import { NotesTab } from '@/components/asset/notes-tab'
 import { Panel } from '@/components/asset/panel'
@@ -29,6 +30,7 @@ const TABS: { id: AssetTab; label: string }[] = [
   { id: 'ratings', label: 'Ratings' },
   { id: 'thesis', label: 'Thesis' },
   { id: 'valuation', label: 'Fair value' },
+  { id: 'fundamentals', label: 'Fundamentals' },
   { id: 'notes', label: 'Research' },
   { id: 'trades', label: 'Trades' },
 ]
@@ -101,6 +103,7 @@ function AssetPage() {
       {tab === 'ratings' && <RatingsTab assetId={id} />}
       {tab === 'thesis' && <ThesisTab assetId={id} />}
       {tab === 'valuation' && <ValuationTab assetId={id} currency={a.currency} price={position?.price} />}
+      {tab === 'fundamentals' && <FundamentalsTab asset={a} />}
       {tab === 'notes' && <NotesTab assetId={id} />}
       {tab === 'trades' && <TradesSection asset={a} />}
     </>

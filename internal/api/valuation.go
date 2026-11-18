@@ -20,6 +20,7 @@ type FairValueCreate struct {
 	AsOf          string           `json:"as_of" required:"false" doc:"YYYY-MM-DD; defaults to today"`
 	Sources       []string         `json:"sources,omitempty"`
 	Note          string           `json:"note" required:"false"`
+	Inputs        map[string]any   `json:"inputs,omitempty" doc:"How a bazin or graham value was computed (stored with the version)"`
 }
 
 // WithValuation mounts fair value routes.

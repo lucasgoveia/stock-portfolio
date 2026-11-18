@@ -3,6 +3,8 @@
 
 const brlFmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })
 const usdFmt = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' })
+const brlCompact = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', notation: 'compact', maximumFractionDigits: 1 })
+const usdCompact = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', notation: 'compact', maximumFractionDigits: 1 })
 const numFmt = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 8 })
 
 export function money(v: string | null | undefined, currency = 'BRL'): string {
@@ -10,6 +12,29 @@ export function money(v: string | null | undefined, currency = 'BRL'): string {
   const n = Number(v)
   if (!Number.isFinite(n)) return v
   return currency === 'USD' ? usdFmt.format(n) : brlFmt.format(n)
+}
+
+/** Compact currency ("R$ 497,5 bi") for large statement amounts. */
+export function moneyCompact(v: string | null | undefined, currency = 'BRL'): string {
+  if (v == null || v === '') return '—'
+  const n = Number(v)
+  if (!Number.isFinite(n)) return v
+  const f = currency === 'USD' ? usdCompact : brlCompact
+  return f.format(n)
+}
+
+/** A multiple such as P/E: "12.3×". */
+export function multiple(v: string | null | undefined): string {
+  if (v == null || v === '') return '—'
+  const n = Number(v)
+  return Number.isFinite(n) ? `${n.toFixed(1)}×` : v
+}
+
+/** Upside of a value over a price as a signed percent, or null without a price. */
+export function upside(value: string, price?: string | null): string | null {
+  if (!price || !Number(price)) return null
+  const u = Number(value) / Number(price) - 1
+  return `${u >= 0 ? '+' : ''}${(u * 100).toFixed(1)}%`
 }
 
 export function qty(v: string | null | undefined): string {

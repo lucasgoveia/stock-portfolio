@@ -104,7 +104,7 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** Update name, sleeve or benchmark */
+        /** Update name, sleeve, benchmark, CNPJ or CIK */
         patch: operations["updateAsset"];
         trace?: never;
     };
@@ -188,6 +188,57 @@ export interface paths {
         get: operations["latestFairValue"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/assets/{id}/fundamentals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Fundamentals panel: multiples, history, ranges and valuation helpers */
+        get: operations["getFundamentals"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/assets/{id}/fundamentals/fair-value-draft": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Fair value version proposed from Bazin or Graham */
+        get: operations["fundamentalsFairValueDraft"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/assets/{id}/fundamentals/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Fetch statements from CVM or SEC now */
+        post: operations["refreshFundamentals"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1330,6 +1381,10 @@ export interface components {
         };
         Asset: {
             benchmark: string;
+            /** @description SEC CIK (10 digits) used by fundamentals; empty when unset */
+            cik: string;
+            /** @description B3 company CNPJ used by fundamentals; empty when unset */
+            cnpj: string;
             created_at: string;
             /** @enum {string} */
             currency: "BRL" | "USD";
@@ -1349,6 +1404,10 @@ export interface components {
         AssetCreate: {
             /** @description Defaults from market */
             benchmark?: string;
+            /** @description SEC CIK (fundamentals); resolved from the ticker when empty */
+            cik?: string;
+            /** @description B3 company CNPJ (fundamentals) */
+            cnpj?: string;
             /** @description Defaults from market */
             currency?: string;
             /** @description stock, bdr or etf */
@@ -1362,6 +1421,10 @@ export interface components {
         };
         AssetUpdate: {
             benchmark?: string;
+            /** @description Empty string clears */
+            cik?: string;
+            /** @description Empty string clears */
+            cnpj?: string;
             name?: string;
             sleeve?: string;
         };
@@ -1507,12 +1570,28 @@ export interface components {
             currency?: string;
             /** @description Required when method is scenario_dcf */
             dcf?: components["schemas"]["DCFInput"];
+            /** @description How a bazin or graham value was computed (stored with the version) */
+            inputs?: {
+                [key: string]: unknown;
+            };
             /** @description scenario_dcf, bazin, graham, manual or target_price */
             method: string;
             note?: string;
             sources?: string[] | null;
             /** @description Required unless method is scenario_dcf */
             value_per_share?: string;
+        };
+        FairValueDraft: {
+            as_of: string;
+            currency: string;
+            inputs: {
+                [key: string]: unknown;
+            };
+            /** @enum {string} */
+            method: "bazin" | "graham";
+            note: string;
+            sources: string[] | null;
+            value_per_share: string;
         };
         ForeignSale: {
             /** Format: int64 */
@@ -1537,6 +1616,60 @@ export interface components {
             withheld: string;
             /** Format: int64 */
             year: number;
+        };
+        FundamentalMetrics: {
+            bvps?: string;
+            /** @description Fraction of price */
+            dividend_yield?: string;
+            dividends_per_share?: string;
+            ebit?: string;
+            ebitda?: string;
+            enterprise_value?: string;
+            eps?: string;
+            ev_ebit?: string;
+            fcf?: string;
+            /** @description Fraction of market cap */
+            fcf_yield?: string;
+            /** @description Period end of the annual figures used */
+            fiscal_year_end?: string;
+            market_cap?: string;
+            net_debt?: string;
+            net_debt_ebitda?: string;
+            net_income?: string;
+            pe?: string;
+            price?: string;
+            price_date?: string;
+            revenue?: string;
+            shares?: string;
+        };
+        FundamentalsPanel: {
+            /** @description Latest period end stored */
+            as_of: string;
+            /** Format: int64 */
+            asset_id: number;
+            /** @enum {string} */
+            currency: "BRL" | "USD";
+            entity?: string;
+            fetched_at: string;
+            helpers: components["schemas"]["Helpers"];
+            history: components["schemas"]["HistoryPoint"][] | null;
+            identifier: string;
+            /** @enum {string} */
+            identifier_kind: "cnpj" | "cik";
+            /** @description Outcome of the last failed refresh, if it failed */
+            last_error?: string;
+            /** @enum {string} */
+            market: "B3" | "US";
+            message: string;
+            metrics: components["schemas"]["FundamentalMetrics"];
+            notes: string[] | null;
+            ranges: components["schemas"]["Ranges"];
+            /** @description cvm or sec; empty before the first fetch */
+            source: string;
+            source_name: string;
+            /** @enum {string} */
+            status: "ok" | "needs_identifier" | "not_fetched" | "unsupported";
+            ticker: string;
         };
         GateResult: {
             catalyst_only: boolean;
@@ -1575,6 +1708,30 @@ export interface components {
         Health: {
             /** @example ok */
             status: string;
+        };
+        HelperValue: {
+            /** @enum {string} */
+            method: "bazin" | "graham";
+            note: string;
+            /** @description Bazin only */
+            required_yield?: string;
+            /** @description Omitted when undefined */
+            value?: string;
+        };
+        Helpers: {
+            bazin: components["schemas"]["HelperValue"];
+            graham: components["schemas"]["HelperValue"];
+            reverse_dcf: components["schemas"]["ReverseDCF"];
+        };
+        HistoryPoint: {
+            ebit?: string;
+            /** @description Fraction of revenue */
+            ebit_margin?: string;
+            net_income?: string;
+            /** @description Fraction of revenue */
+            net_margin?: string;
+            period_end: string;
+            revenue?: string;
         };
         IncomeLine: {
             /** Format: int64 */
@@ -1742,6 +1899,21 @@ export interface components {
             below_floor: boolean;
             below_lower: boolean;
         };
+        Range: {
+            current?: string;
+            max?: string;
+            min?: string;
+            points: components["schemas"]["RangePoint"][] | null;
+            position?: string;
+        };
+        RangePoint: {
+            date: string;
+            value: string;
+        };
+        Ranges: {
+            ev_ebit?: components["schemas"]["Range"];
+            pe?: components["schemas"]["Range"];
+        };
         Rating: {
             /** Format: int64 */
             asset_id: number;
@@ -1793,6 +1965,16 @@ export interface components {
             cdi: string | null;
             ibov: string | null;
             sp500_brl: string | null;
+        };
+        ReverseDCF: {
+            discount_rate: string;
+            exit_multiple: string;
+            /** @description Constant yearly revenue growth over 5 years, as a fraction */
+            implied_growth?: string;
+            note: string;
+            /** @enum {string} */
+            status: "ok" | "below_range" | "above_range" | "unavailable";
+            terminal_margin: string;
         };
         Review: {
             created_at: string;
@@ -2647,6 +2829,119 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FairValue"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getFundamentals: {
+        parameters: {
+            query?: {
+                /** @description Required dividend yield for Bazin (default 0.06) */
+                bazin_yield?: string;
+                /** @description Reverse DCF terminal EBIT margin (default: latest margin) */
+                terminal_margin?: string;
+                /** @description Reverse DCF exit EV/EBIT multiple (default 10) */
+                exit_multiple?: string;
+                /** @description Reverse DCF discount rate (default 0.14 B3, 0.10 US) */
+                discount_rate?: string;
+            };
+            header?: never;
+            path: {
+                /** @description Resource id */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FundamentalsPanel"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    fundamentalsFairValueDraft: {
+        parameters: {
+            query?: {
+                /** @description bazin or graham */
+                method?: string;
+                /** @description Required dividend yield for Bazin (default 0.06) */
+                bazin_yield?: string;
+                terminal_margin?: string;
+                exit_multiple?: string;
+                discount_rate?: string;
+            };
+            header?: never;
+            path: {
+                /** @description Resource id */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FairValueDraft"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    refreshFundamentals: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Resource id */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FundamentalsPanel"];
                 };
             };
             /** @description Error */

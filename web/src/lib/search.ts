@@ -26,8 +26,8 @@ export function parseTradeSearch(s: Record<string, unknown>): TradeSearch {
   }
 }
 
-export type AssetTab = 'overview' | 'ratings' | 'thesis' | 'valuation' | 'notes' | 'trades'
-const ASSET_TABS: AssetTab[] = ['overview', 'ratings', 'thesis', 'valuation', 'notes', 'trades']
+export type AssetTab = 'overview' | 'ratings' | 'thesis' | 'valuation' | 'fundamentals' | 'notes' | 'trades'
+const ASSET_TABS: AssetTab[] = ['overview', 'ratings', 'thesis', 'valuation', 'fundamentals', 'notes', 'trades']
 
 export interface AssetSearch {
   tab?: AssetTab

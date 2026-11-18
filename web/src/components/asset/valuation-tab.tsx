@@ -9,7 +9,7 @@ import { ErrorBlock, LoadingBlock } from '@/components/query-state'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { api, errorMessage, unwrap, type Schemas } from '@/lib/api'
-import { decimalInput, fractionToPercent, humanize, money, percentToFraction, scaled, today } from '@/lib/format'
+import { decimalInput, fractionToPercent, humanize, money, percentToFraction, scaled, today, upside } from '@/lib/format'
 import { qk } from '@/lib/queries'
 import { cn } from '@/lib/utils'
 
@@ -156,12 +156,6 @@ export function ValuationTab({ assetId, currency, price }: { assetId: number; cu
       <DCFEditor key={editorKey} assetId={assetId} currency={currency} price={price} initial={draft} />
     </div>
   )
-}
-
-function upside(fv: string, price?: string | null): string | null {
-  if (!price || !Number(price)) return null
-  const u = Number(fv) / Number(price) - 1
-  return `${u >= 0 ? '+' : ''}${(u * 100).toFixed(1)}%`
 }
 
 function VersionRow({

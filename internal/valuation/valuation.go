@@ -77,6 +77,9 @@ type CreateInput struct {
 	AsOf          string
 	Sources       []string
 	Note          string
+	// Inputs documents how a helper value (bazin, graham) was computed; it is
+	// stored as the version's inputs JSON. Ignored for scenario_dcf.
+	Inputs map[string]any
 }
 
 // Service manages fair values.
@@ -166,6 +169,11 @@ func (s *Service) Create(ctx context.Context, assetID int64, in CreateInput) (Fa
 			return FairValue{}, validationf("value_per_share is required")
 		}
 		value = *in.ValuePerShare
+		if len(in.Inputs) > 0 {
+			if inputs, err = json.Marshal(in.Inputs); err != nil {
+				return FairValue{}, validationf("inputs must be a JSON object")
+			}
+		}
 	default:
 		return FairValue{}, validationf("method must be one of scenario_dcf, bazin, graham, manual, target_price")
 	}

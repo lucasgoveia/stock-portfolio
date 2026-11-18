@@ -10,3 +10,6 @@ tiingo_token = ""
 # Daily job wall time in America/Sao_Paulo.
 daily_job_at = "19:00"
 disable_scheduler = false
+# SEC EDGAR requires a descriptive User-Agent with a contact address, or it
+# answers 200 with an HTML block page. Env: STOCKPORTFOLIO_SEC_USER_AGENT
+sec_user_agent = "stock-portfolio you@example.com"
