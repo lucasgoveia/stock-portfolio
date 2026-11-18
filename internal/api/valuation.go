@@ -1,93 +1,50 @@
 package api
 
 import (
+	"context"
 	"net/http"
 
-	"github.com/go-chi/chi/v5"
+	"github.com/danielgtaylor/huma/v2"
 
 	"github.com/lucasgoveia/stock-portfolio/internal/engine"
 	"github.com/lucasgoveia/stock-portfolio/internal/money"
 	"github.com/lucasgoveia/stock-portfolio/internal/valuation"
 )
 
+// FairValueCreate is the body of POST /api/assets/{id}/fair-values.
+type FairValueCreate struct {
+	Method        string           `json:"method" doc:"scenario_dcf, bazin, graham, manual or target_price"`
+	ValuePerShare *money.Decimal   `json:"value_per_share,omitempty" doc:"Required unless method is scenario_dcf"`
+	DCF           *engine.DCFInput `json:"dcf,omitempty" doc:"Required when method is scenario_dcf"`
+	Currency      string           `json:"currency" required:"false" doc:"Defaults to the asset's currency"`
+	AsOf          string           `json:"as_of" required:"false" doc:"YYYY-MM-DD; defaults to today"`
+	Sources       []string         `json:"sources,omitempty"`
+	Note          string           `json:"note" required:"false"`
+}
+
 // WithValuation mounts fair value routes.
 func WithValuation(svc *valuation.Service) Option {
-	return func(r chi.Router) {
-		r.Post("/api/valuation/dcf", func(w http.ResponseWriter, req *http.Request) {
-			var in engine.DCFInput
-			if err := decode(req, &in); err != nil {
-				badRequest(w, "invalid JSON body")
-				return
-			}
-			res, err := valuation.Preview(in)
-			if err != nil {
-				writeError(w, err)
-				return
-			}
-			writeJSON(w, http.StatusOK, res)
-		})
-		r.Post("/api/assets/{id}/fair-values", func(w http.ResponseWriter, req *http.Request) {
-			id, ok := assetID(w, req)
-			if !ok {
-				return
-			}
-			var in struct {
-				Method        string           `json:"method"`
-				ValuePerShare *money.Decimal   `json:"value_per_share"`
-				DCF           *engine.DCFInput `json:"dcf"`
-				Currency      string           `json:"currency"`
-				AsOf          string           `json:"as_of"`
-				Sources       []string         `json:"sources"`
-				Note          string           `json:"note"`
-			}
-			if err := decode(req, &in); err != nil {
-				badRequest(w, "invalid JSON body")
-				return
-			}
-			fv, err := svc.Create(req.Context(), id, valuation.CreateInput{
-				Method: in.Method, ValuePerShare: in.ValuePerShare, DCF: in.DCF, Currency: in.Currency,
-				AsOf: in.AsOf, Sources: in.Sources, Note: in.Note,
+	return func(s *server) {
+		const tag = "valuation"
+		huma.Register(s.api, op(http.MethodPost, "/api/valuation/dcf", "previewDCF", "Compute a scenario DCF without saving", tag),
+			func(_ context.Context, in *Body[engine.DCFInput]) (*Body[engine.DCFResult], error) {
+				return ok(valuation.Preview(in.Body))
 			})
-			if err != nil {
-				writeError(w, err)
-				return
-			}
-			writeJSON(w, http.StatusCreated, fv)
-		})
-		r.Get("/api/assets/{id}/fair-values", func(w http.ResponseWriter, req *http.Request) {
-			id, ok := assetID(w, req)
-			if !ok {
-				return
-			}
-			list, err := svc.List(req.Context(), id)
-			if err != nil {
-				writeError(w, err)
-				return
-			}
-			writeJSON(w, http.StatusOK, list)
-		})
-		r.Get("/api/assets/{id}/fair-values/latest", func(w http.ResponseWriter, req *http.Request) {
-			id, ok := assetID(w, req)
-			if !ok {
-				return
-			}
-			fv, err := svc.Latest(req.Context(), id)
-			if err != nil {
-				writeError(w, err)
-				return
-			}
-			writeJSON(w, http.StatusOK, fv)
-		})
-		r.Delete("/api/fair-values/{id}", func(w http.ResponseWriter, req *http.Request) {
-			id, ok := pathID(w, req, "id", "fair value id")
-			if !ok {
-				return
-			}
-			if err := svc.Delete(req.Context(), id); err != nil {
-				writeError(w, err)
-				return
-			}
-			w.WriteHeader(http.StatusNoContent)
-		})
+		huma.Register(s.api, opStatus(http.MethodPost, "/api/assets/{id}/fair-values", "createFairValue", "Add a fair value version", tag, http.StatusCreated),
+			func(ctx context.Context, in *BodyIn[FairValueCreate]) (*Body[valuation.FairValue], error) {
+				return ok(svc.Create(ctx, in.ID, valuation.CreateInput(in.Body)))
+			})
+		huma.Register(s.api, op(http.MethodGet, "/api/assets/{id}/fair-values", "listFairValues", "Fair value versions, newest first", tag),
+			func(ctx context.Context, in *IDPath) (*Body[[]valuation.FairValue], error) {
+				return ok(svc.List(ctx, in.ID))
+			})
+		huma.Register(s.api, op(http.MethodGet, "/api/assets/{id}/fair-values/latest", "latestFairValue", "Current fair value", tag),
+			func(ctx context.Context, in *IDPath) (*Body[valuation.FairValue], error) {
+				return ok(svc.Latest(ctx, in.ID))
+			})
+		huma.Register(s.api, opStatus(http.MethodDelete, "/api/fair-values/{id}", "deleteFairValue", "Delete a fair value version", tag, http.StatusNoContent),
+			func(ctx context.Context, in *IDPath) (*struct{}, error) {
+				return noContent(svc.Delete(ctx, in.ID))
+			})
 	}
 }

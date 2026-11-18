@@ -1,4 +1,4 @@
-.PHONY: run dev build build-web test lint generate migration migrate-check
+.PHONY: run dev build build-web test lint generate openapi migration migrate-check
 
 run:
 	go run ./cmd/stockportfolio
@@ -25,8 +25,13 @@ lint:
 	golangci-lint run
 	pnpm --dir web lint
 
-generate:
+generate: openapi
 	sqlc generate
+
+# OpenAPI document from the Go handler types, then the TS client types from it.
+openapi:
+	go run ./cmd/openapi -o api/openapi.json
+	pnpm --dir web gen:api
 
 # Schema changes: edit internal/store/schema, then `make migration name=<desc>`.
 migration:

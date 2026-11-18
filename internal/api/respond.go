@@ -1,13 +1,17 @@
 package api
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
+
+	"github.com/danielgtaylor/huma/v2"
 
 	"github.com/lucasgoveia/stock-portfolio/internal/alerts"
 	"github.com/lucasgoveia/stock-portfolio/internal/assets"
 	"github.com/lucasgoveia/stock-portfolio/internal/cash"
+	"github.com/lucasgoveia/stock-portfolio/internal/jobs"
+	"github.com/lucasgoveia/stock-portfolio/internal/portfolio"
 	"github.com/lucasgoveia/stock-portfolio/internal/ratings"
 	"github.com/lucasgoveia/stock-portfolio/internal/research"
 	"github.com/lucasgoveia/stock-portfolio/internal/thesis"
@@ -15,35 +19,93 @@ import (
 	"github.com/lucasgoveia/stock-portfolio/internal/valuation"
 )
 
-func writeJSON(w http.ResponseWriter, status int, v any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v)
+// Error is the body of every error response: {"error": "message"}.
+type Error struct {
+	status  int
+	Message string `json:"error" doc:"Human-readable error message"`
 }
 
-// writeError maps domain errors to HTTP status codes. Internal errors are not leaked.
-func writeError(w http.ResponseWriter, err error) {
+func (e *Error) Error() string  { return e.Message }
+func (e *Error) GetStatus() int { return e.status }
+
+func init() {
+	// huma reports request validation failures as 422; this API has always
+	// answered 400 for any malformed request, so fold them together.
+	huma.NewError = func(status int, msg string, errs ...error) huma.StatusError {
+		if status == http.StatusUnprocessableEntity {
+			status = http.StatusBadRequest
+		}
+		var details []string
+		for _, e := range errs {
+			if e != nil {
+				details = append(details, e.Error())
+			}
+		}
+		if len(details) > 0 {
+			msg += ": " + strings.Join(details, "; ")
+		}
+		return &Error{status: status, Message: msg}
+	}
+}
+
+// apiError maps domain errors to HTTP errors. Internal errors are not leaked.
+func apiError(err error) error {
 	status := http.StatusInternalServerError
 	switch {
 	case errors.Is(err, assets.ErrValidation),
 		errors.Is(err, alerts.ErrInvalid), errors.Is(err, alerts.ErrInvalidType),
 		errors.Is(err, trades.ErrValidation), errors.Is(err, cash.ErrValidation),
 		errors.Is(err, ratings.ErrValidation), errors.Is(err, research.ErrValidation),
-		errors.Is(err, thesis.ErrValidation), errors.Is(err, valuation.ErrValidation):
+		errors.Is(err, thesis.ErrValidation), errors.Is(err, valuation.ErrValidation),
+		errors.Is(err, portfolio.ErrValidation):
 		status = http.StatusBadRequest
 	case errors.Is(err, assets.ErrNotFound), errors.Is(err, alerts.ErrNotFound),
 		errors.Is(err, trades.ErrNotFound), errors.Is(err, cash.ErrNotFound),
 		errors.Is(err, ratings.ErrNotFound), errors.Is(err, research.ErrNotFound),
-		errors.Is(err, thesis.ErrNotFound), errors.Is(err, valuation.ErrNotFound):
+		errors.Is(err, thesis.ErrNotFound), errors.Is(err, valuation.ErrNotFound),
+		errors.Is(err, jobs.ErrNoRuns):
 		status = http.StatusNotFound
 	case errors.Is(err, assets.ErrDuplicate), errors.Is(err, assets.ErrInvalidTransition),
 		errors.Is(err, alerts.ErrResolved), errors.Is(err, trades.ErrInsufficientQuantity),
-		errors.Is(err, cash.ErrInsufficientBalance), errors.Is(err, cash.ErrNoRate):
+		errors.Is(err, cash.ErrInsufficientBalance), errors.Is(err, cash.ErrNoRate),
+		errors.Is(err, portfolio.ErrNoFX), errors.Is(err, jobs.ErrRunning):
 		status = http.StatusConflict
 	}
 	msg := err.Error()
 	if status == http.StatusInternalServerError {
 		msg = "internal error"
 	}
-	writeJSON(w, status, map[string]string{"error": msg})
+	return &Error{status: status, Message: msg}
+}
+
+// Shared input and output shapes.
+
+// IDPath is the {id} path parameter shared by most routes.
+type IDPath struct {
+	ID int64 `path:"id" minimum:"1" doc:"Resource id"`
+}
+
+// Body wraps a JSON response body.
+type Body[T any] struct {
+	Body T
+}
+
+// BodyIn wraps a JSON request body for a route with an {id} path parameter.
+type BodyIn[T any] struct {
+	IDPath
+	Body T
+}
+
+func ok[T any](v T, err error) (*Body[T], error) {
+	if err != nil {
+		return nil, apiError(err)
+	}
+	return &Body[T]{Body: v}, nil
+}
+
+func noContent(err error) (*struct{}, error) {
+	if err != nil {
+		return nil, apiError(err)
+	}
+	return nil, nil
 }

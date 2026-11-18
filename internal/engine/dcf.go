@@ -42,7 +42,7 @@ type DCFInput struct {
 	// BaseRevenue is the latest annual revenue (year 0).
 	BaseRevenue decimal.Decimal `json:"base_revenue"`
 	// NetDebt is subtracted from the discounted terminal value (default 0).
-	NetDebt decimal.Decimal `json:"net_debt"`
+	NetDebt decimal.Decimal `json:"net_debt" required:"false"`
 	// Shares outstanding.
 	Shares    decimal.Decimal `json:"shares"`
 	Scenarios []Scenario      `json:"scenarios"`

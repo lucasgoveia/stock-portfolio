@@ -1,118 +1,71 @@
 package api
 
 import (
+	"context"
 	"net/http"
-	"strconv"
 
-	"github.com/go-chi/chi/v5"
+	"github.com/danielgtaylor/huma/v2"
 
 	"github.com/lucasgoveia/stock-portfolio/internal/cash"
 	"github.com/lucasgoveia/stock-portfolio/internal/money"
 )
 
-func pathID(w http.ResponseWriter, r *http.Request, param, label string) (int64, bool) {
-	id, err := strconv.ParseInt(chi.URLParam(r, param), 10, 64)
-	if err != nil || id <= 0 {
-		badRequest(w, "invalid "+label)
-		return 0, false
-	}
-	return id, true
+// AsOfQuery is the as_of query parameter.
+type AsOfQuery struct {
+	AsOf string `query:"as_of" doc:"YYYY-MM-DD; defaults to today"`
+}
+
+type instrumentValueIn struct {
+	IDPath
+	AsOfQuery
+}
+
+// InstrumentCreate is the body of POST /api/cash/instruments.
+type InstrumentCreate struct {
+	Kind   string         `json:"kind" doc:"tesouro_selic, cdi or usd"`
+	Name   string         `json:"name" required:"false"`
+	PctCDI *money.Decimal `json:"pct_cdi,omitempty" doc:"Percent of CDI (cdi kind only, default 100)"`
+}
+
+// MovementCreate is the body of POST /api/cash/instruments/{id}/movements.
+type MovementCreate struct {
+	Date     string         `json:"date" required:"false" doc:"YYYY-MM-DD; defaults to today"`
+	Type     string         `json:"type" doc:"deposit, withdraw or yield"`
+	Amount   money.Decimal  `json:"amount"`
+	Quantity *money.Decimal `json:"quantity,omitempty" doc:"Title units (Tesouro Selic)"`
 }
 
 // WithCash mounts the cash instrument routes.
 func WithCash(svc *cash.Service) Option {
-	return func(r chi.Router) {
-		r.Route("/api/cash", func(r chi.Router) {
-			r.Get("/summary", func(w http.ResponseWriter, req *http.Request) {
-				s, err := svc.Summary(req.Context(), req.URL.Query().Get("as_of"))
-				if err != nil {
-					writeError(w, err)
-					return
-				}
-				writeJSON(w, http.StatusOK, s)
+	return func(s *server) {
+		const tag = "cash"
+		huma.Register(s.api, op(http.MethodGet, "/api/cash/summary", "cashSummary", "Total cash with the BRL/USD split", tag),
+			func(ctx context.Context, in *AsOfQuery) (*Body[cash.Summary], error) {
+				return ok(svc.Summary(ctx, in.AsOf))
 			})
-			r.Post("/instruments", func(w http.ResponseWriter, req *http.Request) {
-				var in struct {
-					Kind   string         `json:"kind"`
-					Name   string         `json:"name"`
-					PctCDI *money.Decimal `json:"pct_cdi"`
-				}
-				if err := decode(req, &in); err != nil {
-					badRequest(w, "invalid JSON body (decimals must be JSON strings)")
-					return
-				}
-				i, err := svc.Create(req.Context(), cash.CreateInput(in))
-				if err != nil {
-					writeError(w, err)
-					return
-				}
-				writeJSON(w, http.StatusCreated, i)
+		huma.Register(s.api, opStatus(http.MethodPost, "/api/cash/instruments", "createInstrument", "Create a cash instrument", tag, http.StatusCreated),
+			func(ctx context.Context, in *Body[InstrumentCreate]) (*Body[cash.Instrument], error) {
+				return ok(svc.Create(ctx, cash.CreateInput(in.Body)))
 			})
-			r.Get("/instruments", func(w http.ResponseWriter, req *http.Request) {
-				list, err := svc.List(req.Context())
-				if err != nil {
-					writeError(w, err)
-					return
-				}
-				writeJSON(w, http.StatusOK, list)
+		huma.Register(s.api, op(http.MethodGet, "/api/cash/instruments", "listInstruments", "List cash instruments", tag),
+			func(ctx context.Context, _ *struct{}) (*Body[[]cash.Instrument], error) {
+				return ok(svc.List(ctx))
 			})
-			r.Get("/instruments/{id}/value", func(w http.ResponseWriter, req *http.Request) {
-				id, ok := pathID(w, req, "id", "instrument id")
-				if !ok {
-					return
-				}
-				v, err := svc.Value(req.Context(), id, req.URL.Query().Get("as_of"))
-				if err != nil {
-					writeError(w, err)
-					return
-				}
-				writeJSON(w, http.StatusOK, v)
+		huma.Register(s.api, op(http.MethodGet, "/api/cash/instruments/{id}/value", "instrumentValue", "Value an instrument at a date", tag),
+			func(ctx context.Context, in *instrumentValueIn) (*Body[cash.Valuation], error) {
+				return ok(svc.Value(ctx, in.ID, in.AsOf))
 			})
-			r.Get("/instruments/{id}/movements", func(w http.ResponseWriter, req *http.Request) {
-				id, ok := pathID(w, req, "id", "instrument id")
-				if !ok {
-					return
-				}
-				list, err := svc.Movements(req.Context(), id)
-				if err != nil {
-					writeError(w, err)
-					return
-				}
-				writeJSON(w, http.StatusOK, list)
+		huma.Register(s.api, op(http.MethodGet, "/api/cash/instruments/{id}/movements", "listMovements", "List an instrument's ledger", tag),
+			func(ctx context.Context, in *IDPath) (*Body[[]cash.Movement], error) {
+				return ok(svc.Movements(ctx, in.ID))
 			})
-			r.Post("/instruments/{id}/movements", func(w http.ResponseWriter, req *http.Request) {
-				id, ok := pathID(w, req, "id", "instrument id")
-				if !ok {
-					return
-				}
-				var in struct {
-					Date     string         `json:"date"`
-					Type     string         `json:"type"`
-					Amount   money.Decimal  `json:"amount"`
-					Quantity *money.Decimal `json:"quantity"`
-				}
-				if err := decode(req, &in); err != nil {
-					badRequest(w, "invalid JSON body (decimals must be JSON strings)")
-					return
-				}
-				m, err := svc.AddMovement(req.Context(), id, cash.MovementInput(in))
-				if err != nil {
-					writeError(w, err)
-					return
-				}
-				writeJSON(w, http.StatusCreated, m)
+		huma.Register(s.api, opStatus(http.MethodPost, "/api/cash/instruments/{id}/movements", "addMovement", "Add a deposit, withdrawal or yield", tag, http.StatusCreated),
+			func(ctx context.Context, in *BodyIn[MovementCreate]) (*Body[cash.Movement], error) {
+				return ok(svc.AddMovement(ctx, in.ID, cash.MovementInput(in.Body)))
 			})
-			r.Delete("/movements/{id}", func(w http.ResponseWriter, req *http.Request) {
-				id, ok := pathID(w, req, "id", "movement id")
-				if !ok {
-					return
-				}
-				if err := svc.DeleteMovement(req.Context(), id); err != nil {
-					writeError(w, err)
-					return
-				}
-				w.WriteHeader(http.StatusNoContent)
+		huma.Register(s.api, opStatus(http.MethodDelete, "/api/cash/movements/{id}", "deleteMovement", "Delete a ledger entry", tag, http.StatusNoContent),
+			func(ctx context.Context, in *IDPath) (*struct{}, error) {
+				return noContent(svc.DeleteMovement(ctx, in.ID))
 			})
-		})
 	}
 }

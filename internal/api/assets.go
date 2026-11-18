@@ -1,142 +1,101 @@
 package api
 
 import (
-	"encoding/json"
+	"context"
 	"net/http"
-	"strconv"
 
-	"github.com/go-chi/chi/v5"
+	"github.com/danielgtaylor/huma/v2"
 
 	"github.com/lucasgoveia/stock-portfolio/internal/assets"
 	"github.com/lucasgoveia/stock-portfolio/internal/store/db"
 )
 
-type assetJSON struct {
+// Asset is the JSON shape of an asset.
+type Asset struct {
 	ID        int64  `json:"id"`
 	Ticker    string `json:"ticker"`
 	Name      string `json:"name"`
-	Market    string `json:"market"`
-	Currency  string `json:"currency"`
+	Market    string `json:"market" enum:"B3,US"`
+	Currency  string `json:"currency" enum:"BRL,USD"`
 	Kind      string `json:"kind"`
-	Sleeve    string `json:"sleeve"`
-	Status    string `json:"status"`
+	Sleeve    string `json:"sleeve" enum:"core,tactical"`
+	Status    string `json:"status" enum:"watchlist,holding,exited"`
 	Benchmark string `json:"benchmark"`
 	CreatedAt string `json:"created_at"`
 	UpdatedAt string `json:"updated_at"`
 }
 
-func toJSON(a db.Asset) assetJSON {
-	return assetJSON{a.ID, a.Ticker, a.Name, a.Market, a.Currency, a.Kind, a.Sleeve, a.Status, a.Benchmark, a.CreatedAt, a.UpdatedAt}
+func toAsset(a db.Asset) Asset {
+	return Asset{a.ID, a.Ticker, a.Name, a.Market, a.Currency, a.Kind, a.Sleeve, a.Status, a.Benchmark, a.CreatedAt, a.UpdatedAt}
 }
 
-func badRequest(w http.ResponseWriter, msg string) {
-	writeJSON(w, http.StatusBadRequest, map[string]string{"error": msg})
-}
-
-func decode(r *http.Request, v any) error {
-	dec := json.NewDecoder(r.Body)
-	dec.DisallowUnknownFields()
-	return dec.Decode(v)
-}
-
-func assetID(w http.ResponseWriter, r *http.Request) (int64, bool) {
-	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
-	if err != nil || id <= 0 {
-		badRequest(w, "invalid asset id")
-		return 0, false
+func okAsset(a db.Asset, err error) (*Body[Asset], error) {
+	if err != nil {
+		return nil, apiError(err)
 	}
-	return id, true
+	return &Body[Asset]{Body: toAsset(a)}, nil
 }
 
-func mountAssets(r chi.Router, svc *assets.Service) {
-	r.Route("/api/assets", func(r chi.Router) {
-		r.Post("/", func(w http.ResponseWriter, req *http.Request) {
-			var in struct {
-				Ticker    string `json:"ticker"`
-				Name      string `json:"name"`
-				Market    string `json:"market"`
-				Currency  string `json:"currency"`
-				Kind      string `json:"kind"`
-				Sleeve    string `json:"sleeve"`
-				Benchmark string `json:"benchmark"`
-			}
-			if err := decode(req, &in); err != nil {
-				badRequest(w, "invalid JSON body")
-				return
-			}
-			a, err := svc.Create(req.Context(), assets.CreateInput(in))
-			if err != nil {
-				writeError(w, err)
-				return
-			}
-			writeJSON(w, http.StatusCreated, toJSON(a))
-		})
-		r.Get("/", func(w http.ResponseWriter, req *http.Request) {
-			q := req.URL.Query()
-			list, err := svc.List(req.Context(), assets.Filter{
-				Status: q.Get("status"), Sleeve: q.Get("sleeve"), Market: q.Get("market"),
+// AssetCreate is the body of POST /api/assets.
+type AssetCreate struct {
+	Ticker    string `json:"ticker"`
+	Name      string `json:"name" required:"false"`
+	Market    string `json:"market" doc:"B3 or US"`
+	Currency  string `json:"currency" required:"false" doc:"Defaults from market"`
+	Kind      string `json:"kind" doc:"stock, bdr or etf"`
+	Sleeve    string `json:"sleeve" required:"false" doc:"core (default) or tactical"`
+	Benchmark string `json:"benchmark" required:"false" doc:"Defaults from market"`
+}
+
+// AssetUpdate is the body of PATCH /api/assets/{id}.
+type AssetUpdate struct {
+	Name      *string `json:"name,omitempty"`
+	Sleeve    *string `json:"sleeve,omitempty"`
+	Benchmark *string `json:"benchmark,omitempty"`
+}
+
+// StatusChange is a body carrying only a status.
+type StatusChange struct {
+	Status string `json:"status"`
+}
+
+type assetListIn struct {
+	Status string `query:"status"`
+	Sleeve string `query:"sleeve"`
+	Market string `query:"market"`
+}
+
+// WithAssets mounts the asset routes.
+func WithAssets(svc *assets.Service) Option {
+	return func(s *server) {
+		const tag = "assets"
+		huma.Register(s.api, opStatus(http.MethodPost, "/api/assets", "createAsset", "Create an asset (starts on the watchlist)", tag, http.StatusCreated),
+			func(ctx context.Context, in *Body[AssetCreate]) (*Body[Asset], error) {
+				return okAsset(svc.Create(ctx, assets.CreateInput(in.Body)))
 			})
-			if err != nil {
-				writeError(w, err)
-				return
-			}
-			out := make([]assetJSON, 0, len(list))
-			for _, a := range list {
-				out = append(out, toJSON(a))
-			}
-			writeJSON(w, http.StatusOK, out)
-		})
-		r.Get("/{id}", func(w http.ResponseWriter, req *http.Request) {
-			id, ok := assetID(w, req)
-			if !ok {
-				return
-			}
-			a, err := svc.Get(req.Context(), id)
-			if err != nil {
-				writeError(w, err)
-				return
-			}
-			writeJSON(w, http.StatusOK, toJSON(a))
-		})
-		r.Patch("/{id}", func(w http.ResponseWriter, req *http.Request) {
-			id, ok := assetID(w, req)
-			if !ok {
-				return
-			}
-			var in struct {
-				Name      *string `json:"name"`
-				Sleeve    *string `json:"sleeve"`
-				Benchmark *string `json:"benchmark"`
-			}
-			if err := decode(req, &in); err != nil {
-				badRequest(w, "invalid JSON body")
-				return
-			}
-			a, err := svc.Update(req.Context(), id, assets.UpdateInput(in))
-			if err != nil {
-				writeError(w, err)
-				return
-			}
-			writeJSON(w, http.StatusOK, toJSON(a))
-		})
-		r.Post("/{id}/status", func(w http.ResponseWriter, req *http.Request) {
-			id, ok := assetID(w, req)
-			if !ok {
-				return
-			}
-			var in struct {
-				Status string `json:"status"`
-			}
-			if err := decode(req, &in); err != nil {
-				badRequest(w, "invalid JSON body")
-				return
-			}
-			a, err := svc.Transition(req.Context(), id, in.Status)
-			if err != nil {
-				writeError(w, err)
-				return
-			}
-			writeJSON(w, http.StatusOK, toJSON(a))
-		})
-	})
+		huma.Register(s.api, op(http.MethodGet, "/api/assets", "listAssets", "List assets", tag),
+			func(ctx context.Context, in *assetListIn) (*Body[[]Asset], error) {
+				list, err := svc.List(ctx, assets.Filter{Status: in.Status, Sleeve: in.Sleeve, Market: in.Market})
+				if err != nil {
+					return nil, apiError(err)
+				}
+				out := make([]Asset, 0, len(list))
+				for _, a := range list {
+					out = append(out, toAsset(a))
+				}
+				return &Body[[]Asset]{Body: out}, nil
+			})
+		huma.Register(s.api, op(http.MethodGet, "/api/assets/{id}", "getAsset", "Get an asset", tag),
+			func(ctx context.Context, in *IDPath) (*Body[Asset], error) {
+				return okAsset(svc.Get(ctx, in.ID))
+			})
+		huma.Register(s.api, op(http.MethodPatch, "/api/assets/{id}", "updateAsset", "Update name, sleeve or benchmark", tag),
+			func(ctx context.Context, in *BodyIn[AssetUpdate]) (*Body[Asset], error) {
+				return okAsset(svc.Update(ctx, in.ID, assets.UpdateInput(in.Body)))
+			})
+		huma.Register(s.api, op(http.MethodPost, "/api/assets/{id}/status", "transitionAsset", "Move an asset through its lifecycle", tag),
+			func(ctx context.Context, in *BodyIn[StatusChange]) (*Body[Asset], error) {
+				return okAsset(svc.Transition(ctx, in.ID, in.Body.Status))
+			})
+	}
 }

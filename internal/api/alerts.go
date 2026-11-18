@@ -1,99 +1,58 @@
 package api
 
 import (
-	"encoding/json"
+	"context"
 	"net/http"
-	"strconv"
 	"time"
 
-	"github.com/go-chi/chi/v5"
+	"github.com/danielgtaylor/huma/v2"
 
 	"github.com/lucasgoveia/stock-portfolio/internal/alerts"
 )
 
+type alertListIn struct {
+	State   string `query:"state" doc:"open, snoozed, acknowledged or resolved"`
+	Type    string `query:"type"`
+	AssetID int64  `query:"asset_id" minimum:"0" doc:"Filter by asset; 0 or absent means any"`
+}
+
+// AlertList is the body of GET /api/alerts.
+type AlertList struct {
+	Alerts []alerts.Alert `json:"alerts"`
+}
+
+// Snooze is the body of POST /api/alerts/{id}/snooze.
+type Snooze struct {
+	Until time.Time `json:"until" doc:"RFC 3339 time the alert reopens"`
+}
+
 // WithAlerts mounts the alert inbox endpoints.
 func WithAlerts(svc *alerts.Service) Option {
-	h := &alertHandler{svc: svc}
-	return func(r chi.Router) {
-		r.Get("/api/alerts", h.list)
-		r.Post("/api/alerts/{id}/ack", h.ack)
-		r.Post("/api/alerts/{id}/snooze", h.snooze)
-		r.Post("/api/alerts/{id}/resolve", h.resolve)
+	return func(s *server) {
+		const tag = "alerts"
+		huma.Register(s.api, op(http.MethodGet, "/api/alerts", "listAlerts", "List alerts", tag),
+			func(ctx context.Context, in *alertListIn) (*Body[AlertList], error) {
+				f := alerts.Filter{State: in.State, Type: in.Type}
+				if in.AssetID > 0 {
+					f.AssetID = &in.AssetID
+				}
+				list, err := svc.List(ctx, f)
+				return ok(AlertList{Alerts: list}, err)
+			})
+		huma.Register(s.api, op(http.MethodPost, "/api/alerts/{id}/ack", "acknowledgeAlert", "Acknowledge an alert", tag),
+			func(ctx context.Context, in *IDPath) (*Body[alerts.Alert], error) {
+				return ok(svc.Acknowledge(ctx, in.ID))
+			})
+		huma.Register(s.api, op(http.MethodPost, "/api/alerts/{id}/snooze", "snoozeAlert", "Snooze an alert until a time", tag),
+			func(ctx context.Context, in *BodyIn[Snooze]) (*Body[alerts.Alert], error) {
+				if in.Body.Until.IsZero() {
+					return nil, &Error{status: http.StatusBadRequest, Message: `body must be {"until": RFC3339 time}`}
+				}
+				return ok(svc.Snooze(ctx, in.ID, in.Body.Until))
+			})
+		huma.Register(s.api, op(http.MethodPost, "/api/alerts/{id}/resolve", "resolveAlert", "Resolve an alert", tag),
+			func(ctx context.Context, in *IDPath) (*Body[alerts.Alert], error) {
+				return ok(svc.Resolve(ctx, in.ID))
+			})
 	}
-}
-
-type alertHandler struct{ svc *alerts.Service }
-
-func (h *alertHandler) list(w http.ResponseWriter, r *http.Request) {
-	q := r.URL.Query()
-	f := alerts.Filter{State: q.Get("state"), Type: q.Get("type")}
-	if v := q.Get("asset_id"); v != "" {
-		id, err := strconv.ParseInt(v, 10, 64)
-		if err != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid asset_id"})
-			return
-		}
-		f.AssetID = &id
-	}
-	list, err := h.svc.List(r.Context(), f)
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"alerts": list})
-}
-
-func alertID(w http.ResponseWriter, r *http.Request) (int64, bool) {
-	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
-	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid id"})
-		return 0, false
-	}
-	return id, true
-}
-
-func (h *alertHandler) ack(w http.ResponseWriter, r *http.Request) {
-	id, ok := alertID(w, r)
-	if !ok {
-		return
-	}
-	a, err := h.svc.Acknowledge(r.Context(), id)
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, a)
-}
-
-func (h *alertHandler) resolve(w http.ResponseWriter, r *http.Request) {
-	id, ok := alertID(w, r)
-	if !ok {
-		return
-	}
-	a, err := h.svc.Resolve(r.Context(), id)
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, a)
-}
-
-func (h *alertHandler) snooze(w http.ResponseWriter, r *http.Request) {
-	id, ok := alertID(w, r)
-	if !ok {
-		return
-	}
-	var body struct {
-		Until time.Time `json:"until"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Until.IsZero() {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "body must be {\"until\": RFC3339 time}"})
-		return
-	}
-	a, err := h.svc.Snooze(r.Context(), id, body.Until)
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, a)
 }

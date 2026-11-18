@@ -1,40 +1,25 @@
 package api
 
 import (
-	"errors"
+	"context"
 	"net/http"
 
-	"github.com/go-chi/chi/v5"
+	"github.com/danielgtaylor/huma/v2"
 
 	"github.com/lucasgoveia/stock-portfolio/internal/jobs"
 )
 
 // WithJobs mounts the daily job routes.
 func WithJobs(r *jobs.Runner) Option {
-	return func(rt chi.Router) {
-		rt.Post("/api/jobs/daily/run", func(w http.ResponseWriter, req *http.Request) {
-			res, err := r.Run(req.Context())
-			if errors.Is(err, jobs.ErrRunning) {
-				writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
-				return
-			}
-			if err != nil {
-				writeError(w, err)
-				return
-			}
-			writeJSON(w, http.StatusOK, res)
-		})
-		rt.Get("/api/jobs/daily/last", func(w http.ResponseWriter, req *http.Request) {
-			res, err := r.Last(req.Context())
-			if errors.Is(err, jobs.ErrNoRuns) {
-				writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
-				return
-			}
-			if err != nil {
-				writeError(w, err)
-				return
-			}
-			writeJSON(w, http.StatusOK, res)
-		})
+	return func(s *server) {
+		const tag = "jobs"
+		huma.Register(s.api, op(http.MethodPost, "/api/jobs/daily/run", "runDailyJob", "Run the daily pipeline now", tag),
+			func(ctx context.Context, _ *struct{}) (*Body[jobs.RunResult], error) {
+				return ok(r.Run(ctx))
+			})
+		huma.Register(s.api, op(http.MethodGet, "/api/jobs/daily/last", "lastDailyJob", "Last daily pipeline run", tag),
+			func(ctx context.Context, _ *struct{}) (*Body[jobs.RunResult], error) {
+				return ok(r.Last(ctx))
+			})
 	}
 }

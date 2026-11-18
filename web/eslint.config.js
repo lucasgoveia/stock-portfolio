@@ -5,7 +5,7 @@ import globals from 'globals'
 import tseslint from 'typescript-eslint'
 
 export default tseslint.config(
-  { ignores: ['dist', 'src/routeTree.gen.ts', 'src/components/ui', 'src/hooks'] },
+  { ignores: ['dist', 'src/routeTree.gen.ts', 'src/lib/api.gen.ts', 'src/components/ui', 'src/hooks'] },
   {
     files: ['**/*.{ts,tsx}'],
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
