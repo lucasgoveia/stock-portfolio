@@ -837,6 +837,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/taxes/annual/{year}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Annual report: US 15% tax, income and positions at 31/12 for the DIRPF */
+        get: operations["annualTaxes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/taxes/annual/{year}/csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The annual report as CSV */
+        get: operations["annualTaxesCSV"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/taxes/b3": {
         parameters: {
             query?: never;
@@ -933,6 +967,17 @@ export interface components {
         Amount: {
             /** @description BRL */
             amount: string;
+        };
+        AnnualReport: {
+            b3_dividends: string;
+            b3_jcp_gross: string;
+            b3_jcp_withheld: string;
+            foreign: components["schemas"]["ForeignYear"];
+            income: components["schemas"]["IncomeLine"][] | null;
+            positions: components["schemas"]["YearEndPosition"][] | null;
+            sales: components["schemas"]["ForeignSale"][] | null;
+            /** Format: int64 */
+            year: number;
         };
         Asset: {
             benchmark: string;
@@ -1116,6 +1161,30 @@ export interface components {
             /** @description Required unless method is scenario_dcf */
             value_per_share?: string;
         };
+        ForeignSale: {
+            /** Format: int64 */
+            asset_id: number;
+            date: string;
+            gain_brl: string;
+            gain_usd: string;
+            proceeds: string;
+            quantity: string;
+            ticker: string;
+        };
+        ForeignYear: {
+            base: string;
+            dividends: string;
+            gains: string;
+            loss_in: string;
+            loss_out: string;
+            rate: string;
+            tax: string;
+            tax_net_of_withholding: string;
+            taxable: string;
+            withheld: string;
+            /** Format: int64 */
+            year: number;
+        };
         GateResult: {
             catalyst_only: boolean;
             deep_discount: boolean;
@@ -1133,6 +1202,17 @@ export interface components {
         Health: {
             /** @example ok */
             status: string;
+        };
+        IncomeLine: {
+            /** Format: int64 */
+            asset_id: number;
+            gross_brl: string;
+            kind: string;
+            market: string;
+            net_brl: string;
+            pay_date: string;
+            ticker: string;
+            withheld_brl: string;
         };
         Instrument: {
             currency: string;
@@ -1618,6 +1698,17 @@ export interface components {
             predictability: string;
             understanding: string;
             volatility: string;
+        };
+        YearEndPosition: {
+            /** Format: int64 */
+            asset_id: number;
+            cost: string;
+            cost_brl: string;
+            currency: string;
+            market: string;
+            name: string;
+            quantity: string;
+            ticker: string;
         };
     };
     responses: never;
@@ -3744,6 +3835,70 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["WeightsInput"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    annualTaxes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                year: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnnualReport"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    annualTaxesCSV: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                year: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description CSV file */
+            200: {
+                headers: {
+                    "Content-Disposition"?: string;
+                    "Content-Type"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/csv": unknown;
                 };
             };
             /** @description Error */

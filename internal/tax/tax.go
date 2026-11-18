@@ -11,24 +11,27 @@ import (
 	"github.com/shopspring/decimal"
 
 	"github.com/lucasgoveia/stock-portfolio/internal/assets"
+	"github.com/lucasgoveia/stock-portfolio/internal/dividends"
 	"github.com/lucasgoveia/stock-portfolio/internal/engine"
 	"github.com/lucasgoveia/stock-portfolio/internal/trades"
 )
 
 // Service reads trades and applies the tax rules.
 type Service struct {
-	assets *assets.Service
-	trades *trades.Service
-	params engine.TaxParams
-	now    func() time.Time
+	assets    *assets.Service
+	trades    *trades.Service
+	dividends *dividends.Service
+	params    engine.TaxParams
+	now       func() time.Time
 }
 
-// NewService builds a Service with default rules. A nil clock uses time.Now.
-func NewService(a *assets.Service, t *trades.Service, clock func() time.Time) *Service {
+// NewService builds a Service with default rules. d (optional) supplies the
+// dividends of the annual report. A nil clock uses time.Now.
+func NewService(a *assets.Service, t *trades.Service, d *dividends.Service, clock func() time.Time) *Service {
 	if clock == nil {
 		clock = time.Now
 	}
-	return &Service{assets: a, trades: t, params: engine.DefaultTaxParams(), now: clock}
+	return &Service{assets: a, trades: t, dividends: d, params: engine.DefaultTaxParams(), now: clock}
 }
 
 // Params returns the tax rules in use.

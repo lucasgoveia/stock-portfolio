@@ -78,8 +78,8 @@ func run() error {
 	cashSvc := cash.NewService(conn, rateStore, nil)
 	researchSvc := research.NewService(conn, assetSvc, nil)
 	tacticalSvc := tactical.NewService(conn, assetSvc, researchSvc)
-	taxSvc := tax.NewService(assetSvc, tradeSvc, nil)
 	dividendSvc := dividends.NewService(conn, assetSvc, tradeSvc, cashSvc, nil)
+	taxSvc := tax.NewService(assetSvc, tradeSvc, dividendSvc, nil)
 	deps.Dividends = dividendSvc
 	portfolioSvc := portfolio.NewService(portfolio.Deps{
 		Conn: conn, Assets: assetSvc, Trades: tradeSvc, Cash: cashSvc, Rates: rateStore, Ratings: ratingSvc,

@@ -116,7 +116,7 @@ func setup(t *testing.T) *env {
 	e.cdiID = ins.ID
 	e.research, e.tactical = rn, tactical.NewService(conn, as, rn)
 	e.svc = NewService(Deps{Conn: conn, Assets: as, Trades: tr, Cash: cs, Rates: rs, Ratings: rt, Valuation: va,
-		Thesis: th, Research: rn, Alerts: al, Tactical: e.tactical, Tax: tax.NewService(as, tr, clock),
+		Thesis: th, Research: rn, Alerts: al, Tactical: e.tactical, Tax: tax.NewService(as, tr, nil, clock),
 		Dividends: e.dividends, Now: clock})
 	return e
 }
