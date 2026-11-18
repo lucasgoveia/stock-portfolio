@@ -1,6 +1,6 @@
-# Stock Portfolio — Specification v0.1
+# Stock Portfolio — Specification v0.2
 
-Status: approved design (grilling session 2026-11-18). Spec before code.
+Status: approved design (grilling session 2026-11-18). v0.2 folds in the data-source spike findings (`docs/data-sources.md`, issue #8). Spec before code.
 
 ## 1. Purpose
 
@@ -96,7 +96,7 @@ Weighted score: `S = Σ wᵢ·rᵢ / Σ wᵢ`, range 1–5.
 
 ### 5.2 Volatility from beta
 
-Beta computed daily from 2 years of weekly log returns against IBOV (B3 assets) or S&P 500 (US assets), FX-neutral (US assets measured in USD vs S&P 500 in USD).
+Beta computed daily from 2 years of weekly log returns (B3 history from B3 COTAHIST files, US history from the US price source; see §17) against IBOV (B3 assets) or S&P 500 (US assets), FX-neutral (US assets measured in USD vs S&P 500 in USD).
 
 | Beta | Score |
 |---|---|
@@ -193,7 +193,7 @@ Output: a plan (list of orders with quantity, estimated price, amount). The user
 
 ### 8.5 Dividends and JCP
 
-Recorded net of withholding, credited to cash, and treated as new money in the next contribution plan. Yield on cost tracked per position. The daily job may detect announced dividends from data sources and propose entries for confirmation.
+Recorded net of withholding (JCP 17.5% IRRF per LC 224/2025; dividends above R$50k/month from one payer have 10% IRRF per Lei 15.270/2025; rates are settings), credited to cash, and treated as new money in the next contribution plan. Yield on cost tracked per position. The daily job may detect announced dividends from data sources and propose entries for confirmation.
 
 ## 9. Trimming and selling
 
@@ -261,11 +261,12 @@ All rates and limits are settings; verify current law before release (see §17).
 - Above that, gains taxed 15%; DARF code 6015 due by last business day of the following month. Losses carried forward.
 - Trim planning: when a suggested trim would push the month's sales above R$20,000, the system offers (a) split across months, (b) proceed with estimated tax shown.
 - Core and tactical sales share the same monthly pool; warn when a tactical exit consumes room needed by planned core trims.
-- Day trades (buy and sell same asset same day) are flagged; 20% rate shown.
+- Day trades (buy and sell same asset same day) are flagged; 20% rate shown. DARF code for day trade (6015 vs 6047) unconfirmed.
 
 ### 11.3 US assets
 
-- Gains on foreign assets taxed annually (15%, Lei 14.754/2023), reported in the annual DIRPF. System produces a yearly report of realized gains in BRL and dividends with US withholding.
+- Gains and dividends on foreign assets taxed annually (15%, Lei 14.754/2023), reported in the annual DIRPF. System produces a yearly report of realized gains in BRL and dividends with US withholding. Whether US withholding is creditable (art. 4, reciprocity) is unconfirmed; show it separately.
+- FX convention for foreign cost basis must be confirmed before release.
 
 ### 11.4 Outputs
 
@@ -304,7 +305,7 @@ After each earnings release, compare reported revenue and EPS against the base s
 
 ## 14. Corporate actions
 
-- Daily job pulls events (brapi `stockDividends`, Yahoo splits) and cross-checks each against the price ratio around the ex-date.
+- Daily job pulls events (the `stockDividends` field of brapi's dividends endpoint; US splits from the US price source) and cross-checks each against the ratio of **raw** closes around the event date. brapi prices are retroactively adjusted, so the system stores each day's raw close at fetch time and uses B3 COTAHIST (unadjusted) for history. brapi `exDate` is null for stock events; use the approval/last-date-with fields.
 - Detected events wait in a confirmation queue; the user confirms or rejects. Confirmed events adjust quantity and average cost (§11.1).
 - A suspicious price jump with no detected event raises an alert to enter the event manually.
 
@@ -319,7 +320,7 @@ After each earnings release, compare reported revenue and EPS against the base s
 
 ### 16.1 Pipeline (19:00 BRT)
 
-1. Fetch prices (B3, US), FX, CDI rate, Tesouro Selic price, index levels.
+1. Fetch prices (B3, US), FX, CDI rate, Tesouro Selic price, index levels. CDI and Tesouro Selic are published D-1: always take the latest available point and record its reference date.
 2. Detect dividends and corporate actions.
 3. Recompute beta, weights, cash target, targets, bands.
 4. Evaluate all triggers; upsert alerts (dedupe by type + asset); resolve alerts whose condition cleared.
@@ -333,20 +334,25 @@ overweight, overvalued, thesis_broken, thesis_review_due, fair_value_stale, miss
 
 Delivery: dashboard inbox only.
 
-## 17. Data sources (to verify in M2)
+## 17. Data sources
 
-| Need | Candidate | Notes |
+Details, endpoints and fixtures: `docs/data-sources.md`.
+
+| Need | Source | Notes |
 |---|---|---|
-| B3 prices, dividends, events | brapi.dev | Check which modules need a paid plan (`stockDividends`, fundamentals). |
-| US prices, splits, dividends | Yahoo Finance (unofficial) | Fragile; wrap behind an interface; consider a fallback. |
-| USDBRL | BCB PTAX (SGS / Olinda API) | Official. |
-| CDI | BCB SGS series 12 | Official, daily. |
-| Tesouro Selic price | Tesouro Transparente datasets | Verify freshness. |
-| IBOV, S&P 500 | brapi (`^BVSP`), Yahoo (`^GSPC`) | |
-| BR filings | CVM Dados Abertos, RAD | |
-| US filings, fundamentals | SEC EDGAR, XBRL companyfacts | Needs a descriptive User-Agent. |
+| B3 daily quotes | brapi.dev free plan (token) | 1 asset per request, 15k req/month, 30 min freshness. Store raw close daily. |
+| B3 history (beta, backfill, corp-action check) | B3 COTAHIST yearly/daily files | Official, unadjusted. To verify (#37). |
+| B3 dividends, stock events | brapi dividends endpoint | Free plan "limited"; fallback CVM IPE (avisos aos acionistas). |
+| US prices, splits, dividends | Tiingo free tier | To verify (#37). Yahoo returned 429; optional fallback only. |
+| USDBRL | BCB PTAX (Olinda API) | Verified. |
+| CDI | BCB SGS series 12 | Verified; D-1; requires `dataInicial`, max 10-year window. |
+| Tesouro Selic price | Tesouro Transparente CSV | Verified; D-1; 14MB file, refreshed ~07:23 BRT. |
+| IBOV history | B3 index endpoint (undocumented) | Fragile; COTAHIST fallback to verify. |
+| S&P 500 history | FRED CSV (SP500) | No key; price index only. |
+| BR filings | CVM Dados Abertos (DFP, ITR, IPE) | Latin-1, `VERSAO` for restatements. RAD is UI only. |
+| US filings, fundamentals | SEC EDGAR submissions, companyfacts | Needs descriptive User-Agent; check content type (HTML on block). |
 
-Tax rules in §11 (rates, exemption, JCP/dividend withholding after the 2025 income tax reform) must be re-verified and kept as settings.
+Tax facts confirmed and still open are listed in `docs/data-sources.md`; all rates in §11 are settings.
 
 ## 18. UI
 
