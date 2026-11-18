@@ -6,12 +6,18 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+
+	"github.com/lucasgoveia/stock-portfolio/internal/assets"
 )
 
-// NewRouter builds the HTTP router.
-func NewRouter() http.Handler {
+// NewRouter builds the HTTP router. assetSvc may be nil only in tests that do
+// not touch asset routes.
+func NewRouter(assetSvc *assets.Service) http.Handler {
 	r := chi.NewRouter()
 	r.Get("/api/health", health)
+	if assetSvc != nil {
+		mountAssets(r, assetSvc)
+	}
 	return r
 }
 

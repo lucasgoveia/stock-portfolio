@@ -4,6 +4,20 @@
 
 package db
 
+type Asset struct {
+	ID        int64
+	Ticker    string
+	Name      string
+	Market    string
+	Currency  string
+	Kind      string
+	Sleeve    string
+	Status    string
+	Benchmark string
+	CreatedAt string
+	UpdatedAt string
+}
+
 type Setting struct {
 	Key   string
 	Value string
