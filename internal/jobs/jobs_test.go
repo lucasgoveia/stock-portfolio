@@ -4,8 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"net/http"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -17,6 +19,7 @@ import (
 	"github.com/lucasgoveia/stock-portfolio/internal/marketdata"
 	"github.com/lucasgoveia/stock-portfolio/internal/money"
 	"github.com/lucasgoveia/stock-portfolio/internal/store"
+	"github.com/lucasgoveia/stock-portfolio/internal/store/db"
 )
 
 func m(s string) money.Decimal { return money.New(decimal.RequireFromString(s)) }
@@ -197,7 +200,7 @@ func TestDailyRunPersistsAndIsIdempotent(t *testing.T) {
 		t.Fatalf("evaluators ran %d times", *e.evals)
 	}
 	last, err := e.runner.Last(ctx)
-	if err != nil || last.Status != RunOK || len(last.Steps) != 9 || last.FinishedAt == "" {
+	if err != nil || last.Status != RunOK || len(last.Steps) != 10 || last.FinishedAt == "" {
 		t.Fatalf("last = %+v, %v", last, err)
 	}
 }
@@ -348,5 +351,43 @@ func TestBetaStep(t *testing.T) {
 	// ITUB4 (asset 2) has history; WEGE3 and MSFT do not.
 	if len(fb.got) != 1 || fb.got[2][:5] != "IBOV " {
 		t.Fatalf("betas = %v", fb.got)
+	}
+}
+
+type fakeFeed struct{}
+
+func (fakeFeed) CorporateActions(_ context.Context, ticker string, _, _ time.Time) (marketdata.CorporateActions, error) {
+	pay := date(2026, 12, 5)
+	return marketdata.CorporateActions{Ticker: ticker, CashDividends: []marketdata.CashDividend{
+		{Label: "JCP", Rate: m("0.5"), LastDatePrior: date(2026, 11, 10), PaymentDate: &pay},
+		{Label: "DIVIDENDO", Rate: m("0.2"), LastDatePrior: date(2026, 11, 10)},
+	}}, nil
+}
+
+type fakeSink struct{ got []string }
+
+func (f *fakeSink) Detect(_ context.Context, id int64, kind, rec, pay string, ps decimal.Decimal, src string) (bool, error) {
+	f.got = append(f.got, fmt.Sprintf("%d %s %s %s %s %s", id, kind, rec, pay, ps, src))
+	return true, nil
+}
+
+func TestDividendStep(t *testing.T) {
+	e := setup(t)
+	ctx := context.Background()
+	sink := &fakeSink{}
+	d := e.deps
+	d.DividendFeed, d.Dividends = fakeFeed{}, sink
+	p := &pipeline{d: d, q: db.New(d.Conn)}
+	// No holdings yet: skipped.
+	if _, err := p.dividends(ctx, date(2026, 11, 18)); !errors.Is(err, ErrSkipped) {
+		t.Fatalf("no holdings: %v", err)
+	}
+	if _, err := e.conn.Exec(`UPDATE assets SET status = 'holding' WHERE market = 'B3'`); err != nil {
+		t.Fatal(err)
+	}
+	note, err := p.dividends(ctx, date(2026, 11, 18))
+	if err != nil || len(sink.got) == 0 || !strings.Contains(sink.got[0], "jcp 2026-11-10 2026-12-05 0.5 brapi") ||
+		!strings.Contains(sink.got[1], "dividend 2026-11-10  0.2 brapi") {
+		t.Fatalf("detect: %q %v %v", note, sink.got, err)
 	}
 }

@@ -4,6 +4,7 @@ import { Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 
+import { DividendsTab } from '@/components/dividends-tab'
 import { Field, FormError, NativeSelect } from '@/components/form'
 import { PageHeader } from '@/components/page-header'
 import { ErrorBlock, LoadingBlock } from '@/components/query-state'
@@ -23,6 +24,7 @@ export const Route = createFileRoute('/trades')({ validateSearch: parseTradeSear
 const TABS = [
   { id: 'trades', label: 'Trades' },
   { id: 'cash', label: 'Cash' },
+  { id: 'dividends', label: 'Dividends' },
   { id: 'positions', label: 'Positions' },
 ] as const
 
@@ -54,6 +56,7 @@ function Page() {
       </div>
       {tab === 'trades' && <TradesTab search={search} />}
       {tab === 'cash' && <CashTab />}
+      {tab === 'dividends' && <DividendsTab />}
       {tab === 'positions' && <PositionsTab />}
     </>
   )

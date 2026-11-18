@@ -59,8 +59,17 @@ type Deps struct {
 	IBOV       marketdata.IndexSource
 	SP500      marketdata.IndexSource
 	Betas      BetaWriter
-	Evaluators []Evaluator
+	// DividendFeed announces B3 dividends and JCP; Dividends queues them for
+	// confirmation (spec §8.5). Either nil skips the step.
+	DividendFeed marketdata.DividendSource
+	Dividends    DividendSink
+	Evaluators   []Evaluator
 	Now        func() time.Time
+}
+
+// DividendSink queues detected payments (dividends.Service).
+type DividendSink interface {
+	Detect(ctx context.Context, assetID int64, kind, recordDate, payDate string, perShare decimal.Decimal, source string) (bool, error)
 }
 
 // BetaWriter stores computed betas (ratings.Service).
@@ -92,6 +101,7 @@ func DailySteps(d Deps) []Step {
 		{"cotahist", p.cotahist},
 		{"us_prices", p.usPrices},
 		{"indices", p.indices},
+		{"dividends", p.dividends},
 		{"beta", p.beta},
 		{"evaluate", p.evaluate},
 	}
@@ -210,6 +220,56 @@ func (p *pipeline) b3Quotes(ctx context.Context, _ time.Time) (string, error) {
 		}
 	}
 	note := fmt.Sprintf("%d/%d quotes", len(list)-len(failed), len(list))
+	if len(failed) > 0 {
+		return note, errors.New(strings.Join(failed, "; "))
+	}
+	return note, nil
+}
+
+// dividendLookback is how far back announcements are read each day.
+const dividendLookback = 120 * 24 * time.Hour
+
+// dividends proposes announced B3 dividends and JCP for held assets. brapi
+// rates are gross per share on today's split-adjusted scale.
+func (p *pipeline) dividends(ctx context.Context, day time.Time) (string, error) {
+	if p.d.DividendFeed == nil || p.d.Dividends == nil {
+		return "", ErrSkipped
+	}
+	held, err := p.d.Assets.List(ctx, assets.Filter{Status: assets.StatusHolding, Market: "B3"})
+	if err != nil {
+		return "", err
+	}
+	if len(held) == 0 {
+		return "no B3 holdings", ErrSkipped
+	}
+	found := 0
+	var failed []string
+	for _, a := range held {
+		ca, err := p.d.DividendFeed.CorporateActions(ctx, a.Ticker, day.Add(-dividendLookback), time.Time{})
+		if err != nil {
+			failed = append(failed, fmt.Sprintf("%s: %v", a.Ticker, err))
+			continue
+		}
+		for _, cd := range ca.CashDividends {
+			kind := "dividend"
+			if strings.Contains(strings.ToUpper(cd.Label), "JCP") {
+				kind = "jcp"
+			}
+			pay := ""
+			if cd.PaymentDate != nil && !cd.PaymentDateIsDeadline {
+				pay = cd.PaymentDate.Format("2006-01-02")
+			}
+			ok, err := p.d.Dividends.Detect(ctx, a.ID, kind, cd.LastDatePrior.Format("2006-01-02"), pay, cd.Rate.Decimal, "brapi")
+			if err != nil {
+				failed = append(failed, fmt.Sprintf("%s: %v", a.Ticker, err))
+				continue
+			}
+			if ok {
+				found++
+			}
+		}
+	}
+	note := fmt.Sprintf("%d new payments to confirm", found)
 	if len(failed) > 0 {
 		return note, errors.New(strings.Join(failed, "; "))
 	}

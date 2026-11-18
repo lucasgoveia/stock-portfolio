@@ -21,8 +21,11 @@ var ErrValidation = errors.New("portfolio validation error")
 // ContributionPlan is an engine plan plus ticker lookup.
 type ContributionPlan struct {
 	engine.Plan
-	Amount  decimal.Decimal   `json:"amount"`
-	Tickers map[string]string `json:"tickers"`
+	// Amount is the new money entered; Dividends is undeployed dividend cash
+	// planned along with it (already in cash, so it is not counted twice).
+	Amount    decimal.Decimal   `json:"amount"`
+	Dividends decimal.Decimal   `json:"dividends"`
+	Tickers   map[string]string `json:"tickers"`
 }
 
 func (s *Service) params(ctx context.Context) (engine.Params, error) {
@@ -56,9 +59,15 @@ func (s *Service) PlanContribution(ctx context.Context, amount decimal.Decimal) 
 	if err != nil {
 		return ContributionPlan{}, err
 	}
+	// Undeployed dividends already sit in cash: plan them as new money and
+	// take them out of the starting cash and portfolio value.
+	div := snap.UndeployedDividends
+	if div.GreaterThan(snap.CashValue) {
+		div = snap.CashValue
+	}
 	in := engine.PlanInput{
-		Amount: amount, PortfolioValue: snap.TotalValue, CashValue: snap.CashValue, CashTarget: snap.CashTarget,
-		UndeployedWeight: snap.Undeployed, PendingUS: snap.PendingUS, Bootstrap: snap.Bootstrap,
+		Amount: amount.Add(div), PortfolioValue: snap.TotalValue.Sub(div), CashValue: snap.CashValue.Sub(div),
+		CashTarget: snap.CashTarget, UndeployedWeight: snap.Undeployed, PendingUS: snap.PendingUS, Bootstrap: snap.Bootstrap,
 	}
 	for _, x := range append(append([]Position(nil), snap.Holdings...), snap.Watchlist...) {
 		if x.Target == nil || x.Price == nil {
@@ -74,7 +83,7 @@ func (s *Service) PlanContribution(ctx context.Context, amount decimal.Decimal) 
 		}
 		in.Assets = append(in.Assets, pa)
 	}
-	return ContributionPlan{Plan: p.PlanContribution(in), Amount: amount, Tickers: tickers(snap)}, nil
+	return ContributionPlan{Plan: p.PlanContribution(in), Amount: amount, Dividends: div, Tickers: tickers(snap)}, nil
 }
 
 // TrimsResult is an engine trim plan plus ticker lookup and, for B3 trims,

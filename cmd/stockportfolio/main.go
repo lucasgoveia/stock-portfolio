@@ -18,6 +18,7 @@ import (
 	"github.com/lucasgoveia/stock-portfolio/internal/assets"
 	"github.com/lucasgoveia/stock-portfolio/internal/cash"
 	"github.com/lucasgoveia/stock-portfolio/internal/config"
+	"github.com/lucasgoveia/stock-portfolio/internal/dividends"
 	"github.com/lucasgoveia/stock-portfolio/internal/jobs"
 	"github.com/lucasgoveia/stock-portfolio/internal/marketdata"
 	"github.com/lucasgoveia/stock-portfolio/internal/portfolio"
@@ -78,9 +79,11 @@ func run() error {
 	researchSvc := research.NewService(conn, assetSvc, nil)
 	tacticalSvc := tactical.NewService(conn, assetSvc, researchSvc)
 	taxSvc := tax.NewService(assetSvc, tradeSvc, nil)
+	dividendSvc := dividends.NewService(conn, assetSvc, tradeSvc, cashSvc, nil)
+	deps.Dividends = dividendSvc
 	portfolioSvc := portfolio.NewService(portfolio.Deps{
 		Conn: conn, Assets: assetSvc, Trades: tradeSvc, Cash: cashSvc, Rates: rateStore, Ratings: ratingSvc,
-		Valuation: valuationSvc, Thesis: thesisSvc, Research: researchSvc, Alerts: alertSvc, Tactical: tacticalSvc, Tax: taxSvc,
+		Valuation: valuationSvc, Thesis: thesisSvc, Research: researchSvc, Alerts: alertSvc, Tactical: tacticalSvc, Tax: taxSvc, Dividends: dividendSvc,
 	})
 	deps.Evaluators = []jobs.Evaluator{
 		{Name: "thesis", Run: thesisSvc.Evaluate},
@@ -117,6 +120,7 @@ func run() error {
 		api.WithJobs(runner),
 		api.WithTactical(tacticalSvc, portfolioSvc),
 		api.WithTaxes(taxSvc),
+		api.WithDividends(dividendSvc),
 		api.WithUI(web.Dist()),
 	), ReadHeaderTimeout: 10 * time.Second}
 	go func() {
@@ -134,17 +138,20 @@ func run() error {
 
 // marketDeps wires the real market data clients from config.
 func marketDeps(cfg config.Config, conn *sql.DB, a *assets.Service, rates *cash.RateStore) jobs.Deps {
+	brapi := marketdata.NewBrapi(nil, "", cfg.BrapiToken)
 	d := jobs.Deps{
-		Conn:     conn,
-		Assets:   a,
-		Rates:    rates,
-		FX:       marketdata.NewPTAX(nil, ""),
-		CDI:      marketdata.NewSGS(nil, ""),
-		Tesouro:  marketdata.NewTesouro(nil, ""),
-		Quotes:   marketdata.NewBrapi(nil, "", cfg.BrapiToken),
-		Cotahist: marketdata.NewCotahist(nil, ""),
-		IBOV:     marketdata.NewB3Index(nil, "", "IBOV"),
-		SP500:    marketdata.NewFRED(nil, "", "SP500"),
+		Conn:    conn,
+		Assets:  a,
+		Rates:   rates,
+		FX:      marketdata.NewPTAX(nil, ""),
+		CDI:     marketdata.NewSGS(nil, ""),
+		Tesouro: marketdata.NewTesouro(nil, ""),
+		Quotes:  brapi,
+		// brapi's dividends endpoint also announces JCP and dividends.
+		DividendFeed: brapi,
+		Cotahist:     marketdata.NewCotahist(nil, ""),
+		IBOV:         marketdata.NewB3Index(nil, "", "IBOV"),
+		SP500:        marketdata.NewFRED(nil, "", "SP500"),
 	}
 	if cfg.TiingoToken != "" {
 		d.US = marketdata.NewTiingo(nil, "", cfg.TiingoToken)

@@ -367,6 +367,9 @@
           "amount": {
             "type": "string"
           },
+          "dividends": {
+            "type": "string"
+          },
           "new_money": {
             "type": "string"
           },
@@ -403,6 +406,7 @@
         },
         "required": [
           "amount",
+          "dividends",
           "tickers",
           "orders",
           "new_money",
@@ -460,6 +464,179 @@
         "required": [
           "scenarios",
           "value_per_share"
+        ],
+        "type": "object"
+      },
+      "Dividend": {
+        "additionalProperties": false,
+        "properties": {
+          "asset_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "contribution_id": {
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "fx_rate": {
+            "type": "string"
+          },
+          "gross": {
+            "type": "string"
+          },
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "kind": {
+            "enum": [
+              "dividend",
+              "jcp"
+            ],
+            "type": "string"
+          },
+          "movement_id": {
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "net": {
+            "type": "string"
+          },
+          "net_brl": {
+            "type": "string"
+          },
+          "pay_date": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "per_share": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "string"
+          },
+          "record_date": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "detected",
+              "confirmed",
+              "rejected"
+            ],
+            "type": "string"
+          },
+          "withholding": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "asset_id",
+          "kind",
+          "record_date",
+          "pay_date",
+          "quantity",
+          "per_share",
+          "gross",
+          "withholding",
+          "net",
+          "net_brl",
+          "currency",
+          "fx_rate",
+          "status",
+          "source",
+          "movement_id",
+          "contribution_id",
+          "created_at"
+        ],
+        "type": "object"
+      },
+      "DividendConfirm": {
+        "additionalProperties": false,
+        "properties": {
+          "fx_rate": {
+            "type": "string"
+          },
+          "instrument_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "pay_date": {
+            "type": "string"
+          },
+          "withholding": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "instrument_id"
+        ],
+        "type": "object"
+      },
+      "DividendCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "fx_rate": {
+            "description": "BRL per USD on the payment date (USD only)",
+            "type": "string"
+          },
+          "instrument_id": {
+            "description": "Cash instrument credited with the net amount",
+            "format": "int64",
+            "type": "integer"
+          },
+          "kind": {
+            "enum": [
+              "dividend",
+              "jcp"
+            ],
+            "type": "string"
+          },
+          "pay_date": {
+            "description": "YYYY-MM-DD",
+            "type": "string"
+          },
+          "per_share": {
+            "description": "Gross per share, asset currency",
+            "type": "string"
+          },
+          "quantity": {
+            "description": "Defaults to the shares held on the record date",
+            "type": "string"
+          },
+          "record_date": {
+            "description": "Data-com, YYYY-MM-DD",
+            "type": "string"
+          },
+          "withholding": {
+            "description": "Defaults to the rule (JCP 17.5%, dividends over R$50k/month 10%, US 30%)",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "record_date",
+          "pay_date",
+          "per_share",
+          "instrument_id"
         ],
         "type": "object"
       },
@@ -985,7 +1162,13 @@
           "catalyst": {
             "type": "boolean"
           },
+          "cost_brl": {
+            "type": "string"
+          },
           "currency": {
+            "type": "string"
+          },
+          "dividends_ttm": {
             "type": "string"
           },
           "fair_value": {
@@ -1063,6 +1246,9 @@
           },
           "weight": {
             "type": "string"
+          },
+          "yield_on_cost": {
+            "type": "string"
           }
         },
         "required": [
@@ -1076,6 +1262,9 @@
           "benchmark",
           "quantity",
           "avg_cost",
+          "cost_brl",
+          "dividends_ttm",
+          "yield_on_cost",
           "price",
           "price_brl",
           "value_brl",
@@ -1540,6 +1729,9 @@
           "undeployed": {
             "type": "string"
           },
+          "undeployed_dividends": {
+            "type": "string"
+          },
           "unpriced": {
             "items": {
               "type": "string"
@@ -1593,6 +1785,7 @@
           "too_few",
           "too_many",
           "pending_us",
+          "undeployed_dividends",
           "holdings",
           "watchlist",
           "unpriced",
@@ -2896,6 +3089,61 @@
         "summary": "Latest computed beta",
         "tags": [
           "ratings"
+        ]
+      }
+    },
+    "/api/assets/{id}/dividends": {
+      "post": {
+        "operationId": "recordDividend",
+        "parameters": [
+          {
+            "description": "Resource id",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Resource id",
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DividendCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Dividend"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Record a received dividend or JCP and credit cash",
+        "tags": [
+          "dividends"
         ]
       }
     },
@@ -4677,6 +4925,207 @@
         "summary": "Mark a plan order done, skipped or open",
         "tags": [
           "portfolio"
+        ]
+      }
+    },
+    "/api/dividends": {
+      "get": {
+        "operationId": "listDividends",
+        "parameters": [
+          {
+            "explode": false,
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "enum": [
+                "detected",
+                "confirmed",
+                "rejected",
+                ""
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "asset_id",
+            "schema": {
+              "format": "int64",
+              "minimum": 0,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Dividend"
+                  },
+                  "type": [
+                    "array",
+                    "null"
+                  ]
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Dividends, newest first",
+        "tags": [
+          "dividends"
+        ]
+      }
+    },
+    "/api/dividends/{id}": {
+      "delete": {
+        "operationId": "deleteDividend",
+        "parameters": [
+          {
+            "description": "Resource id",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Resource id",
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Delete a payment and its cash credit",
+        "tags": [
+          "dividends"
+        ]
+      }
+    },
+    "/api/dividends/{id}/confirm": {
+      "post": {
+        "operationId": "confirmDividend",
+        "parameters": [
+          {
+            "description": "Resource id",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Resource id",
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DividendConfirm"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Dividend"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Confirm a detected payment and credit cash",
+        "tags": [
+          "dividends"
+        ]
+      }
+    },
+    "/api/dividends/{id}/reject": {
+      "post": {
+        "operationId": "rejectDividend",
+        "parameters": [
+          {
+            "description": "Resource id",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Resource id",
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Dividend"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Dismiss a detected payment",
+        "tags": [
+          "dividends"
         ]
       }
     },

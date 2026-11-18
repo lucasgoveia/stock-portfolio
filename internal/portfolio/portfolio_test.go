@@ -13,6 +13,7 @@ import (
 	"github.com/lucasgoveia/stock-portfolio/internal/alerts"
 	"github.com/lucasgoveia/stock-portfolio/internal/assets"
 	"github.com/lucasgoveia/stock-portfolio/internal/cash"
+	"github.com/lucasgoveia/stock-portfolio/internal/dividends"
 	"github.com/lucasgoveia/stock-portfolio/internal/engine"
 	"github.com/lucasgoveia/stock-portfolio/internal/money"
 	"github.com/lucasgoveia/stock-portfolio/internal/ratings"
@@ -30,12 +31,14 @@ func m(s string) money.Decimal   { return money.New(d(s)) }
 func mp(s string) *money.Decimal { v := m(s); return &v }
 
 type env struct {
-	conn     *sql.DB
-	svc      *Service
-	alerts   *alerts.Service
-	research *research.Service
-	tactical *tactical.Service
-	ids      map[string]int64
+	conn      *sql.DB
+	svc       *Service
+	alerts    *alerts.Service
+	research  *research.Service
+	dividends *dividends.Service
+	cdiID     int64
+	tactical  *tactical.Service
+	ids       map[string]int64
 }
 
 const today = "2026-11-18"
@@ -109,9 +112,12 @@ func setup(t *testing.T) *env {
 		t.Fatal(err)
 	}
 	rn := research.NewService(conn, as, clock)
+	e.dividends = dividends.NewService(conn, as, tr, cs, clock)
+	e.cdiID = ins.ID
 	e.research, e.tactical = rn, tactical.NewService(conn, as, rn)
 	e.svc = NewService(Deps{Conn: conn, Assets: as, Trades: tr, Cash: cs, Rates: rs, Ratings: rt, Valuation: va,
-		Thesis: th, Research: rn, Alerts: al, Tactical: e.tactical, Tax: tax.NewService(as, tr, clock), Now: clock})
+		Thesis: th, Research: rn, Alerts: al, Tactical: e.tactical, Tax: tax.NewService(as, tr, clock),
+		Dividends: e.dividends, Now: clock})
 	return e
 }
 

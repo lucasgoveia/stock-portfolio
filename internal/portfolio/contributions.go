@@ -67,6 +67,11 @@ func (s *Service) CreateContribution(ctx context.Context, amount decimal.Decimal
 	if err != nil {
 		return Contribution{}, err
 	}
+	if s.d.Dividends != nil && pl.Dividends.IsPositive() {
+		if err := s.d.Dividends.MarkDeployed(ctx, row.ID); err != nil {
+			return Contribution{}, err
+		}
+	}
 	for _, o := range pl.Orders {
 		if err := s.q.CreateContributionOrder(ctx, db.CreateContributionOrderParams{ContributionID: row.ID, Seq: int64(o.Seq)}); err != nil {
 			return Contribution{}, err

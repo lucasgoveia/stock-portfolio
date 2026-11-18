@@ -215,6 +215,10 @@ function Overview({ asset: a, position: p, snapshotError }: { asset: Asset; posi
             <dd className="num text-right">{money(p.avg_cost, a.currency)}</dd>
             <dt className="text-muted-foreground">Value</dt>
             <dd className="num text-right">{money(p.value_brl)}</dd>
+            <dt className="text-muted-foreground">Dividends, 12 months</dt>
+            <dd className="num text-right">
+              {money(p.dividends_ttm)} <span className="text-muted-foreground">({pct(p.yield_on_cost)} on cost)</span>
+            </dd>
             <dt className="text-muted-foreground">Ramp-in stage</dt>
             <dd className="num text-right">{p.ramp_stage} of 3</dd>
             {p.last_sell && (

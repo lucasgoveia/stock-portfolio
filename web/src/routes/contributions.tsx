@@ -103,6 +103,11 @@ function NewPlan({ onCreated }: { onCreated: (c: Contribution) => void }) {
         </Button>
         <FormError error={error} />
       </form>
+      {snap.data && Number(snap.data.undeployed_dividends) > 0 && (
+        <p className="text-muted-foreground mt-2 text-xs">
+          {money(snap.data.undeployed_dividends)} of received dividends will be planned along with this amount.
+        </p>
+      )}
       {snap.data && Number(snap.data.pending_us) > 0 && (
         <p className="text-muted-foreground mt-2 text-xs">
           The pending US bucket ({money(snap.data.pending_us)}) is included when it reaches the remittance minimum.
@@ -208,6 +213,12 @@ function PlanView({ c }: { c: Contribution }) {
         )}
       </div>
       <dl className="text-muted-foreground mb-4 flex flex-wrap gap-x-6 gap-y-1 text-sm">
+        {Number(plan.dividends) > 0 && (
+          <div className="flex gap-1.5">
+            <dt>Includes dividends</dt>
+            <dd className="num text-foreground">{money(plan.dividends)}</dd>
+          </div>
+        )}
         <div className="flex gap-1.5">
           <dt>Placed</dt>
           <dd className="num text-foreground">{money(plan.new_money)}</dd>

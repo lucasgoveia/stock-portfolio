@@ -17,6 +17,7 @@ import (
 	"github.com/lucasgoveia/stock-portfolio/internal/alerts"
 	"github.com/lucasgoveia/stock-portfolio/internal/assets"
 	"github.com/lucasgoveia/stock-portfolio/internal/cash"
+	"github.com/lucasgoveia/stock-portfolio/internal/dividends"
 	"github.com/lucasgoveia/stock-portfolio/internal/engine"
 	"github.com/lucasgoveia/stock-portfolio/internal/ratings"
 	"github.com/lucasgoveia/stock-portfolio/internal/research"
@@ -51,8 +52,9 @@ type Deps struct {
 	Thesis    *thesis.Service
 	Research  *research.Service
 	Alerts    *alerts.Service
-	Tactical  *tactical.Service // optional: tactical setups (spec §10)
-	Tax       *tax.Service      // optional: B3 tax impact of trims (spec §11.2)
+	Tactical  *tactical.Service  // optional: tactical setups (spec §10)
+	Tax       *tax.Service       // optional: B3 tax impact of trims (spec §11.2)
+	Dividends *dividends.Service // optional: undeployed dividends and yield on cost (spec §8.5)
 	Params    engine.Params
 	Now       func() time.Time
 }
@@ -87,13 +89,19 @@ type Position struct {
 	Status    string `json:"status"`
 	Benchmark string `json:"benchmark"`
 
-	Quantity  decimal.Decimal  `json:"quantity"`
-	AvgCost   decimal.Decimal  `json:"avg_cost"`
-	Price     *decimal.Decimal `json:"price"`
-	PriceDate string           `json:"price_date,omitempty"`
-	PriceBRL  decimal.Decimal  `json:"price_brl"`
-	ValueBRL  decimal.Decimal  `json:"value_brl"`
-	Weight    decimal.Decimal  `json:"weight"`
+	Quantity decimal.Decimal `json:"quantity"`
+	AvgCost  decimal.Decimal `json:"avg_cost"`
+	// CostBRL is the BRL cost basis of the shares held.
+	CostBRL decimal.Decimal `json:"cost_brl"`
+	// DividendsTTM is net dividends received in the last 12 months (BRL);
+	// YieldOnCost is DividendsTTM / CostBRL.
+	DividendsTTM decimal.Decimal  `json:"dividends_ttm"`
+	YieldOnCost  decimal.Decimal  `json:"yield_on_cost"`
+	Price        *decimal.Decimal `json:"price"`
+	PriceDate    string           `json:"price_date,omitempty"`
+	PriceBRL     decimal.Decimal  `json:"price_brl"`
+	ValueBRL     decimal.Decimal  `json:"value_brl"`
+	Weight       decimal.Decimal  `json:"weight"`
 
 	Score         *decimal.Decimal `json:"score"`
 	FairValue     *decimal.Decimal `json:"fair_value"`
@@ -143,8 +151,10 @@ type Snapshot struct {
 	TooFew          bool            `json:"too_few"`
 	TooMany         bool            `json:"too_many"`
 	PendingUS       decimal.Decimal `json:"pending_us"`
-	Holdings        []Position      `json:"holdings"`
-	Watchlist       []Position      `json:"watchlist"`
+	// UndeployedDividends is net dividend money not yet put into a plan.
+	UndeployedDividends decimal.Decimal `json:"undeployed_dividends"`
+	Holdings            []Position      `json:"holdings"`
+	Watchlist           []Position      `json:"watchlist"`
 	// Unpriced and Unrated list tickers left out of the rule math.
 	Unpriced []string     `json:"unpriced"`
 	Unrated  []string     `json:"unrated"`
@@ -175,6 +185,13 @@ func (s *Service) Snapshot(ctx context.Context) (Snapshot, error) {
 	snap := Snapshot{AsOf: today, Unpriced: []string{}, Unrated: []string{}, Holdings: []Position{}, Watchlist: []Position{}}
 	snap.PendingUS = s.setting(ctx, SettingPendingUS)
 	snap.TacticalMaxOpen = s.d.Params.TacticalMaxOpen
+	if s.d.Dividends != nil {
+		u, err := s.d.Dividends.Undeployed(ctx)
+		if err != nil {
+			return snap, err
+		}
+		snap.UndeployedDividends = u
+	}
 
 	weights, err := s.d.Ratings.Weights(ctx)
 	if err != nil {
@@ -221,6 +238,12 @@ func (s *Service) Snapshot(ctx context.Context) (Snapshot, error) {
 	for _, n := range opps {
 		catalyst[n.AssetID] = true
 	}
+	ttm := map[int64]decimal.Decimal{}
+	if s.d.Dividends != nil {
+		if ttm, err = s.d.Dividends.TrailingNetBRL(ctx, s.d.Now()); err != nil {
+			return snap, err
+		}
+	}
 	setups := map[int64]tactical.Setup{}
 	if s.d.Tactical != nil {
 		if setups, err = s.d.Tactical.All(ctx); err != nil {
@@ -258,9 +281,11 @@ func (s *Service) Snapshot(ctx context.Context) (Snapshot, error) {
 	for _, a := range list {
 		x := &Position{AssetID: a.ID, Ticker: a.Ticker, Market: a.Market, Kind: a.Kind, Currency: a.Currency, Sleeve: a.Sleeve,
 			Status: a.Status, Benchmark: a.Benchmark, Quantity: decimal.Zero, AvgCost: decimal.Zero,
-			PriceBRL: decimal.Zero, ValueBRL: decimal.Zero, Weight: decimal.Zero, Catalyst: catalyst[a.ID]}
+			PriceBRL: decimal.Zero, ValueBRL: decimal.Zero, Weight: decimal.Zero, Catalyst: catalyst[a.ID],
+			CostBRL: decimal.Zero, DividendsTTM: ttm[a.ID], YieldOnCost: decimal.Zero}
 		if ps, ok := pos[a.ID]; ok {
-			x.Quantity, x.AvgCost = ps.Quantity, ps.AvgCost
+			x.Quantity, x.AvgCost, x.CostBRL = ps.Quantity, ps.AvgCost, ps.TotalCostBRL
+			x.YieldOnCost = engine.YieldOnCost(x.DividendsTTM, x.CostBRL)
 		}
 		if pr, ok := prices[a.ID]; ok {
 			if v, err := decimal.NewFromString(pr.Close); err == nil {

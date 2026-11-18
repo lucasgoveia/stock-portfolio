@@ -125,6 +125,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/assets/{id}/dividends": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Record a received dividend or JCP and credit cash */
+        post: operations["recordDividend"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/assets/{id}/fair-values": {
         parameters: {
             query?: never;
@@ -562,6 +579,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/dividends": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Dividends, newest first */
+        get: operations["listDividends"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/dividends/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete a payment and its cash credit */
+        delete: operations["deleteDividend"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/dividends/{id}/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Confirm a detected payment and credit cash */
+        post: operations["confirmDividend"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/dividends/{id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Dismiss a detected payment */
+        post: operations["rejectDividend"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/fair-values/{id}": {
         parameters: {
             query?: never;
@@ -924,6 +1009,7 @@ export interface components {
         };
         ContributionPlan: {
             amount: string;
+            dividends: string;
             new_money: string;
             orders: components["schemas"]["Order"][] | null;
             pending_us_after: string;
@@ -942,6 +1028,60 @@ export interface components {
         DCFResult: {
             scenarios: components["schemas"]["ScenarioValue"][] | null;
             value_per_share: string;
+        };
+        Dividend: {
+            /** Format: int64 */
+            asset_id: number;
+            /** Format: int64 */
+            contribution_id: number | null;
+            created_at: string;
+            currency: string;
+            fx_rate: string;
+            gross: string;
+            /** Format: int64 */
+            id: number;
+            /** @enum {string} */
+            kind: "dividend" | "jcp";
+            /** Format: int64 */
+            movement_id: number | null;
+            net: string;
+            net_brl: string;
+            pay_date: string | null;
+            per_share: string;
+            quantity: string;
+            record_date: string;
+            source: string;
+            /** @enum {string} */
+            status: "detected" | "confirmed" | "rejected";
+            withholding: string;
+        };
+        DividendConfirm: {
+            fx_rate?: string;
+            /** Format: int64 */
+            instrument_id: number;
+            pay_date?: string;
+            withholding?: string;
+        };
+        DividendCreate: {
+            /** @description BRL per USD on the payment date (USD only) */
+            fx_rate?: string;
+            /**
+             * Format: int64
+             * @description Cash instrument credited with the net amount
+             */
+            instrument_id: number;
+            /** @enum {string} */
+            kind: "dividend" | "jcp";
+            /** @description YYYY-MM-DD */
+            pay_date: string;
+            /** @description Gross per share, asset currency */
+            per_share: string;
+            /** @description Defaults to the shares held on the record date */
+            quantity?: string;
+            /** @description Data-com, YYYY-MM-DD */
+            record_date: string;
+            /** @description Defaults to the rule (JCP 17.5%, dividends over R$50k/month 10%, US 30%) */
+            withholding?: string;
         };
         Error: {
             /** @description Human-readable error message */
@@ -1094,7 +1234,9 @@ export interface components {
             band: components["schemas"]["PositionStatus"];
             benchmark: string;
             catalyst: boolean;
+            cost_brl: string;
             currency: string;
+            dividends_ttm: string;
             fair_value: string | null;
             fair_value_date?: string;
             gate?: components["schemas"]["GateResult"];
@@ -1118,6 +1260,7 @@ export interface components {
             ticker: string;
             value_brl: string;
             weight: string;
+            yield_on_cost: string;
         };
         PositionStatus: {
             above_cap: boolean;
@@ -1251,6 +1394,7 @@ export interface components {
             too_many: boolean;
             total_value: string;
             undeployed: string;
+            undeployed_dividends: string;
             unpriced: string[] | null;
             unrated: string[] | null;
             usdbrl: string;
@@ -1772,6 +1916,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Beta"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    recordDividend: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Resource id */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DividendCreate"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Dividend"];
                 };
             };
             /** @description Error */
@@ -3001,6 +3181,136 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Contribution"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listDividends: {
+        parameters: {
+            query?: {
+                status?: "detected" | "confirmed" | "rejected" | "";
+                asset_id?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Dividend"][] | null;
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteDividend: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Resource id */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    confirmDividend: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Resource id */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DividendConfirm"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Dividend"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    rejectDividend: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Resource id */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Dividend"];
                 };
             };
             /** @description Error */

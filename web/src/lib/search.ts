@@ -7,7 +7,7 @@ export interface TradeSearch {
   price?: string
   /** Prefill the whole position as the sell quantity. */
   full?: boolean
-  tab?: 'trades' | 'cash' | 'positions'
+  tab?: 'trades' | 'cash' | 'positions' | 'dividends'
 }
 
 const decimalString = (v: unknown) =>
@@ -20,7 +20,7 @@ export function parseTradeSearch(s: Record<string, unknown>): TradeSearch {
     quantity: decimalString(s.quantity),
     price: decimalString(s.price),
     full: s.full === true || s.full === 'true' ? true : undefined,
-    tab: s.tab === 'cash' || s.tab === 'positions' || s.tab === 'trades' ? s.tab : undefined,
+    tab: s.tab === 'cash' || s.tab === 'positions' || s.tab === 'trades' || s.tab === 'dividends' ? s.tab : undefined,
   }
 }
 
