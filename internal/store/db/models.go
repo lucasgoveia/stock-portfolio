@@ -78,6 +78,18 @@ type Rating struct {
 	CreatedAt      string
 }
 
+type ResearchNote struct {
+	ID                   int64
+	AssetID              int64
+	Body                 string
+	Sources              string
+	Author               string
+	Opportunity          int64
+	OpportunityExpiresOn sql.NullString
+	CreatedAt            string
+	UpdatedAt            string
+}
+
 type Setting struct {
 	Key   string
 	Value string

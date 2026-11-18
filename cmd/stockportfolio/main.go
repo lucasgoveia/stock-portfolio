@@ -18,6 +18,7 @@ import (
 	"github.com/lucasgoveia/stock-portfolio/internal/cash"
 	"github.com/lucasgoveia/stock-portfolio/internal/config"
 	"github.com/lucasgoveia/stock-portfolio/internal/ratings"
+	"github.com/lucasgoveia/stock-portfolio/internal/research"
 	"github.com/lucasgoveia/stock-portfolio/internal/store"
 	"github.com/lucasgoveia/stock-portfolio/internal/trades"
 	"github.com/lucasgoveia/stock-portfolio/web"
@@ -49,6 +50,7 @@ func run() error {
 		api.WithAssets(assetSvc),
 		api.WithCash(cash.NewService(conn, cash.NewRateStore(conn), nil)),
 		api.WithRatings(ratings.NewService(conn, assetSvc, nil)),
+		api.WithResearch(research.NewService(conn, assetSvc, nil)),
 		api.WithTrades(trades.NewService(conn, assetSvc)),
 		api.WithAlerts(alerts.New(conn, nil)),
 		api.WithUI(web.Dist()),

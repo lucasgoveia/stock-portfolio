@@ -9,6 +9,7 @@ import (
 	"github.com/lucasgoveia/stock-portfolio/internal/assets"
 	"github.com/lucasgoveia/stock-portfolio/internal/cash"
 	"github.com/lucasgoveia/stock-portfolio/internal/ratings"
+	"github.com/lucasgoveia/stock-portfolio/internal/research"
 	"github.com/lucasgoveia/stock-portfolio/internal/trades"
 )
 
@@ -25,11 +26,11 @@ func writeError(w http.ResponseWriter, err error) {
 	case errors.Is(err, assets.ErrValidation),
 		errors.Is(err, alerts.ErrInvalid), errors.Is(err, alerts.ErrInvalidType),
 		errors.Is(err, trades.ErrValidation), errors.Is(err, cash.ErrValidation),
-		errors.Is(err, ratings.ErrValidation):
+		errors.Is(err, ratings.ErrValidation), errors.Is(err, research.ErrValidation):
 		status = http.StatusBadRequest
 	case errors.Is(err, assets.ErrNotFound), errors.Is(err, alerts.ErrNotFound),
 		errors.Is(err, trades.ErrNotFound), errors.Is(err, cash.ErrNotFound),
-		errors.Is(err, ratings.ErrNotFound):
+		errors.Is(err, ratings.ErrNotFound), errors.Is(err, research.ErrNotFound):
 		status = http.StatusNotFound
 	case errors.Is(err, assets.ErrDuplicate), errors.Is(err, assets.ErrInvalidTransition),
 		errors.Is(err, alerts.ErrResolved), errors.Is(err, trades.ErrInsufficientQuantity),
