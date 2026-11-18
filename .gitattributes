@@ -1,0 +1,2 @@
+internal/marketdata/testdata/cotahist/* -text
+internal/marketdata/testdata/index/ibov_2025_b3_matrix.csv -text

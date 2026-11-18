@@ -1,4 +1,4 @@
-# Data sources (spike for issue #8)
+# Data sources (spikes for issues #8 and #37)
 
 Research done on 2026-11-18 with live calls from a residential Brazilian IP (no paid signups, no tokens). Spec reference: `docs/spec.md` §11, §14, §15, §16, §17. Fixtures live in `internal/marketdata/testdata/<source>/`.
 
@@ -159,25 +159,111 @@ Spec impact: §17 and §11 should record JCP at 17.5% and dividend withholding 1
 | Need | Source | Fallback | Cost | Confidence |
 |---|---|---|---|---|
 | B3 quotes | brapi `/api/v2/stocks/quote` (token) | Yahoo `.SA`, manual | Free token OK (15k req/month, 1 asset/req) | High |
-| B3 daily history | brapi `/api/v2/stocks/historical` | Own stored closes; Yahoo `.SA` | Free: 3 months; Startup R$ 119.99/mo: 1 yr; Pro R$ 139.99/mo: 10+ yr | High (prices adjusted, see 1) |
+| B3 daily history (unadjusted) | **B3 COTAHIST** yearly/daily zips (section 11) | brapi (3 months, adjusted) | Free | High (VERIFIED; daily file ~21:00 BRT; one UTF-8 record) |
 | B3 dividends/JCP | brapi `/api/v2/stocks/dividends` | CVM IPE (manual), manual entry | Free "limited" (undefined); Startup 1 yr; Pro 10+ yr | Medium |
 | B3 splits/bonificações | same endpoint (`stockDividends`) | Manual entry via confirmation queue | same | Medium (BONIFICACAO label unverified) |
 | B3 fundamentals | brapi `/api/v2/stocks/*` statements, or CVM ITR/DFP | CVM Dados Abertos | Startup annual; Pro quarterly; CVM free | High for CVM, medium for brapi |
-| US quotes/history/splits/dividends | Yahoo chart API `events=div,splits` | Tiingo or Polygon (free key) | Free | **Low** (blocked here, unofficial) |
+| US prices/splits/dividends | **Tiingo** free key (section 12) | Yahoo chart API, Polygon | Free (50/h, 1000/day, 500 symbols/mo, personal use) | Medium (DOCS only, no key) |
 | USDBRL | BCB Olinda PTAX | SGS series 1 | Free | High |
 | CDI | BCB SGS 12 (daily %, string) | brapi macro (Startup+) | Free | High |
 | Tesouro Selic price | Tesouro Transparente CSV | brapi treasury (Pro), Selic accrual estimate | Free | High (1-day lag) |
-| IBOV | B3 yearly close matrix | brapi `^BVSP` (token), Yahoo `^BVSP` | Free | Medium (undocumented endpoint) |
+| IBOV | B3 yearly close matrix (2024, 2025, 2026 tested; not in COTAHIST) | BOVA11 from COTAHIST, brapi `^BVSP`, Yahoo | Free | Medium (undocumented endpoint) |
 | S&P 500 | FRED SP500 CSV | Yahoo `^GSPC` | Free | Medium (price index, licence note) |
 | BR filings | CVM Dados Abertos (IPE, ITR, DFP) | RAD web UI | Free | High |
 | US filings, XBRL | SEC EDGAR submissions and companyfacts | none needed | Free (descriptive User-Agent) | High |
 | Tax rules | Planalto (Lei 11.033, 14.754, 15.270, 9.249/LC 224) | contador | n/a | High for rates, low for details flagged above |
 
-## 10. Not verified
+## 11. B3 COTAHIST (issue #37)
+
+Official B3 "Séries Históricas" files. Live calls on 2026-11-18 from a Brazilian IP, no auth, no cookies, plain `curl` with a browser User-Agent. Layout doc: https://www.b3.com.br/data/files/33/67/B9/50/D84057102C784E47AC094EA8/SeriesHistoricas_Layout.pdf (rev. 2020, 10 pages; read, **VERIFIED** 200). Fixture: `testdata/cotahist/COTAHIST_sample.TXT` (17 real records plus header and trailer, 4.4 KB; the trailer record count does not match because the file is trimmed).
+
+### Download URLs (all VERIFIED, HTTP 200, `application/x-zip-compressed`)
+Base `https://bvmf.bmfbovespa.com.br/InstDados/SerHist/`
+| Granularity | File | Size observed | Last-Modified observed |
+|---|---|---|---|
+| Year | `COTAHIST_A2026.ZIP` (YYYY) | 95 MB zip, 833 MB txt, 3.5M records | 2026-11-18 00:08 GMT |
+| Year | `COTAHIST_A2025.ZIP` | 89 MB zip, 748 MB txt, 3.17M records | 2025-12-31 |
+| Month | `COTAHIST_M102026.ZIP` (MMYYYY) | 10 MB | 2026-10-30 |
+| Day | `COTAHIST_D17112026.ZIP` (DDMMYYYY) | 606 KB zip, 3.9 MB txt, 16,440 records | 2026-11-18 00:02 GMT |
+- Entry inside the zip is `COTAHIST_<same suffix>.TXT`. Parse the daily file for the incremental job; use yearly files only for backfill (two files for 2 years, ~185 MB download; stream, do not load into memory).
+- Freshness: the file for D is published about **21:00 BRT on D** (Last-Modified 00:02 GMT on D+1). `COTAHIST_D18112026.ZIP` returned 404 at 13:00 BRT the same day. So the 19:00 job (spec §16) may not find today's file: ask for the latest available daily file (try D, then walk back), or schedule the COTAHIST step after 21:30.
+- The yearly file of the current year is regenerated nightly and contains every day to date; the 2025 file ends at 2025-12-30 (last trading day).
+- Terms: B3 publishes the files for free on its site; redistribution terms were not checked (personal use only here). UNVERIFIED.
+
+### Format
+Text, **245 characters per record + CRLF**, fixed width, positions 1-based inclusive (layout PDF, all offsets below checked against real rows).
+- Record `00` header (`COTAHIST.YYYYBOVESPA YYYYMMDD` generation date) and `99` trailer (record count). `01` = one row per security per day. Skip `00`/`99`.
+- Prices are `N(11)V99`: 13 digits, last two are cents (`0000000004398` = 43.98). Volume `N(16)V99`, 18 digits. No decimal separator.
+
+| Field | Pos | Notes (PETR4, 2026-11-17: `020 ... 02PETR4`) |
+|---|---|---|
+| TIPREG | 1-2 | `01` |
+| DATA | 3-10 | `20261117` |
+| CODBDI | 11-12 | `02` |
+| CODNEG | 13-24 | ticker, right-padded: `PETR4`, fractional `PETR4F` |
+| TPMERC | 25-27 | `010` |
+| NOMRES | 28-39 | `PETROBRAS` |
+| ESPECI | 40-49 | `PN      N2` |
+| PREABE / PREMAX / PREMIN / PREMED | 57-69 / 70-82 / 83-95 / 96-108 | 44.30 / 44.75 / 43.90 / 44.27 |
+| PREULT (close) | 109-121 | 43.98 |
+| PREOFC / PREOFV | 122-134 / 135-147 | best bid / ask |
+| TOTNEG | 148-152 | number of trades, 35371 |
+| QUATOT | 153-170 | quantity (shares), integer |
+| VOLTOT | 171-188 | financial volume, `V99` |
+| PREEXE / INDOPC / DATVEN | 189-201 / 202 / 203-210 | options strike, indicator, expiry (`99991231` if none) |
+| FATCOT | 211-217 | quotation factor, `0000001` for every equity/BDR/FII observed |
+| PTOEXE | 218-230 | |
+| CODISI | 231-242 | ISIN `BRPETRACNPR6` |
+| DISMES | 243-245 | distribution number |
+
+### Encoding gotcha (VERIFIED)
+The 2025 file is pure ASCII (all records 245 bytes). The **2026 file contains one record in UTF-8** (`FROTA OCEÂNICA`, 246 bytes, `012026102252FR0T5L`), so byte offsets shift for that line. The layout says nothing about encoding; older years were Latin-1 historically (not checked). Parser rule: decode each line as UTF-8, fall back to Latin-1, then slice by characters (never by bytes). Accents only occur in NOMRES/ESPECI, so a tolerant parser could also ignore bad lines for non-held tickers. Fixture keeps this line.
+
+### Filtering
+Layout tables (PDF): TPMERC `010` vista, `012`/`013` option exercise, `017` leilão, `020` fracionário, `030` termo, `050`/`060` futuro, `070` call, `080` put. CODBDI `02` lote padrão, `96` mercado fracionário, `12` FII, `78`/`82` options, `74`/`75` index options, `38`/`42` option exercise, `62` termo, `10` direitos e recibos, `08` recuperação judicial. **BDR/ETF codes are not in the 2020 layout but observed in 2025-26 data**: BDI `34` (ESPECI `DRN`, e.g. MACY34), `36` (`DRE`), `35` (`DR1`), `14` (`CI`: ETFs such as BOVA11 and some funds), `13` (`CI`, FIDC/FIAGRO-like), `22` (bônus).
+- Lot-market stocks, units and BDRs: `TPMERC = 010` and CODBDI in {`02`, `34`, `35`, `36`, `14` for ETFs, `12` for FIIs}. Simplest robust rule: key on the ticker the user holds (exact `CODNEG` match with `TPMERC=010`), not on BDI whitelists; use BDI only to classify unknown tickers.
+- Fractional: `TPMERC = 020` and `CODBDI = 96`, ticker = lot ticker + `F` (`PETR4F`). Prices differ slightly from the lot ticker and volume is small. For beta/split checks use the lot ticker only.
+- Exclude options (`070`/`080`, BDI `78`/`82`), exercise, termo (`030`), auctions (`017`, BDI `5x`), and stray rows.
+- Same ticker can appear with several `010` rows? Not observed for a given day and BDI; still key by (date, CODNEG, TPMERC=010) and keep the first.
+
+### Unadjusted and split detection (VERIFIED)
+Prices are raw trade prices. Scanning 2025-01 to 2026-11 lot tickers for day-to-day close ratios outside 0.55-1.8 found clear events with `FATCOT` still `0000001`: ENJU3 0.80 to 8.24 on 2026-10-09 (consistent with a 1:10 grupamento), GFSA3 1.24 to 22.48 on 2025-06-16, DIRR3 40.99 to 13.63 on 2025-08-11 (ratio 0.333, consistent with a 3:1 split/bonificação; fixture rows). FATCOT does not carry split information. Noise to filter: penny stocks (PDGR3, IFCM3 at R$0.01-0.05), tickers in recuperação judicial and tick-size jumps; require price above some floor and a matching brapi/CVM event or send to the confirmation queue. Example of an unexplained jump: MGLU3 12.69 to 5.30 on 2026-10-26 (ratio 0.418, not a clean split ratio) while the brapi sandbox dividends endpoint listed no stock event since 2026-09-01 (so either a real price move or a missing/late event; exactly the spec §14 alert case; not investigated further).
+Ticker changes (e.g. `AXIA3`) appear as new `CODNEG` with no link to the old one; use ISIN (`CODISI`) to join history across renames.
+
+### IBOV in COTAHIST
+**No index series.** The file has only securities. Observed IBOV-related rows are the ETF `IBOV11` (BDI `02`, `IBO/`, an index-linked security, not the index) and options on index (BDI `74`/`75`, e.g. `IBOVK187`). Use the B3 index endpoint already found in #8 (section 5): year matrix for `IBOV`, re-tested for `year` 2024 and 2025 (both HTTP 200), so a 2+ year history is a handful of calls. Fixture: `testdata/index/ibov_2025_b3_matrix.csv` (full 2025 matrix, 3.3 KB; Latin-1/ASCII, rows = day, columns = month, `;`, decimal comma, thousands dot). The matrix gives the close only: fine for weekly returns. Undocumented endpoint; keep a manual CSV import as fallback. The ETF BOVA11 (COTAHIST BDI 14) is a usable proxy if the endpoint disappears, with the caveat of ETF dividends (unadjusted close drops on ex-date).
+
+### Use for beta
+Weekly (Friday close, or last trading day of the week) returns of the ticker from COTAHIST raw closes versus IBOV from the matrix. Raw closes must be split-adjusted before returns: apply confirmed events (spec §14) or drop weeks that straddle an unexplained jump. Dividends are not in the file, so raw returns understate total return by the yield (immaterial for beta).
+
+## 12. Tiingo (US EOD, splits, dividends) (issue #37)
+
+**No API key was created**, so nothing below was called with a token. `https://api.tiingo.com/tiingo/daily/aapl/prices` answered HTTP 403 `{"detail":"Please supply a token"}` (VERIFIED, confirms key auth). Everything else is from Tiingo's own pages fetched today (pricing page and https://www.tiingo.com/documentation/end-of-day), marked DOCS. No Tiingo fixture could be saved.
+
+- Free plan "Starter" (individual, $0), DOCS: **50 requests/hour, 1,000 requests/day, 500 unique symbols/month, 1 GB bandwidth/month**; price history listed as 30+ years; license "personal use only, may not display or share data with another organization" (pricing page). Search summaries agree on the limits and note that fundamentals and News are not included. Paid: Power $30/month (UNVERIFIED, search results only).
+- Endpoints (DOCS): `GET https://api.tiingo.com/tiingo/daily/<ticker>/prices` (latest EOD), same with `?startDate=YYYY-M-D&endDate=...&resampleFreq=daily|weekly|monthly&format=json|csv` for history; meta `GET /tiingo/daily/<ticker>` returns `ticker,name,exchangeCode,description,startDate,endDate`.
+- Fields (DOCS): `date, open, high, low, close, volume` (raw), `adjOpen, adjHigh, adjLow, adjClose, adjVolume`, `divCash` (cash dividend on its ex-date), `splitFactor` (1.0 normally; 2.0 for a 2:1 split). Raw vs adjusted are both present, which fits the spec §14 ratio check.
+- Auth (DOCS, UNVERIFIED here): `Authorization: Token <key>` header or `?token=`; the docs page text did not show the header format, it is Tiingo's documented convention.
+- Not verified: timestamps/freshness (EOD usually posted evening US time), the exact ISO format of `date`, whether `^GSPC`-style indices exist (use FRED for S&P, see 5), ToS beyond the personal-use line, and any quota-exceeded response shape (expect 429).
+- Fit: daily job needs 1 request per US ticker per day (batch not needed), well under 50/hour and 1,000/day for a personal portfolio; symbols/month of 500 is no problem. History backfill per ticker is one request. Corporate events come from the same call by asking for a date range and reading `divCash`/`splitFactor` != 0/1.
+- Account needed: free signup by the user. Until then Yahoo (section 2) remains unverified.
+
+## 13. CVM IPE as fallback (issue #37)
+Already described in section 6 (IPE CSV, `Categoria`: Fato Relevante, Comunicado ao Mercado, Aviso aos Acionistas). Not re-tested. It carries announcements as text/links, not structured split ratios or dividend amounts, so it is a manual-queue trigger only.
+
+## 14. Recommendation after #37
+- **B3 prices**: brapi Free for the quote (30 min delayed); **COTAHIST daily file as the official EOD close** (unadjusted, same-day after ~21:00 BRT, D-1 at the 19:00 job) and as the history/backfill source. It removes the need to "store each raw close" from brapi for history and gives raw ratios for split checks from 2 years back on day one.
+- **IBOV**: B3 index year matrix (close only); BOVA11 from COTAHIST as proxy fallback.
+- **B3 dividends/events**: still brapi Free "limited" plus manual queue, CVM IPE as trigger; nothing new found. COTAHIST detects splits (raw jump) but not dividends.
+- **US**: Tiingo free key (50/h, 1000/day, 500 symbols/month, personal use), pending live verification once the user creates a key; Yahoo optional.
+
+## 15. Not verified
 
 - Yahoo Finance live behaviour (429 from this IP); cookie/crumb flow; exact rate limits.
 - brapi plan gating on a real token (sandbox ignores it); what Free "Limited" dividends means; whether `^BVSP` works on Free; which three Tesouro bonds are open without token.
 - brapi BONIFICACAO label and shape; `exDate` for stock events (null for all observed).
 - CDI availability on the same day by 19:00 BRT; PTAX timing relative to the job (should be fine).
-- Tiingo and Polygon free-tier limits.
+- Polygon free-tier limits. Tiingo: all of section 12 is DOCS only (no key created, no JSON captured, no fixture); `Authorization: Token` header format, date format, ToS beyond personal use.
+- COTAHIST: redistribution terms; Latin-1 encoding of older years; behaviour on holidays/half days; whether the UTF-8 record is a one-off; BDI list for BDRs/ETFs beyond observed codes (layout PDF dates from 2020); how the 2025 yearly file looks after the final trading day.
+- DIRR3/GFSA3/ENJU3/MGLU3 jumps were not matched to official corporate-action notices.
 - DARF 6047 vs 6015 for day trade; Cosit SC 130/2026 text; JCP 20% from 2028; FX convention for foreign cost basis; US withholding creditability; whether Receita's own pages (gov.br) state the R$ 20k rule (URL returned 404 when fetched).
