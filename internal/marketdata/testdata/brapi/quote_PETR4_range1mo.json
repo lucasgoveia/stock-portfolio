@@ -1,0 +1,108 @@
+{
+ "results": [
+  {
+   "symbol": "PETR4",
+   "shortName": "PETR4",
+   "longName": "Petroleo Brasileiro SA Pfd",
+   "currency": "BRL",
+   "regularMarketPrice": 43.53,
+   "regularMarketDayHigh": 44.1,
+   "regularMarketDayLow": 43.22,
+   "regularMarketDayRange": "43.22 - 44.1",
+   "regularMarketChange": -0.45,
+   "regularMarketChangePercent": -1.02,
+   "regularMarketTime": "2026-11-18T15:11:30.000Z",
+   "marketCap": 607412506823,
+   "regularMarketVolume": 6747500,
+   "regularMarketPreviousClose": 43.98,
+   "regularMarketOpen": 43.7,
+   "fiftyTwoWeekRange": "29.53 - 59.79",
+   "fiftyTwoWeekLow": 29.53,
+   "fiftyTwoWeekHigh": 59.79,
+   "priceEarnings": 3.9954474111740357,
+   "earningsPerShare": 10.8948647,
+   "logourl": "https://icons.brapi.dev/icons/PETR4.svg",
+   "usedInterval": "1d",
+   "usedRange": "1mo",
+   "historicalDataPrice": [
+    {
+     "date": 1792378800,
+     "open": 59.3,
+     "high": 59.3,
+     "low": 57.95,
+     "close": 58,
+     "volume": 35174800,
+     "adjustedClose": 58
+    },
+    {
+     "date": 1792465200,
+     "open": 58.82,
+     "high": 59.1,
+     "low": 56.91,
+     "close": 58.21,
+     "volume": 42491900,
+     "adjustedClose": 58.21
+    },
+    {
+     "date": 1792551600,
+     "open": 58.21,
+     "high": 58.68,
+     "low": 57.75,
+     "close": 57.75,
+     "volume": 37151500,
+     "adjustedClose": 57.75
+    },
+    {
+     "date": 1792638000,
+     "open": 58.39,
+     "high": 58.6,
+     "low": 57.01,
+     "close": 57.83,
+     "volume": 39860200,
+     "adjustedClose": 57.83
+    },
+    {
+     "date": 1792724400,
+     "open": 58.1,
+     "high": 59.79,
+     "low": 58.01,
+     "close": 58.68,
+     "volume": 58347500,
+     "adjustedClose": 58.68
+    }
+   ],
+   "validRanges": [
+    "1d",
+    "2d",
+    "5d",
+    "7d",
+    "1mo",
+    "3mo",
+    "6mo",
+    "1y",
+    "2y",
+    "5y",
+    "10y",
+    "ytd",
+    "max"
+   ],
+   "validIntervals": [
+    "1m",
+    "2m",
+    "5m",
+    "15m",
+    "30m",
+    "60m",
+    "90m",
+    "1h",
+    "1d",
+    "5d",
+    "1wk",
+    "1mo",
+    "3mo"
+   ]
+  }
+ ],
+ "requestedAt": "2026-11-18T15:12:56.550Z",
+ "took": 2
+}
