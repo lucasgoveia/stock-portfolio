@@ -305,7 +305,7 @@ After each earnings release, compare reported revenue and EPS against the base s
 
 ## 14. Corporate actions
 
-- Daily job pulls events (the `stockDividends` field of brapi's dividends endpoint; US splits from the US price source) and cross-checks each against the ratio of **raw** closes around the event date. brapi prices are retroactively adjusted, so the system stores each day's raw close at fetch time and uses B3 COTAHIST (unadjusted) for history. brapi `exDate` is null for stock events; use the approval/last-date-with fields.
+- Daily job pulls events (the `stockDividends` field of brapi's dividends endpoint; US splits from the US price source) and cross-checks each against the ratio of **raw** closes around the event date. brapi prices are retroactively adjusted, so raw closes come from B3 COTAHIST (FATCOT is always 1, so splits appear only as raw close jumps). brapi `exDate` is null for stock events; use the approval/last-date-with fields.
 - Detected events wait in a confirmation queue; the user confirms or rejects. Confirmed events adjust quantity and average cost (§11.1).
 - A suspicious price jump with no detected event raises an alert to enter the event manually.
 
@@ -341,13 +341,13 @@ Details, endpoints and fixtures: `docs/data-sources.md`.
 | Need | Source | Notes |
 |---|---|---|
 | B3 daily quotes | brapi.dev free plan (token) | 1 asset per request, 15k req/month, 30 min freshness. Store raw close daily. |
-| B3 history (beta, backfill, corp-action check) | B3 COTAHIST yearly/daily files | Official, unadjusted. To verify (#37). |
+| B3 history (beta, backfill, corp-action check) | B3 COTAHIST yearly/monthly/daily files | Verified (#37). Official, unadjusted, fixed-width 245 chars. Daily file for D lands ~21:00 BRT (run COTAHIST step at 21:30 or take D-1). Decode UTF-8 with Latin-1 fallback, slice by characters. Lot market = TPMERC 010; join renamed tickers by ISIN. |
 | B3 dividends, stock events | brapi dividends endpoint | Free plan "limited"; fallback CVM IPE (avisos aos acionistas). |
-| US prices, splits, dividends | Tiingo free tier | To verify (#37). Yahoo returned 429; optional fallback only. |
+| US prices, splits, dividends | Tiingo free tier | 50 req/h, 1,000/day, 500 symbols/month, personal use; raw + adjusted OHLC, `divCash`, `splitFactor`. Docs only until a key exists. Yahoo returned 429; optional fallback. |
 | USDBRL | BCB PTAX (Olinda API) | Verified. |
 | CDI | BCB SGS series 12 | Verified; D-1; requires `dataInicial`, max 10-year window. |
 | Tesouro Selic price | Tesouro Transparente CSV | Verified; D-1; 14MB file, refreshed ~07:23 BRT. |
-| IBOV history | B3 index endpoint (undocumented) | Fragile; COTAHIST fallback to verify. |
+| IBOV history | B3 index matrix endpoint (undocumented) | Tested 2024–2026, close only. COTAHIST has no indices; fallback BOVA11 proxy or manual CSV. |
 | S&P 500 history | FRED CSV (SP500) | No key; price index only. |
 | BR filings | CVM Dados Abertos (DFP, ITR, IPE) | Latin-1, `VERSAO` for restatements. RAD is UI only. |
 | US filings, fundamentals | SEC EDGAR submissions, companyfacts | Needs descriptive User-Agent; check content type (HTML on block). |
