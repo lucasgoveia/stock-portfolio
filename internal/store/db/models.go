@@ -65,6 +65,19 @@ type FxRate struct {
 	Rate    string
 }
 
+type Rating struct {
+	ID             int64
+	AssetID        int64
+	RatedOn        string
+	Volatility     int64
+	Understanding  int64
+	Moat           int64
+	Predictability int64
+	Horizon        int64
+	Reason         string
+	CreatedAt      string
+}
+
 type Setting struct {
 	Key   string
 	Value string
