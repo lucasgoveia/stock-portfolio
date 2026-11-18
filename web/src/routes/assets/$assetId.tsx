@@ -6,6 +6,7 @@ import { GateChecklist } from '@/components/asset/gate-checklist'
 import { NotesTab } from '@/components/asset/notes-tab'
 import { Panel } from '@/components/asset/panel'
 import { RatingsTab } from '@/components/asset/ratings-tab'
+import { TacticalPanel } from '@/components/asset/tactical-panel'
 import { ThesisTab } from '@/components/asset/thesis-tab'
 import { ValuationTab } from '@/components/asset/valuation-tab'
 import { NativeSelect } from '@/components/form'
@@ -141,7 +142,16 @@ function AssetControls({ asset: a }: { asset: Asset }) {
         className="w-auto"
         value={a.sleeve}
         disabled={sleeve.isPending}
-        onChange={(e) => sleeve.mutate(e.target.value)}
+        onChange={(e) => {
+          const next = e.target.value
+          const snap = qc.getQueryData<Schemas['Snapshot']>(qk.portfolio)
+          if (next === 'tactical' && a.status === 'holding' && snap && snap.tactical_open >= snap.tactical_max_open) {
+            toast.warning(
+              `This makes ${snap.tactical_open + 1} open tactical positions; the rules allow ${snap.tactical_max_open}.`,
+            )
+          }
+          sleeve.mutate(next)
+        }}
       >
         <option value="core">Core</option>
         <option value="tactical">Tactical</option>
@@ -158,7 +168,9 @@ function AssetControls({ asset: a }: { asset: Asset }) {
 function KeyFigures({ asset: a, position: p }: { asset: Asset; position?: Position }) {
   const items: [string, string][] = [
     ['Price', p?.price ? money(p.price, a.currency) : '—'],
-    ['Fair value', p?.fair_value ? money(p.fair_value, a.currency) : '—'],
+    p?.tactical
+      ? ['Exit target', money(p.tactical.setup.target_price, a.currency)]
+      : ['Fair value', p?.fair_value ? money(p.fair_value, a.currency) : '—'],
     ['Score', p?.score ? Number(p.score).toFixed(2) : '—'],
   ]
   if (a.status === 'holding' && p) {
@@ -191,6 +203,7 @@ function Overview({ asset: a, position: p, snapshotError }: { asset: Asset; posi
           <Link to="." search={{ tab: 'valuation' }} className="underline">fair value</Link>.
         </p>
       </Panel>
+      {a.sleeve === 'tactical' && <TacticalPanel asset={a} view={p?.tactical} />}
       <Panel title="Position">
         {!p || Number(p.quantity) === 0 ? (
           <p className="text-muted-foreground text-sm">Not held. Buys come from the contribution planner.</p>

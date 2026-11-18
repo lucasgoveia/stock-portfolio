@@ -153,6 +153,7 @@ func (s *Service) SetPendingUS(ctx context.Context, v decimal.Decimal) error {
 var evaluatedTypes = []string{
 	"overweight", "overvalued", "raise_cash", "deploy_cash", "better_opportunity",
 	"below_floor", "undeployed_budget", "too_many_positions", "opportunity",
+	string(engine.TacticalTargetHit), string(engine.TacticalStopHit), string(engine.TacticalExpired), "tactical_count",
 }
 
 // Evaluate raises the portfolio alerts and resolves cleared ones. Run it from
@@ -232,6 +233,24 @@ func (s *Service) Evaluate(ctx context.Context) error {
 				"catalyst_only": x.Gate.CatalystOnly}); err != nil {
 				return err
 			}
+		}
+	}
+	for _, x := range snap.Holdings {
+		if x.Tactical == nil {
+			continue
+		}
+		id := x.AssetID
+		st := x.Tactical.Setup
+		for _, sig := range x.Tactical.Signals {
+			if err := up(string(sig), &id, map[string]any{"ticker": x.Ticker, "price": x.Price,
+				"target_price": st.TargetPrice, "stop_price": st.StopPrice, "expires_on": st.ExpiresOn}); err != nil {
+				return err
+			}
+		}
+	}
+	if snap.TacticalOpen > snap.TacticalMaxOpen {
+		if err := up("tactical_count", nil, map[string]any{"open": snap.TacticalOpen, "max": snap.TacticalMaxOpen}); err != nil {
+			return err
 		}
 	}
 	if snap.TooFew && !snap.Bootstrap {

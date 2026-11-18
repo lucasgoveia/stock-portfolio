@@ -195,6 +195,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/assets/{id}/promote": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Promote a tactical asset to core (must pass the core buy gate) */
+        post: operations["promoteToCore"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/assets/{id}/rating": {
         parameters: {
             query?: never;
@@ -242,6 +259,25 @@ export interface paths {
         /** Move an asset through its lifecycle */
         post: operations["transitionAsset"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/assets/{id}/tactical": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The asset's tactical setup */
+        get: operations["getTacticalSetup"];
+        /** Create or replace a tactical setup */
+        put: operations["putTacticalSetup"];
+        post?: never;
+        /** Remove a tactical setup */
+        delete: operations["deleteTacticalSetup"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1054,6 +1090,7 @@ export interface components {
             score: string | null;
             sleeve: string;
             status: string;
+            tactical?: components["schemas"]["TacticalView"];
             target?: components["schemas"]["Target"];
             thesis_status?: string;
             ticker: string;
@@ -1153,6 +1190,19 @@ export interface components {
             terminal_value: string;
             value_per_share: string;
         };
+        Setup: {
+            /** Format: int64 */
+            asset_id: number;
+            created_at: string;
+            entry_price: string;
+            expires_on: string;
+            /** Format: int64 */
+            note_id: number;
+            sizing: components["schemas"]["TacticalSizing"];
+            stop_price: string;
+            target_price: string;
+            updated_at: string;
+        };
         Skip: {
             asset_id: string;
             reason: string;
@@ -1170,6 +1220,10 @@ export interface components {
             holdings: components["schemas"]["PortfolioPosition"][] | null;
             overvalued_share: string;
             pending_us: string;
+            /** Format: int64 */
+            tactical_max_open: number;
+            /** Format: int64 */
+            tactical_open: number;
             tactical_weight: string;
             too_few: boolean;
             too_many: boolean;
@@ -1207,6 +1261,29 @@ export interface components {
             usd_balance: string;
             usd_in_brl: string;
             usd_share: string;
+        };
+        TacticalPut: {
+            entry_price: string;
+            /** @description YYYY-MM-DD; an alert fires the day after */
+            expires_on: string;
+            /**
+             * Format: int64
+             * @description Research note describing the catalyst
+             */
+            note_id: number;
+            stop_price: string;
+            /** @description Used as the fair value for the tactical buy gate */
+            target_price: string;
+        };
+        TacticalSizing: {
+            loss_at_stop: string;
+            size: string;
+            stop_distance: string;
+        };
+        TacticalView: {
+            setup: components["schemas"]["Setup"];
+            signals: string[] | null;
+            suggested_value_brl: string;
         };
         Target: {
             clamped: boolean;
@@ -1840,6 +1917,38 @@ export interface operations {
             };
         };
     };
+    promoteToCore: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Resource id */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Asset"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     latestRating: {
         parameters: {
             query?: never;
@@ -1964,6 +2073,104 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["Asset"];
                 };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getTacticalSetup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Resource id */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Setup"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    putTacticalSetup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Resource id */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TacticalPut"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Setup"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteTacticalSetup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Resource id */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Error */
             default: {

@@ -1021,6 +1021,9 @@
           "status": {
             "type": "string"
           },
+          "tactical": {
+            "$ref": "#/components/schemas/TacticalView"
+          },
           "target": {
             "$ref": "#/components/schemas/Target"
           },
@@ -1381,6 +1384,52 @@
         ],
         "type": "object"
       },
+      "Setup": {
+        "additionalProperties": false,
+        "properties": {
+          "asset_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "entry_price": {
+            "type": "string"
+          },
+          "expires_on": {
+            "type": "string"
+          },
+          "note_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "sizing": {
+            "$ref": "#/components/schemas/TacticalSizing"
+          },
+          "stop_price": {
+            "type": "string"
+          },
+          "target_price": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "asset_id",
+          "note_id",
+          "entry_price",
+          "target_price",
+          "stop_price",
+          "expires_on",
+          "created_at",
+          "updated_at",
+          "sizing"
+        ],
+        "type": "object"
+      },
       "Skip": {
         "additionalProperties": false,
         "properties": {
@@ -1442,6 +1491,14 @@
           "pending_us": {
             "type": "string"
           },
+          "tactical_max_open": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "tactical_open": {
+            "format": "int64",
+            "type": "integer"
+          },
           "tactical_weight": {
             "type": "string"
           },
@@ -1502,6 +1559,8 @@
           "cash_signal",
           "overvalued_share",
           "tactical_weight",
+          "tactical_open",
+          "tactical_max_open",
           "bootstrap",
           "core_budget",
           "undeployed",
@@ -1608,6 +1667,84 @@
           "usd_balance",
           "usd_share",
           "instruments"
+        ],
+        "type": "object"
+      },
+      "TacticalPut": {
+        "additionalProperties": false,
+        "properties": {
+          "entry_price": {
+            "type": "string"
+          },
+          "expires_on": {
+            "description": "YYYY-MM-DD; an alert fires the day after",
+            "type": "string"
+          },
+          "note_id": {
+            "description": "Research note describing the catalyst",
+            "format": "int64",
+            "type": "integer"
+          },
+          "stop_price": {
+            "type": "string"
+          },
+          "target_price": {
+            "description": "Used as the fair value for the tactical buy gate",
+            "type": "string"
+          }
+        },
+        "required": [
+          "note_id",
+          "entry_price",
+          "target_price",
+          "stop_price",
+          "expires_on"
+        ],
+        "type": "object"
+      },
+      "TacticalSizing": {
+        "additionalProperties": false,
+        "properties": {
+          "loss_at_stop": {
+            "type": "string"
+          },
+          "size": {
+            "type": "string"
+          },
+          "stop_distance": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "stop_distance",
+          "size",
+          "loss_at_stop"
+        ],
+        "type": "object"
+      },
+      "TacticalView": {
+        "additionalProperties": false,
+        "properties": {
+          "setup": {
+            "$ref": "#/components/schemas/Setup"
+          },
+          "signals": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "suggested_value_brl": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "setup",
+          "suggested_value_brl",
+          "signals"
         ],
         "type": "object"
       },
@@ -2838,6 +2975,51 @@
         ]
       }
     },
+    "/api/assets/{id}/promote": {
+      "post": {
+        "operationId": "promoteToCore",
+        "parameters": [
+          {
+            "description": "Resource id",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Resource id",
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Asset"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Promote a tactical asset to core (must pass the core buy gate)",
+        "tags": [
+          "tactical"
+        ]
+      }
+    },
     "/api/assets/{id}/rating": {
       "get": {
         "operationId": "latestRating",
@@ -3039,6 +3221,140 @@
         "summary": "Move an asset through its lifecycle",
         "tags": [
           "assets"
+        ]
+      }
+    },
+    "/api/assets/{id}/tactical": {
+      "delete": {
+        "operationId": "deleteTacticalSetup",
+        "parameters": [
+          {
+            "description": "Resource id",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Resource id",
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Remove a tactical setup",
+        "tags": [
+          "tactical"
+        ]
+      },
+      "get": {
+        "operationId": "getTacticalSetup",
+        "parameters": [
+          {
+            "description": "Resource id",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Resource id",
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Setup"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "The asset's tactical setup",
+        "tags": [
+          "tactical"
+        ]
+      },
+      "put": {
+        "operationId": "putTacticalSetup",
+        "parameters": [
+          {
+            "description": "Resource id",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Resource id",
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TacticalPut"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Setup"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Create or replace a tactical setup",
+        "tags": [
+          "tactical"
         ]
       }
     },

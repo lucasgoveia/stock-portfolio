@@ -21,6 +21,7 @@ import (
 	"github.com/lucasgoveia/stock-portfolio/internal/ratings"
 	"github.com/lucasgoveia/stock-portfolio/internal/research"
 	"github.com/lucasgoveia/stock-portfolio/internal/store/db"
+	"github.com/lucasgoveia/stock-portfolio/internal/tactical"
 	"github.com/lucasgoveia/stock-portfolio/internal/thesis"
 	"github.com/lucasgoveia/stock-portfolio/internal/trades"
 	"github.com/lucasgoveia/stock-portfolio/internal/valuation"
@@ -49,6 +50,7 @@ type Deps struct {
 	Thesis    *thesis.Service
 	Research  *research.Service
 	Alerts    *alerts.Service
+	Tactical  *tactical.Service // optional: tactical setups (spec §10)
 	Params    engine.Params
 	Now       func() time.Time
 }
@@ -103,9 +105,18 @@ type Position struct {
 	GateError string                `json:"gate_error,omitempty"`
 	RampStage int                   `json:"ramp_stage"`
 	LastSell  *string               `json:"last_sell,omitempty"`
+	Tactical  *TacticalView         `json:"tactical,omitempty"`
 	factors   *engine.Factors       // latest rating
 	breaks    int                   // break conditions
 	fvDate    time.Time             // fair value date
+}
+
+// TacticalView is a tactical position's setup with what it implies today.
+type TacticalView struct {
+	Setup tactical.Setup `json:"setup"`
+	// SuggestedValueBRL is the entry size applied to the current portfolio value.
+	SuggestedValueBRL decimal.Decimal         `json:"suggested_value_brl"`
+	Signals           []engine.TacticalSignal `json:"signals"`
 }
 
 // Snapshot is the portfolio at a moment.
@@ -121,6 +132,8 @@ type Snapshot struct {
 	CashSignal      string          `json:"cash_signal"`
 	OvervaluedShare decimal.Decimal `json:"overvalued_share"`
 	TacticalWeight  decimal.Decimal `json:"tactical_weight"`
+	TacticalOpen    int             `json:"tactical_open"`
+	TacticalMaxOpen int             `json:"tactical_max_open"`
 	Bootstrap       bool            `json:"bootstrap"`
 	CoreBudget      decimal.Decimal `json:"core_budget"`
 	Undeployed      decimal.Decimal `json:"undeployed"`
@@ -158,6 +171,7 @@ func (s *Service) Snapshot(ctx context.Context) (Snapshot, error) {
 	today := s.d.Now().Format(dateLayout)
 	snap := Snapshot{AsOf: today, Unpriced: []string{}, Unrated: []string{}, Holdings: []Position{}, Watchlist: []Position{}}
 	snap.PendingUS = s.setting(ctx, SettingPendingUS)
+	snap.TacticalMaxOpen = s.d.Params.TacticalMaxOpen
 
 	weights, err := s.d.Ratings.Weights(ctx)
 	if err != nil {
@@ -203,6 +217,12 @@ func (s *Service) Snapshot(ctx context.Context) (Snapshot, error) {
 	catalyst := map[int64]bool{}
 	for _, n := range opps {
 		catalyst[n.AssetID] = true
+	}
+	setups := map[int64]tactical.Setup{}
+	if s.d.Tactical != nil {
+		if setups, err = s.d.Tactical.All(ctx); err != nil {
+			return snap, err
+		}
 	}
 	cs, err := s.d.Cash.Summary(ctx, today)
 	if err != nil {
@@ -304,10 +324,20 @@ func (s *Service) Snapshot(ctx context.Context) (Snapshot, error) {
 		if x.factors == nil || x.Price == nil {
 			continue
 		}
-		g, err := p.EvaluateGate(engine.GateInput{
+		in := engine.GateInput{
 			Ratings: *x.factors, Tactical: x.Sleeve == assets.SleeveTactical, BreakConditions: x.breaks,
 			FairValue: x.FairValue, FairValueDate: x.fvDate, Price: *x.Price, ActiveCatalyst: x.Catalyst, Now: now,
-		})
+		}
+		if in.Tactical {
+			// Tactical entries are judged against the setup's target price (spec §10.1).
+			in.FairValue, in.FairValueDate = nil, time.Time{}
+			if st, ok := setups[x.AssetID]; ok {
+				tp := st.TargetPrice.Decimal
+				in.FairValue = &tp
+				in.FairValueDate, _ = time.Parse(time.RFC3339, st.UpdatedAt)
+			}
+		}
+		g, err := p.EvaluateGate(in)
 		if err != nil {
 			x.GateError = err.Error()
 			continue
@@ -323,6 +353,14 @@ func (s *Service) Snapshot(ctx context.Context) (Snapshot, error) {
 		}
 		if x.Status == assets.StatusHolding && x.Sleeve == assets.SleeveTactical {
 			snap.TacticalWeight = snap.TacticalWeight.Add(x.Weight)
+			snap.TacticalOpen++
+		}
+		if st, ok := setups[x.AssetID]; ok && x.Sleeve == assets.SleeveTactical {
+			v := &TacticalView{Setup: st, SuggestedValueBRL: st.Sizing.Size.Mul(snap.TotalValue), Signals: []engine.TacticalSignal{}}
+			if x.Price != nil && x.Status == assets.StatusHolding {
+				v.Signals = engine.TacticalSignals(*x.Price, st.TargetPrice.Decimal, st.StopPrice.Decimal, st.ExpiresOn, today)
+			}
+			x.Tactical = v
 		}
 	}
 	cr := p.CashTarget(core)

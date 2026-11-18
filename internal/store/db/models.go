@@ -158,6 +158,17 @@ type Setting struct {
 	Value string
 }
 
+type TacticalSetup struct {
+	AssetID     int64
+	NoteID      int64
+	EntryPrice  string
+	TargetPrice string
+	StopPrice   string
+	ExpiresOn   string
+	CreatedAt   string
+	UpdatedAt   string
+}
+
 type TesouroSelicPrice struct {
 	RefDate string
 	Price   string

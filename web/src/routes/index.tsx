@@ -220,7 +220,8 @@ function RunJobButton() {
 }
 
 function positionState(p: Position, bootstrap: boolean): GaugeState {
-  if (p.thesis_status === 'broken') return 'breach'
+  if (p.thesis_status === 'broken' || p.tactical?.signals?.includes('tactical_stop_hit')) return 'breach'
+  if (p.tactical?.signals?.length) return 'watch'
   if (bootstrap) return 'neutral'
   if (p.band.above_cap || p.band.above_upper || p.band.below_floor) return 'breach'
   if (p.band.below_lower || p.overvalued) return 'watch'
@@ -237,6 +238,7 @@ function positionNote(p: Position, bootstrap: boolean): string | null {
     else if (p.band.below_lower) notes.push('below band')
   }
   if (p.overvalued) notes.push('overvalued')
+  for (const sig of p.tactical?.signals ?? []) notes.push(sig.replace('tactical_', '').replace('_', ' '))
   if (p.price == null) notes.push('no price')
   if (p.score == null) notes.push('not rated')
   return notes.length ? notes.join(' · ') : null

@@ -249,6 +249,9 @@ func (s *Service) Update(ctx context.Context, id int64, in UpdateInput) (Note, e
 // Delete removes a note.
 func (s *Service) Delete(ctx context.Context, id int64) error {
 	n, err := s.q.DeleteResearchNote(ctx, id)
+	if err != nil && strings.Contains(err.Error(), "FOREIGN KEY") {
+		return validationf("note is the catalyst of a tactical setup; change the setup first")
+	}
 	if err != nil {
 		return fmt.Errorf("delete note: %w", err)
 	}

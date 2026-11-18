@@ -14,6 +14,7 @@ import (
 	"github.com/lucasgoveia/stock-portfolio/internal/portfolio"
 	"github.com/lucasgoveia/stock-portfolio/internal/ratings"
 	"github.com/lucasgoveia/stock-portfolio/internal/research"
+	"github.com/lucasgoveia/stock-portfolio/internal/tactical"
 	"github.com/lucasgoveia/stock-portfolio/internal/thesis"
 	"github.com/lucasgoveia/stock-portfolio/internal/trades"
 	"github.com/lucasgoveia/stock-portfolio/internal/valuation"
@@ -57,13 +58,14 @@ func apiError(err error) error {
 		errors.Is(err, trades.ErrValidation), errors.Is(err, cash.ErrValidation),
 		errors.Is(err, ratings.ErrValidation), errors.Is(err, research.ErrValidation),
 		errors.Is(err, thesis.ErrValidation), errors.Is(err, valuation.ErrValidation),
-		errors.Is(err, portfolio.ErrValidation):
+		errors.Is(err, portfolio.ErrValidation), errors.Is(err, tactical.ErrValidation):
 		status = http.StatusBadRequest
 	case errors.Is(err, assets.ErrNotFound), errors.Is(err, alerts.ErrNotFound),
 		errors.Is(err, trades.ErrNotFound), errors.Is(err, cash.ErrNotFound),
 		errors.Is(err, ratings.ErrNotFound), errors.Is(err, research.ErrNotFound),
 		errors.Is(err, thesis.ErrNotFound), errors.Is(err, valuation.ErrNotFound),
-		errors.Is(err, jobs.ErrNoRuns), errors.Is(err, portfolio.ErrNotFound):
+		errors.Is(err, jobs.ErrNoRuns), errors.Is(err, portfolio.ErrNotFound),
+		errors.Is(err, tactical.ErrNotFound):
 		status = http.StatusNotFound
 	case errors.Is(err, assets.ErrDuplicate), errors.Is(err, assets.ErrInvalidTransition),
 		errors.Is(err, alerts.ErrResolved), errors.Is(err, trades.ErrInsufficientQuantity),

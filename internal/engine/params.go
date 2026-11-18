@@ -42,6 +42,12 @@ type Params struct {
 	CooldownDays      int             // 30
 	BetterScoreDelta  decimal.Decimal // 0.5
 	BetterUpsideDelta decimal.Decimal // 0.20 (20 percentage points)
+
+	// Tactical (§10).
+	TacticalMaxLoss decimal.Decimal // 1% of the portfolio lost at the stop
+	TacticalMinSize decimal.Decimal // 1%
+	TacticalMaxSize decimal.Decimal // 2%
+	TacticalMaxOpen int             // 3; a 4th open tactical position warns
 }
 
 // DefaultParams returns the spec defaults.
@@ -77,5 +83,10 @@ func DefaultParams() Params {
 		CooldownDays:      30,
 		BetterScoreDelta:  mustDec("0.5"),
 		BetterUpsideDelta: mustDec("0.20"),
+
+		TacticalMaxLoss: mustDec("0.01"),
+		TacticalMinSize: mustDec("0.01"),
+		TacticalMaxSize: mustDec("0.02"),
+		TacticalMaxOpen: 3,
 	}
 }

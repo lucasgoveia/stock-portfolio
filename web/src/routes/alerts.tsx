@@ -40,6 +40,9 @@ export const Route = createFileRoute('/alerts')({
 // Severity decides group order: things that need a sell or a fix come first.
 const SEVERITY: Record<string, number> = {
   thesis_broken: 0,
+  tactical_stop_hit: 0.5,
+  tactical_target_hit: 0.6,
+  tactical_expired: 0.7,
   raise_cash: 1,
   overweight: 2,
   overvalued: 3,
@@ -51,9 +54,10 @@ const SEVERITY: Record<string, number> = {
   thesis_review_due: 9,
   opportunity: 10,
   deploy_cash: 11,
+  tactical_count: 12,
 }
 
-const SEVERE = new Set(['thesis_broken', 'raise_cash', 'overweight', 'below_floor', 'data_fetch_failed'])
+const SEVERE = new Set(['tactical_stop_hit', 'thesis_broken', 'raise_cash', 'overweight', 'below_floor', 'data_fetch_failed'])
 
 function AlertsPage() {
   const search = Route.useSearch()
@@ -216,6 +220,14 @@ function describe(a: Alert): string {
       return `${str(p.holdings)} holdings: every core target sits at the 2% minimum.`
     case 'bootstrap_exit':
       return `Portfolio passed ${money(str(p.threshold))}. Bands, floors and caps now apply.`
+    case 'tactical_target_hit':
+      return `Price ${money(str(p.price))} reached the target ${money(str(p.target_price))}. Decide the exit.`
+    case 'tactical_stop_hit':
+      return `Price ${money(str(p.price))} reached the stop ${money(str(p.stop_price))}. Decide the exit.`
+    case 'tactical_expired':
+      return `The setup expired on ${str(p.expires_on)} without the catalyst. Exit, or extend the setup.`
+    case 'tactical_count':
+      return `${str(p.open)} open tactical positions; the rules allow ${str(p.max)}.`
     case 'data_fetch_failed':
       return `Step "${str(p.step)}" failed: ${str(p.error)}`
     default:
@@ -340,6 +352,9 @@ function AlertAction({ alert: a }: { alert: Alert }) {
         </Link>
       )
     case 'thesis_broken':
+    case 'tactical_target_hit':
+    case 'tactical_stop_hit':
+    case 'tactical_expired':
       if (id == null) return null
       return (
         <Link to="/trades" search={{ asset: id, side: 'sell', full: true }} className={actionClass}>
