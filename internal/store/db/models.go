@@ -39,3 +39,16 @@ type Setting struct {
 	Key   string
 	Value string
 }
+
+type Trade struct {
+	ID        int64
+	AssetID   int64
+	TradeDate string
+	Side      string
+	Quantity  string
+	Price     string
+	Fees      string
+	Currency  string
+	FxRate    string
+	CreatedAt string
+}

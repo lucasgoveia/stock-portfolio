@@ -7,6 +7,7 @@ import (
 
 	"github.com/lucasgoveia/stock-portfolio/internal/alerts"
 	"github.com/lucasgoveia/stock-portfolio/internal/assets"
+	"github.com/lucasgoveia/stock-portfolio/internal/trades"
 )
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
@@ -20,12 +21,14 @@ func writeError(w http.ResponseWriter, err error) {
 	status := http.StatusInternalServerError
 	switch {
 	case errors.Is(err, assets.ErrValidation),
-		errors.Is(err, alerts.ErrInvalid), errors.Is(err, alerts.ErrInvalidType):
+		errors.Is(err, alerts.ErrInvalid), errors.Is(err, alerts.ErrInvalidType),
+		errors.Is(err, trades.ErrValidation):
 		status = http.StatusBadRequest
-	case errors.Is(err, assets.ErrNotFound), errors.Is(err, alerts.ErrNotFound):
+	case errors.Is(err, assets.ErrNotFound), errors.Is(err, alerts.ErrNotFound),
+		errors.Is(err, trades.ErrNotFound):
 		status = http.StatusNotFound
 	case errors.Is(err, assets.ErrDuplicate), errors.Is(err, assets.ErrInvalidTransition),
-		errors.Is(err, alerts.ErrResolved):
+		errors.Is(err, alerts.ErrResolved), errors.Is(err, trades.ErrInsufficientQuantity):
 		status = http.StatusConflict
 	}
 	msg := err.Error()
