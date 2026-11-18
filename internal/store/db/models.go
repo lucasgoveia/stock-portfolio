@@ -35,9 +35,44 @@ type Asset struct {
 	UpdatedAt string
 }
 
+type CashInstrument struct {
+	ID        int64
+	Kind      string
+	Name      string
+	Currency  string
+	PctCdi    string
+	CreatedAt string
+}
+
+type CashMovement struct {
+	ID           int64
+	InstrumentID int64
+	MoveDate     string
+	Type         string
+	Amount       string
+	Quantity     string
+	CreatedAt    string
+}
+
+type CdiRate struct {
+	RefDate string
+	RatePct string
+}
+
+type FxRate struct {
+	Pair    string
+	RefDate string
+	Rate    string
+}
+
 type Setting struct {
 	Key   string
 	Value string
+}
+
+type TesouroSelicPrice struct {
+	RefDate string
+	Price   string
 }
 
 type Trade struct {

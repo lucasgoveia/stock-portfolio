@@ -15,6 +15,7 @@ import (
 	"github.com/lucasgoveia/stock-portfolio/internal/alerts"
 	"github.com/lucasgoveia/stock-portfolio/internal/api"
 	"github.com/lucasgoveia/stock-portfolio/internal/assets"
+	"github.com/lucasgoveia/stock-portfolio/internal/cash"
 	"github.com/lucasgoveia/stock-portfolio/internal/config"
 	"github.com/lucasgoveia/stock-portfolio/internal/store"
 	"github.com/lucasgoveia/stock-portfolio/internal/trades"
@@ -45,6 +46,7 @@ func run() error {
 	assetSvc := assets.NewService(conn)
 	srv := &http.Server{Addr: cfg.ListenAddr, Handler: api.NewRouter(
 		api.WithAssets(assetSvc),
+		api.WithCash(cash.NewService(conn, cash.NewRateStore(conn), nil)),
 		api.WithTrades(trades.NewService(conn, assetSvc)),
 		api.WithAlerts(alerts.New(conn, nil)),
 		api.WithUI(web.Dist()),
