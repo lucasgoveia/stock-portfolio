@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/lucasgoveia/stock-portfolio/internal/alerts"
 	"github.com/lucasgoveia/stock-portfolio/internal/api"
 	"github.com/lucasgoveia/stock-portfolio/internal/config"
 	"github.com/lucasgoveia/stock-portfolio/internal/store"
@@ -38,7 +39,7 @@ func run() error {
 	}
 	defer func() { _ = conn.Close() }()
 
-	srv := &http.Server{Addr: cfg.ListenAddr, Handler: api.NewRouter(), ReadHeaderTimeout: 10 * time.Second}
+	srv := &http.Server{Addr: cfg.ListenAddr, Handler: api.NewRouter(api.WithAlerts(alerts.New(conn, nil))), ReadHeaderTimeout: 10 * time.Second}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	go func() {

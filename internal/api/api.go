@@ -8,10 +8,16 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
+// Option configures optional router dependencies.
+type Option func(chi.Router)
+
 // NewRouter builds the HTTP router.
-func NewRouter() http.Handler {
+func NewRouter(opts ...Option) http.Handler {
 	r := chi.NewRouter()
 	r.Get("/api/health", health)
+	for _, o := range opts {
+		o(r)
+	}
 	return r
 }
 
