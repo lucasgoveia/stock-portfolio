@@ -95,6 +95,7 @@ type edgarFact struct {
 	Val   json.Number `json:"val"`
 	Form  string      `json:"form"`
 	Filed string      `json:"filed"`
+	FP    string      `json:"fp"` // fiscal period of the filing: Q1, Q2, Q3 or FY
 }
 
 type edgarConcept struct {
@@ -314,6 +315,7 @@ func (d *edgarDoc) financials() FinancialFacts {
 	}
 	out.Periods = append(annual, out.Periods...)
 	sortPeriods(out.Periods)
+	out.Quarters = d.quarters()
 	if len(annual) == 0 {
 		out.Notes = append(out.Notes, "no annual (10-K) USD figures found; foreign private issuers (20-F/40-F) are not supported")
 	}

@@ -34,10 +34,12 @@ const (
 	GroupTax        = "tax"
 	GroupTactical   = "tactical"
 	GroupAI         = "ai"
+	// GroupExpectations holds the expected-versus-actual rules (spec §12.4).
+	GroupExpectations = "expectations"
 )
 
 // Groups lists every group name.
-var Groups = []string{GroupAllocation, GroupPlanner, GroupTax, GroupTactical, GroupAI}
+var Groups = []string{GroupAllocation, GroupPlanner, GroupTax, GroupTactical, GroupAI, GroupExpectations}
 
 func key(group string) string { return "params." + group }
 
@@ -126,6 +128,12 @@ type AI struct {
 	MonthlyCapUSD Dec    `json:"monthly_cap_usd" doc:"Spending cap per month (USD)"`
 }
 
+// Expectations holds the expected-versus-actual rules (spec §12.4).
+type Expectations struct {
+	MissTolerance       Dec `json:"miss_tolerance" doc:"A reported figure within this fraction below the base scenario still counts as met"`
+	ConsecutiveQuarters int `json:"consecutive_quarters" doc:"Consecutive quarters below the base scenario that raise expected_vs_actual_miss"`
+}
+
 // DefaultAllocation returns the spec defaults.
 func DefaultAllocation() Allocation {
 	p := engine.DefaultParams()
@@ -168,6 +176,11 @@ func DefaultTactical() Tactical {
 
 // DefaultAI returns the defaults.
 func DefaultAI() AI { return AI{Model: "claude-sonnet-5-5", MonthlyCapUSD: d("20")} }
+
+// DefaultExpectations returns the defaults: 2% tolerance, 2 consecutive quarters.
+func DefaultExpectations() Expectations {
+	return Expectations{MissTolerance: d("0.02"), ConsecutiveQuarters: 2}
+}
 
 // check collects field errors.
 type check struct{ errs []string }
@@ -329,6 +342,14 @@ func (a AI) Validate() error {
 	return c.err()
 }
 
+// Validate checks ranges.
+func (e Expectations) Validate() error {
+	var c check
+	c.frac("miss_tolerance", e.MissTolerance, false)
+	c.intAtLeast("consecutive_quarters", e.ConsecutiveQuarters, 1)
+	return c.err()
+}
+
 // load merges the stored JSON for group over def.
 func load[T any](ctx context.Context, q *db.Queries, group string, def T) (T, error) {
 	raw, err := q.GetSetting(ctx, key(group))
@@ -378,6 +399,16 @@ func (s *Service) Tactical(ctx context.Context) (Tactical, error) {
 
 // AI returns the stored AI analyst settings over defaults.
 func (s *Service) AI(ctx context.Context) (AI, error) { return load(ctx, s.q, GroupAI, DefaultAI()) }
+
+// Expectations returns the stored expected-versus-actual rules over defaults.
+func (s *Service) Expectations(ctx context.Context) (Expectations, error) {
+	return load(ctx, s.q, GroupExpectations, DefaultExpectations())
+}
+
+// SetExpectations validates and stores the expected-versus-actual rules.
+func (s *Service) SetExpectations(ctx context.Context, v Expectations) (Expectations, error) {
+	return set(ctx, s, GroupExpectations, v)
+}
 
 // SetAllocation validates and stores the allocation rules.
 func (s *Service) SetAllocation(ctx context.Context, v Allocation) (Allocation, error) {
@@ -489,6 +520,8 @@ type Overview struct {
 	Tax        Group[Tax]        `json:"tax"`
 	Tactical   Group[Tactical]   `json:"tactical"`
 	AI         Group[AI]         `json:"ai"`
+	// Expectations are the expected-versus-actual rules.
+	Expectations Group[Expectations] `json:"expectations"`
 }
 
 // All returns every group.
@@ -510,6 +543,10 @@ func (s *Service) All(ctx context.Context) (Overview, error) {
 	if out.AI.Values, err = s.AI(ctx); err != nil {
 		return out, err
 	}
+	if out.Expectations.Values, err = s.Expectations(ctx); err != nil {
+		return out, err
+	}
+	out.Expectations.Defaults = DefaultExpectations()
 	out.Allocation.Defaults, out.Planner.Defaults, out.Tax.Defaults = DefaultAllocation(), DefaultPlanner(), DefaultTax()
 	out.Tactical.Defaults, out.AI.Defaults = DefaultTactical(), DefaultAI()
 	return out, nil

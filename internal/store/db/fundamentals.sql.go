@@ -135,6 +135,44 @@ func (q *Queries) ListFundamentalFacts(ctx context.Context, assetID int64) ([]Fu
 	return items, nil
 }
 
+const listFundamentalQuarters = `-- name: ListFundamentalQuarters :many
+SELECT asset_id, period_end, fiscal_quarter, revenue, net_income, eps, shares, derived, source, filed FROM fundamental_quarters WHERE asset_id = ? ORDER BY period_end
+`
+
+func (q *Queries) ListFundamentalQuarters(ctx context.Context, assetID int64) ([]FundamentalQuarter, error) {
+	rows, err := q.db.QueryContext(ctx, listFundamentalQuarters, assetID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []FundamentalQuarter
+	for rows.Next() {
+		var i FundamentalQuarter
+		if err := rows.Scan(
+			&i.AssetID,
+			&i.PeriodEnd,
+			&i.FiscalQuarter,
+			&i.Revenue,
+			&i.NetIncome,
+			&i.Eps,
+			&i.Shares,
+			&i.Derived,
+			&i.Source,
+			&i.Filed,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listFundamentalSyncs = `-- name: ListFundamentalSyncs :many
 SELECT asset_id, source, fetched_at, as_of, status, message, notes FROM fundamental_syncs
 `
@@ -228,6 +266,43 @@ func (q *Queries) UpsertFundamentalFact(ctx context.Context, arg UpsertFundament
 		arg.PeriodType,
 		arg.Concept,
 		arg.Value,
+		arg.Source,
+		arg.Filed,
+	)
+	return err
+}
+
+const upsertFundamentalQuarter = `-- name: UpsertFundamentalQuarter :exec
+INSERT INTO fundamental_quarters (asset_id, period_end, fiscal_quarter, revenue, net_income, eps, shares, derived, source, filed)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT (asset_id, period_end)
+DO UPDATE SET fiscal_quarter = excluded.fiscal_quarter, revenue = excluded.revenue, net_income = excluded.net_income,
+    eps = excluded.eps, shares = excluded.shares, derived = excluded.derived, source = excluded.source, filed = excluded.filed
+`
+
+type UpsertFundamentalQuarterParams struct {
+	AssetID       int64
+	PeriodEnd     string
+	FiscalQuarter int64
+	Revenue       string
+	NetIncome     string
+	Eps           string
+	Shares        string
+	Derived       int64
+	Source        string
+	Filed         string
+}
+
+func (q *Queries) UpsertFundamentalQuarter(ctx context.Context, arg UpsertFundamentalQuarterParams) error {
+	_, err := q.db.ExecContext(ctx, upsertFundamentalQuarter,
+		arg.AssetID,
+		arg.PeriodEnd,
+		arg.FiscalQuarter,
+		arg.Revenue,
+		arg.NetIncome,
+		arg.Eps,
+		arg.Shares,
+		arg.Derived,
 		arg.Source,
 		arg.Filed,
 	)

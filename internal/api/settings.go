@@ -10,7 +10,7 @@ import (
 )
 
 type groupPath struct {
-	Group string `path:"group" enum:"allocation,planner,tax,tactical,ai" doc:"Settings group"`
+	Group string `path:"group" enum:"allocation,planner,tax,tactical,ai,expectations" doc:"Settings group"`
 }
 
 // putGroup registers PUT /api/settings/{name} for one parameter group.
@@ -47,6 +47,9 @@ func WithSettings(svc *settings.Service) Option {
 		})
 		putGroup(s, settings.GroupAI, "setAISettings", func(ctx context.Context, v settings.AI) (settings.AI, error) {
 			return svc.SetAI(ctx, v)
+		})
+		putGroup(s, settings.GroupExpectations, "setExpectationsSettings", func(ctx context.Context, v settings.Expectations) (settings.Expectations, error) {
+			return svc.SetExpectations(ctx, v)
 		})
 		huma.Register(s.api, opStatus(http.MethodPost, "/api/settings/{group}/reset", "resetSettings", "Restore a group's defaults", tag, http.StatusNoContent),
 			func(ctx context.Context, in *groupPath) (*struct{}, error) {

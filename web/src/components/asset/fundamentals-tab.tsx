@@ -4,6 +4,7 @@ import { RefreshCw } from 'lucide-react'
 import { useDeferredValue, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
+import { ExpectedVsActual } from '@/components/asset/expected-vs-actual'
 import { Panel } from '@/components/asset/panel'
 import { Field, FormError } from '@/components/form'
 import { ErrorBlock, LoadingBlock } from '@/components/query-state'
@@ -75,6 +76,7 @@ export function FundamentalsTab({ asset }: { asset: Asset }) {
         <>
           <MetricCards panel={p} />
           <HistoryPanel history={p.history ?? []} currency={p.currency} />
+          <ExpectedVsActual asset={asset} />
           <RangesPanel panel={p} />
           <HelpersPanel asset={asset} panel={p} inputs={inputs} setInputs={setInputs} query={query} />
           <Notes notes={p.notes ?? []} />
@@ -122,7 +124,7 @@ function SourceBar({ asset, panel: p }: { asset: Asset; panel: PanelData }) {
       </div>
       {refresh.isPending && p.market === 'B3' && (
         <p className="text-muted-foreground text-xs">
-          The first fetch downloads up to six CVM annual files (about 13 MB each); this can take a minute.
+          The first fetch downloads up to six CVM annual files and three quarterly (ITR) files, 13 to 30 MB each; this can take a few minutes.
         </p>
       )}
       {p.last_error && (

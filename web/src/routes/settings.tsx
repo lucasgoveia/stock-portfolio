@@ -80,6 +80,22 @@ const TACTICAL_FIELDS: FieldDef[] = [
   { key: 'max_open', label: 'Open positions before a warning', kind: 'int' },
 ]
 
+const EXPECTATIONS_FIELDS: FieldDef[] = [
+  {
+    key: 'miss_tolerance',
+    label: 'Miss tolerance',
+    kind: 'percent',
+    hint: 'A reported revenue or EPS this far below the base scenario still counts as met.',
+  },
+  {
+    key: 'consecutive_quarters',
+    label: 'Consecutive misses to alert',
+    kind: 'int',
+    unit: 'quarters',
+    hint: 'Quarters in a row below the base scenario that raise the alert and prompt a thesis review.',
+  },
+]
+
 const AI_FIELDS: FieldDef[] = [
   { key: 'model', label: 'Model', kind: 'text' },
   { key: 'monthly_cap_usd', label: 'Monthly cap', kind: 'decimal', unit: 'US$' },
@@ -137,7 +153,7 @@ function RuleSections() {
   if (all.isError) return <ErrorBlock error={all.error} />
   const d = all.data
   const refresh = () => qc.invalidateQueries({ queryKey: settingsQuery.queryKey })
-  const reset = (group: 'allocation' | 'planner' | 'tax' | 'tactical' | 'ai') => async () => {
+  const reset = (group: 'allocation' | 'planner' | 'tax' | 'tactical' | 'ai' | 'expectations') => async () => {
     await unwrap(api.POST('/api/settings/{group}/reset', { params: { path: { group } } }))
     await refresh()
   }
@@ -182,6 +198,17 @@ function RuleSections() {
         defaults={d.tactical.defaults as unknown as Values}
         save={(body) => after(unwrap(api.PUT('/api/settings/tactical', { body: body as unknown as Schemas['Tactical'] })))}
         reset={reset('tactical')}
+      />
+      <SettingsSection
+        title="Expected vs actual"
+        description="Reported quarters are compared with the base scenario of the fair value version that preceded them."
+        fields={EXPECTATIONS_FIELDS}
+        values={d.expectations.values as unknown as Values}
+        defaults={d.expectations.defaults as unknown as Values}
+        save={(body) =>
+          after(unwrap(api.PUT('/api/settings/expectations', { body: body as unknown as Schemas['Expectations'] })))
+        }
+        reset={reset('expectations')}
       />
       <SettingsSection
         title="AI analyst"

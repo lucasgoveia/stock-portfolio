@@ -45,3 +45,13 @@ LIMIT 1;
 -- name: TrailingDividendsPerShare :many
 SELECT per_share FROM dividends
 WHERE asset_id = ? AND status <> 'rejected' AND record_date > sqlc.arg(from_date) AND record_date <= sqlc.arg(to_date);
+
+-- name: UpsertFundamentalQuarter :exec
+INSERT INTO fundamental_quarters (asset_id, period_end, fiscal_quarter, revenue, net_income, eps, shares, derived, source, filed)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT (asset_id, period_end)
+DO UPDATE SET fiscal_quarter = excluded.fiscal_quarter, revenue = excluded.revenue, net_income = excluded.net_income,
+    eps = excluded.eps, shares = excluded.shares, derived = excluded.derived, source = excluded.source, filed = excluded.filed;
+
+-- name: ListFundamentalQuarters :many
+SELECT * FROM fundamental_quarters WHERE asset_id = ? ORDER BY period_end;

@@ -245,6 +245,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/assets/{id}/expected-vs-actual": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Reported quarters against the base scenario of the fair value version that preceded each */
+        get: operations["getExpectedVsActual"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/assets/{id}/fair-values": {
         parameters: {
             query?: never;
@@ -1126,6 +1143,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/settings/expectations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Replace the expectations settings */
+        put: operations["setExpectationsSettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/settings/planner": {
         parameters: {
             query?: never;
@@ -1602,6 +1636,37 @@ export interface components {
             source_urls: string[] | null;
             title: string;
         };
+        Comparison: {
+            /** @description True when a streak reached the required number of quarters */
+            alerting: boolean;
+            /** Format: int64 */
+            asset_id: number;
+            /**
+             * Format: int64
+             * @description Consecutive misses that raise the alert
+             */
+            consecutive_quarters: number;
+            currency: string;
+            /**
+             * Format: int64
+             * @description Consecutive EPS misses ending at the latest quarter
+             */
+            eps_miss_streak: number;
+            message: string;
+            /** @description Fraction below the base scenario still counted as met */
+            miss_tolerance: string;
+            notes: string[] | null;
+            /** @description Oldest first */
+            quarters: components["schemas"]["QuarterComparison"][] | null;
+            /**
+             * Format: int64
+             * @description Consecutive revenue misses ending at the latest quarter
+             */
+            revenue_miss_streak: number;
+            /** @enum {string} */
+            status: "ok" | "unsupported" | "no_quarters" | "no_fair_value";
+            ticker: string;
+        };
         ConditionText: {
             text: string;
         };
@@ -1710,6 +1775,15 @@ export interface components {
         Error: {
             /** @description Human-readable error message */
             error: string;
+        };
+        Expectations: {
+            /**
+             * Format: int64
+             * @description Consecutive quarters below the base scenario that raise expected_vs_actual_miss
+             */
+            consecutive_quarters: number;
+            /** @description A reported figure within this fraction below the base scenario still counts as met */
+            miss_tolerance: string;
         };
         FairValue: {
             as_of: string;
@@ -1867,6 +1941,10 @@ export interface components {
         GroupAllocation: {
             defaults: components["schemas"]["Allocation"];
             values: components["schemas"]["Allocation"];
+        };
+        GroupExpectations: {
+            defaults: components["schemas"]["Expectations"];
+            values: components["schemas"]["Expectations"];
         };
         GroupPlanner: {
             defaults: components["schemas"]["Planner"];
@@ -2044,6 +2122,7 @@ export interface components {
         Overview: {
             ai: components["schemas"]["GroupAI"];
             allocation: components["schemas"]["GroupAllocation"];
+            expectations: components["schemas"]["GroupExpectations"];
             planner: components["schemas"]["GroupPlanner"];
             tactical: components["schemas"]["GroupTactical"];
             tax: components["schemas"]["GroupTax"];
@@ -2096,6 +2175,51 @@ export interface components {
             above_upper: boolean;
             below_floor: boolean;
             below_lower: boolean;
+        };
+        QuarterComparison: {
+            actual_eps?: string;
+            actual_revenue?: string;
+            /** @description Fiscal year end of the base revenue */
+            base_period_end?: string;
+            /** @description Annual revenue at the version date, from fundamentals */
+            base_revenue?: string;
+            /** @description Q4 computed as the annual figure minus the Q3 year to date */
+            derived: boolean;
+            /** @description (actual - expected) / |expected|, as a fraction */
+            eps_delta?: string;
+            /** @enum {string} */
+            eps_status: "met" | "miss" | "na";
+            expected_eps?: string;
+            expected_revenue?: string;
+            fair_value_as_of?: string;
+            /**
+             * Format: int64
+             * @description Scenario DCF version the expectation comes from
+             */
+            fair_value_id?: number;
+            /** @description Filing date, or the document version when unknown */
+            filed: string;
+            /** Format: int64 */
+            fiscal_quarter: number;
+            /**
+             * Format: int64
+             * @description Year the fiscal year of this quarter ends
+             */
+            fiscal_year: number;
+            miss: boolean;
+            /** @description Why there is no comparison, or what is missing */
+            note?: string;
+            period_end: string;
+            /**
+             * Format: int64
+             * @description Quarter number on the 5-year path (1 to 20)
+             */
+            quarters_after_base?: number;
+            /** @description (actual - expected) / expected, as a fraction */
+            revenue_delta?: string;
+            /** @enum {string} */
+            revenue_status: "met" | "miss" | "na";
+            source: string;
         };
         Range: {
             current?: string;
@@ -3149,6 +3273,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Dividend"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getExpectedVsActual: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Resource id */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Comparison"];
                 };
             };
             /** @description Error */
@@ -5293,6 +5449,39 @@ export interface operations {
             };
         };
     };
+    setExpectationsSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Expectations"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Expectations"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     setPlannerSettings: {
         parameters: {
             query?: never;
@@ -5489,7 +5678,7 @@ export interface operations {
             header?: never;
             path: {
                 /** @description Settings group */
-                group: "allocation" | "planner" | "tax" | "tactical" | "ai";
+                group: "allocation" | "planner" | "tax" | "tactical" | "ai" | "expectations";
             };
             cookie?: never;
         };

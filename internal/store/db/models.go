@@ -166,6 +166,19 @@ type FundamentalFact struct {
 	Filed      string
 }
 
+type FundamentalQuarter struct {
+	AssetID       int64
+	PeriodEnd     string
+	FiscalQuarter int64
+	Revenue       string
+	NetIncome     string
+	Eps           string
+	Shares        string
+	Derived       int64
+	Source        string
+	Filed         string
+}
+
 type FundamentalSync struct {
 	AssetID   int64
 	Source    string

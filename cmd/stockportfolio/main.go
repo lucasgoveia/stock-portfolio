@@ -33,6 +33,7 @@ import (
 	"github.com/lucasgoveia/stock-portfolio/internal/tactical"
 	"github.com/lucasgoveia/stock-portfolio/internal/tax"
 	"github.com/lucasgoveia/stock-portfolio/internal/thesis"
+	"github.com/lucasgoveia/stock-portfolio/internal/tracking"
 	"github.com/lucasgoveia/stock-portfolio/internal/trades"
 	"github.com/lucasgoveia/stock-portfolio/internal/valuation"
 	"github.com/lucasgoveia/stock-portfolio/web"
@@ -111,6 +112,8 @@ func run() error {
 		Research: researchSvc, Fundamentals: fundSvc, US: edgar, BR: cvm, Client: aiClient,
 	})
 	settingsSvc.UseUsage(analystSvc.MonthSpend)
+	trackSvc := tracking.NewService(conn, assetSvc, valuationSvc, alertSvc, thesisSvc, settingsSvc)
+	fundSvc.OnRefresh(trackSvc.Evaluate)
 	portfolioSvc := portfolio.NewService(portfolio.Deps{
 		Conn: conn, Assets: assetSvc, Trades: tradeSvc, Cash: cashSvc, Rates: rateStore, Ratings: ratingSvc,
 		Valuation: valuationSvc, Thesis: thesisSvc, Research: researchSvc, Alerts: alertSvc, Tactical: tacticalSvc, Tax: taxSvc, Dividends: dividendSvc,
@@ -121,6 +124,7 @@ func run() error {
 		{Name: "fair_value", Run: valuationSvc.Evaluate},
 		{Name: "portfolio", Run: portfolioSvc.Evaluate},
 		{Name: "corporate_actions", Run: actionSvc.Evaluate},
+		{Name: "expected_vs_actual", Run: trackSvc.Evaluate},
 	}
 
 	if cmd == "backfill" {
@@ -158,6 +162,7 @@ func run() error {
 		api.WithSettings(settingsSvc),
 		api.WithFundamentals(fundSvc),
 		api.WithAnalyst(analystSvc),
+		api.WithExpectedVsActual(trackSvc),
 		api.WithUI(web.Dist()),
 	), ReadHeaderTimeout: 10 * time.Second}
 	go func() {

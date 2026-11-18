@@ -126,26 +126,43 @@ func (c *CVM) AnnualFinancials(ctx context.Context, cnpj string, years []int) (F
 
 // year downloads and parses one DFP zip.
 func (c *CVM) year(ctx context.Context, cnpj string, year int) ([]FinancialPeriod, string, []string, error) {
-	url := fmt.Sprintf("%s/DOC/DFP/DADOS/dfp_cia_aberta_%d.zip", c.BaseURL, year)
-	resp, err := get(ctx, c.HTTP, "cvm", url, nil)
+	var (
+		ps     []FinancialPeriod
+		entity string
+		notes  []string
+		parsed error
+	)
+	err := c.withZip(ctx, fmt.Sprintf("%s/DOC/DFP/DADOS/dfp_cia_aberta_%d.zip", c.BaseURL, year), func(zr *zip.Reader) {
+		ps, entity, notes, parsed = parseDFP(zr, cnpj, year)
+	})
 	if err != nil {
 		return nil, "", nil, err
 	}
-	defer func() { _ = resp.Body.Close() }()
-	tmp, err := os.CreateTemp("", "cvm-dfp-*.zip")
+	return ps, entity, notes, parsed
+}
+
+// withZip downloads url to a temp file and hands the opened zip to fn.
+func (c *CVM) withZip(ctx context.Context, url string, fn func(zr *zip.Reader)) error {
+	resp, err := get(ctx, c.HTTP, "cvm", url, nil)
 	if err != nil {
-		return nil, "", nil, fmt.Errorf("marketdata: cvm: %w", err)
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	tmp, err := os.CreateTemp("", "cvm-*.zip")
+	if err != nil {
+		return fmt.Errorf("marketdata: cvm: %w", err)
 	}
 	defer func() { _ = tmp.Close(); _ = os.Remove(tmp.Name()) }()
 	if _, err := io.Copy(tmp, resp.Body); err != nil {
-		return nil, "", nil, fmt.Errorf("marketdata: cvm: downloading %s: %w", url, err)
+		return fmt.Errorf("marketdata: cvm: downloading %s: %w", url, err)
 	}
 	zr, err := zip.OpenReader(tmp.Name())
 	if err != nil {
-		return nil, "", nil, fmt.Errorf("marketdata: cvm: opening %s: %w", url, err)
+		return fmt.Errorf("marketdata: cvm: opening %s: %w", url, err)
 	}
 	defer func() { _ = zr.Close() }()
-	return parseDFP(&zr.Reader, cnpj, year)
+	fn(&zr.Reader)
+	return nil
 }
 
 // cvmRow is one account line of a statement file.
@@ -156,6 +173,8 @@ type cvmRow struct {
 	Moeda   string
 	Scale   decimal.Decimal
 	Ordem   string
+	Start   string // DT_INI_EXERC
+	End     string // DT_FIM_EXERC
 	Code    string
 	Desc    string
 	Value   decimal.Decimal
@@ -491,7 +510,8 @@ func readStatement(f *zip.File, cnpj string) ([]cvmRow, error) {
 		rows = append(rows, cvmRow{
 			Refer: col(rec, idx, "DT_REFER"), Version: ver, Entity: col(rec, idx, "DENOM_CIA"),
 			Moeda: col(rec, idx, "MOEDA"), Scale: cvmScale(col(rec, idx, "ESCALA_MOEDA")),
-			Ordem: col(rec, idx, "ORDEM_EXERC"), Code: col(rec, idx, "CD_CONTA"), Desc: col(rec, idx, "DS_CONTA"),
+			Ordem: col(rec, idx, "ORDEM_EXERC"), Start: col(rec, idx, "DT_INI_EXERC"), End: col(rec, idx, "DT_FIM_EXERC"),
+			Code: col(rec, idx, "CD_CONTA"), Desc: col(rec, idx, "DS_CONTA"),
 			Value: val.Mul(cvmScale(col(rec, idx, "ESCALA_MOEDA"))),
 		})
 	}

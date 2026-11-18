@@ -871,6 +871,90 @@
         ],
         "type": "object"
       },
+      "Comparison": {
+        "additionalProperties": false,
+        "properties": {
+          "alerting": {
+            "description": "True when a streak reached the required number of quarters",
+            "type": "boolean"
+          },
+          "asset_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "consecutive_quarters": {
+            "description": "Consecutive misses that raise the alert",
+            "format": "int64",
+            "type": "integer"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "eps_miss_streak": {
+            "description": "Consecutive EPS misses ending at the latest quarter",
+            "format": "int64",
+            "type": "integer"
+          },
+          "message": {
+            "type": "string"
+          },
+          "miss_tolerance": {
+            "description": "Fraction below the base scenario still counted as met",
+            "type": "string"
+          },
+          "notes": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "quarters": {
+            "description": "Oldest first",
+            "items": {
+              "$ref": "#/components/schemas/QuarterComparison"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "revenue_miss_streak": {
+            "description": "Consecutive revenue misses ending at the latest quarter",
+            "format": "int64",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "unsupported",
+              "no_quarters",
+              "no_fair_value"
+            ],
+            "type": "string"
+          },
+          "ticker": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "asset_id",
+          "ticker",
+          "currency",
+          "status",
+          "message",
+          "miss_tolerance",
+          "consecutive_quarters",
+          "revenue_miss_streak",
+          "eps_miss_streak",
+          "alerting",
+          "quarters",
+          "notes"
+        ],
+        "type": "object"
+      },
       "ConditionText": {
         "additionalProperties": false,
         "properties": {
@@ -1275,6 +1359,25 @@
         },
         "required": [
           "error"
+        ],
+        "type": "object"
+      },
+      "Expectations": {
+        "additionalProperties": false,
+        "properties": {
+          "consecutive_quarters": {
+            "description": "Consecutive quarters below the base scenario that raise expected_vs_actual_miss",
+            "format": "int64",
+            "type": "integer"
+          },
+          "miss_tolerance": {
+            "description": "A reported figure within this fraction below the base scenario still counts as met",
+            "type": "string"
+          }
+        },
+        "required": [
+          "miss_tolerance",
+          "consecutive_quarters"
         ],
         "type": "object"
       },
@@ -1829,6 +1932,22 @@
           },
           "values": {
             "$ref": "#/components/schemas/Allocation"
+          }
+        },
+        "required": [
+          "values",
+          "defaults"
+        ],
+        "type": "object"
+      },
+      "GroupExpectations": {
+        "additionalProperties": false,
+        "properties": {
+          "defaults": {
+            "$ref": "#/components/schemas/Expectations"
+          },
+          "values": {
+            "$ref": "#/components/schemas/Expectations"
           }
         },
         "required": [
@@ -2481,6 +2600,9 @@
           "allocation": {
             "$ref": "#/components/schemas/GroupAllocation"
           },
+          "expectations": {
+            "$ref": "#/components/schemas/GroupExpectations"
+          },
           "planner": {
             "$ref": "#/components/schemas/GroupPlanner"
           },
@@ -2496,7 +2618,8 @@
           "planner",
           "tax",
           "tactical",
-          "ai"
+          "ai",
+          "expectations"
         ],
         "type": "object"
       },
@@ -2679,6 +2802,112 @@
           "above_cap",
           "below_lower",
           "above_upper"
+        ],
+        "type": "object"
+      },
+      "QuarterComparison": {
+        "additionalProperties": false,
+        "properties": {
+          "actual_eps": {
+            "type": "string"
+          },
+          "actual_revenue": {
+            "type": "string"
+          },
+          "base_period_end": {
+            "description": "Fiscal year end of the base revenue",
+            "type": "string"
+          },
+          "base_revenue": {
+            "description": "Annual revenue at the version date, from fundamentals",
+            "type": "string"
+          },
+          "derived": {
+            "description": "Q4 computed as the annual figure minus the Q3 year to date",
+            "type": "boolean"
+          },
+          "eps_delta": {
+            "description": "(actual - expected) / |expected|, as a fraction",
+            "type": "string"
+          },
+          "eps_status": {
+            "enum": [
+              "met",
+              "miss",
+              "na"
+            ],
+            "type": "string"
+          },
+          "expected_eps": {
+            "type": "string"
+          },
+          "expected_revenue": {
+            "type": "string"
+          },
+          "fair_value_as_of": {
+            "type": "string"
+          },
+          "fair_value_id": {
+            "description": "Scenario DCF version the expectation comes from",
+            "format": "int64",
+            "type": "integer"
+          },
+          "filed": {
+            "description": "Filing date, or the document version when unknown",
+            "type": "string"
+          },
+          "fiscal_quarter": {
+            "format": "int64",
+            "maximum": 4,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "fiscal_year": {
+            "description": "Year the fiscal year of this quarter ends",
+            "format": "int64",
+            "type": "integer"
+          },
+          "miss": {
+            "type": "boolean"
+          },
+          "note": {
+            "description": "Why there is no comparison, or what is missing",
+            "type": "string"
+          },
+          "period_end": {
+            "type": "string"
+          },
+          "quarters_after_base": {
+            "description": "Quarter number on the 5-year path (1 to 20)",
+            "format": "int64",
+            "type": "integer"
+          },
+          "revenue_delta": {
+            "description": "(actual - expected) / expected, as a fraction",
+            "type": "string"
+          },
+          "revenue_status": {
+            "enum": [
+              "met",
+              "miss",
+              "na"
+            ],
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "period_end",
+          "fiscal_quarter",
+          "fiscal_year",
+          "source",
+          "filed",
+          "derived",
+          "revenue_status",
+          "eps_status",
+          "miss"
         ],
         "type": "object"
       },
@@ -5388,6 +5617,51 @@
         "summary": "Record a received dividend or JCP and credit cash",
         "tags": [
           "dividends"
+        ]
+      }
+    },
+    "/api/assets/{id}/expected-vs-actual": {
+      "get": {
+        "operationId": "getExpectedVsActual",
+        "parameters": [
+          {
+            "description": "Resource id",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Resource id",
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Comparison"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Reported quarters against the base scenario of the fair value version that preceded each",
+        "tags": [
+          "fundamentals"
         ]
       }
     },
@@ -8459,6 +8733,47 @@
         ]
       }
     },
+    "/api/settings/expectations": {
+      "put": {
+        "operationId": "setExpectationsSettings",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Expectations"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Expectations"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Replace the expectations settings",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
     "/api/settings/planner": {
       "put": {
         "operationId": "setPlannerSettings",
@@ -8699,7 +9014,8 @@
                 "planner",
                 "tax",
                 "tactical",
-                "ai"
+                "ai",
+                "expectations"
               ],
               "type": "string"
             }

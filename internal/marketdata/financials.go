@@ -48,6 +48,9 @@ type FinancialFacts struct {
 	Entity   string
 	Currency string
 	Periods  []FinancialPeriod // ascending by End
+	// Quarters are the Q1 to Q3 income statement figures (SEC: from 10-Q
+	// filings, filled by EDGAR.Financials; CVM: from QuarterlyFinancials).
+	Quarters []QuarterFact
 	// Notes are caveats for the user (skipped years, approximations).
 	Notes []string
 }

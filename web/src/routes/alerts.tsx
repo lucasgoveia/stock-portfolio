@@ -52,6 +52,7 @@ const SEVERITY: Record<string, number> = {
   missing_fair_value: 7,
   fair_value_stale: 8,
   thesis_review_due: 9,
+  expected_vs_actual_miss: 8.5,
   opportunity: 10,
   deploy_cash: 11,
   tactical_count: 12,
@@ -208,6 +209,8 @@ function describe(a: Alert): string {
       return str(p.message) || 'Thesis is broken: consider a full exit.'
     case 'thesis_review_due':
       return `Thesis review was due on ${str(p.next_review_on)}.`
+    case 'expected_vs_actual_miss':
+      return expectedMissText(p)
     case 'fair_value_stale':
       return `Fair value is from ${str(p.as_of)}, older than 12 months. The buy gate fails until it is refreshed.`
     case 'missing_fair_value':
@@ -247,6 +250,25 @@ function describe(a: Alert): string {
     default:
       return ''
   }
+}
+
+/** The streak that tripped the alert plus the latest quarter's gaps to the base scenario. */
+function expectedMissText(p: Payload): string {
+  const quarters = (p.quarters as Schemas['QuarterComparison'][] | undefined) ?? []
+  const last = quarters[quarters.length - 1]
+  const streaks = [
+    Number(p.revenue_miss_streak) >= Number(p.required_quarters) ? `revenue ${str(p.revenue_miss_streak)}` : '',
+    Number(p.eps_miss_streak) >= Number(p.required_quarters) ? `EPS ${str(p.eps_miss_streak)}` : '',
+  ].filter(Boolean)
+  const gaps = last
+    ? ` Latest quarter (${last.period_end}): revenue ${signedPct(last.revenue_delta)}, EPS ${signedPct(last.eps_delta)} against the base scenario.`
+    : ''
+  return `Below the base scenario in a row: ${streaks.join(' and ')} quarters.${gaps} Review the thesis and the fair value.`
+}
+
+function signedPct(v: string | undefined): string {
+  if (v == null || v === '') return 'n/a'
+  return `${Number(v) >= 0 ? '+' : ''}${pct(v, 1)}`
 }
 
 const SNOOZE: { label: string; days: number }[] = [
@@ -407,6 +429,7 @@ function AlertAction({ alert: a }: { alert: Alert }) {
         </Link>
       )
     case 'thesis_review_due':
+    case 'expected_vs_actual_miss':
       if (id == null) return null
       return (
         <Link to="/assets/$assetId" params={{ assetId: String(id) }} search={{ tab: 'thesis' }} className={actionClass}>

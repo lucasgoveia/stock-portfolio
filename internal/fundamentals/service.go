@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -49,6 +50,12 @@ type BRSource interface {
 	AnnualFinancials(ctx context.Context, cnpj string, years []int) (marketdata.FinancialFacts, error)
 }
 
+// BRQuarterlySource returns Q1 to Q3 income statement figures from the ITR
+// files (marketdata.CVM). Sources that lack it only store annual figures.
+type BRQuarterlySource interface {
+	QuarterlyFinancials(ctx context.Context, cnpj string, years []int) ([]marketdata.QuarterFact, []string, error)
+}
+
 // USSource resolves tickers and returns company facts (marketdata.EDGAR).
 type USSource interface {
 	CIKForTicker(ctx context.Context, ticker string) (string, error)
@@ -69,7 +76,13 @@ type Service struct {
 	assets *assets.Service
 	src    Sources
 	now    func() time.Time
+	// afterRefresh runs after facts were stored (expected vs actual evaluation).
+	afterRefresh func(ctx context.Context) error
 }
+
+// OnRefresh sets a hook that runs after every successful refresh. A failing
+// hook does not fail the refresh; its error is only logged.
+func (s *Service) OnRefresh(fn func(ctx context.Context) error) { s.afterRefresh = fn }
 
 // NewService builds a Service. A nil clock uses time.Now.
 func NewService(conn db.DBTX, a *assets.Service, src Sources, clock func() time.Time) *Service {
@@ -264,6 +277,7 @@ func (s *Service) Refresh(ctx context.Context, assetID int64) (FundamentalsPanel
 		}
 	}
 	notes := facts.Notes
+	notes = append(notes, s.storeQuarters(ctx, a, facts)...)
 	if a.Market == assets.MarketB3 {
 		notes = append(notes, s.trailingDividends(ctx, a)...)
 	}
@@ -273,6 +287,11 @@ func (s *Service) Refresh(ctx context.Context, assetID int64) (FundamentalsPanel
 		Status: "ok", Message: "", Notes: string(nj),
 	}); err != nil {
 		return FundamentalsPanel{}, fmt.Errorf("store sync: %w", err)
+	}
+	if s.afterRefresh != nil {
+		if err := s.afterRefresh(ctx); err != nil {
+			slog.Warn("fundamentals: after-refresh hook failed", "asset", a.ID, "err", err)
+		}
 	}
 	return s.Get(ctx, a.ID, Params{})
 }
