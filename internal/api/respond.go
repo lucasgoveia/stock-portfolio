@@ -12,6 +12,7 @@ import (
 	"github.com/lucasgoveia/stock-portfolio/internal/research"
 	"github.com/lucasgoveia/stock-portfolio/internal/thesis"
 	"github.com/lucasgoveia/stock-portfolio/internal/trades"
+	"github.com/lucasgoveia/stock-portfolio/internal/valuation"
 )
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
@@ -28,12 +29,12 @@ func writeError(w http.ResponseWriter, err error) {
 		errors.Is(err, alerts.ErrInvalid), errors.Is(err, alerts.ErrInvalidType),
 		errors.Is(err, trades.ErrValidation), errors.Is(err, cash.ErrValidation),
 		errors.Is(err, ratings.ErrValidation), errors.Is(err, research.ErrValidation),
-		errors.Is(err, thesis.ErrValidation):
+		errors.Is(err, thesis.ErrValidation), errors.Is(err, valuation.ErrValidation):
 		status = http.StatusBadRequest
 	case errors.Is(err, assets.ErrNotFound), errors.Is(err, alerts.ErrNotFound),
 		errors.Is(err, trades.ErrNotFound), errors.Is(err, cash.ErrNotFound),
 		errors.Is(err, ratings.ErrNotFound), errors.Is(err, research.ErrNotFound),
-		errors.Is(err, thesis.ErrNotFound):
+		errors.Is(err, thesis.ErrNotFound), errors.Is(err, valuation.ErrNotFound):
 		status = http.StatusNotFound
 	case errors.Is(err, assets.ErrDuplicate), errors.Is(err, assets.ErrInvalidTransition),
 		errors.Is(err, alerts.ErrResolved), errors.Is(err, trades.ErrInsufficientQuantity),

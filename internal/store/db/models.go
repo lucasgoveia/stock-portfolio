@@ -59,6 +59,19 @@ type CdiRate struct {
 	RatePct string
 }
 
+type FairValue struct {
+	ID            int64
+	AssetID       int64
+	Method        string
+	ValuePerShare string
+	Currency      string
+	AsOf          string
+	Inputs        string
+	Sources       string
+	Note          string
+	CreatedAt     string
+}
+
 type FxRate struct {
 	Pair    string
 	RefDate string

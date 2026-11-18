@@ -22,6 +22,7 @@ import (
 	"github.com/lucasgoveia/stock-portfolio/internal/store"
 	"github.com/lucasgoveia/stock-portfolio/internal/thesis"
 	"github.com/lucasgoveia/stock-portfolio/internal/trades"
+	"github.com/lucasgoveia/stock-portfolio/internal/valuation"
 	"github.com/lucasgoveia/stock-portfolio/web"
 )
 
@@ -56,6 +57,7 @@ func run() error {
 		api.WithTrades(trades.NewService(conn, assetSvc)),
 		api.WithAlerts(alertSvc),
 		api.WithThesis(thesis.NewService(conn, assetSvc, alertSvc, nil)),
+		api.WithValuation(valuation.NewService(conn, assetSvc, alertSvc, nil)),
 		api.WithUI(web.Dist()),
 	), ReadHeaderTimeout: 10 * time.Second}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
