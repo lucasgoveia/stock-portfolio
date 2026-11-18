@@ -1,0 +1,4 @@
+# Copy to config.local.toml to override. Env vars override both:
+# STOCKPORTFOLIO_LISTEN_ADDR, STOCKPORTFOLIO_DB_PATH
+listen_addr = "127.0.0.1:8080"
+db_path = "stockportfolio.db"
