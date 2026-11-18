@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/lucasgoveia/stock-portfolio/internal/alerts"
+	"github.com/lucasgoveia/stock-portfolio/internal/analyst"
 	"github.com/lucasgoveia/stock-portfolio/internal/api"
 	"github.com/lucasgoveia/stock-portfolio/internal/assets"
 	"github.com/lucasgoveia/stock-portfolio/internal/cash"
@@ -93,12 +94,23 @@ func run() error {
 	deps.Actions = actionSvc
 	perfSvc := performance.NewService(conn, assetSvc, tradeSvc, cashSvc, nil)
 	deps.Snapshots = perfSvc
+	cvm := marketdata.NewCVM(nil, "")
+	edgar := marketdata.NewEDGAR(nil, "", "", cfg.SECUserAgent)
 	fundSvc := fundamentals.NewService(conn, assetSvc, fundamentals.Sources{
-		BR:        marketdata.NewCVM(nil, ""),
-		US:        marketdata.NewEDGAR(nil, "", "", cfg.SECUserAgent),
+		BR:        cvm,
+		US:        edgar,
 		Dividends: marketdata.NewBrapi(nil, "", cfg.BrapiToken),
 	}, nil)
 	deps.Fundamentals = fundSvc
+	var aiClient analyst.Client // nil without a key: runs are refused with a clear message
+	if cfg.AnthropicAPIKey != "" {
+		aiClient = analyst.NewAnthropicClient(cfg.AnthropicAPIKey)
+	}
+	analystSvc := analyst.NewService(analyst.Deps{
+		Conn: conn, Assets: assetSvc, Settings: settingsSvc, Thesis: thesisSvc, Valuation: valuationSvc,
+		Research: researchSvc, Fundamentals: fundSvc, US: edgar, BR: cvm, Client: aiClient,
+	})
+	settingsSvc.UseUsage(analystSvc.MonthSpend)
 	portfolioSvc := portfolio.NewService(portfolio.Deps{
 		Conn: conn, Assets: assetSvc, Trades: tradeSvc, Cash: cashSvc, Rates: rateStore, Ratings: ratingSvc,
 		Valuation: valuationSvc, Thesis: thesisSvc, Research: researchSvc, Alerts: alertSvc, Tactical: tacticalSvc, Tax: taxSvc, Dividends: dividendSvc,
@@ -145,6 +157,7 @@ func run() error {
 		api.WithPerformance(perfSvc),
 		api.WithSettings(settingsSvc),
 		api.WithFundamentals(fundSvc),
+		api.WithAnalyst(analystSvc),
 		api.WithUI(web.Dist()),
 	), ReadHeaderTimeout: 10 * time.Second}
 	go func() {

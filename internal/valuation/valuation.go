@@ -78,7 +78,8 @@ type CreateInput struct {
 	Sources       []string
 	Note          string
 	// Inputs documents how a helper value (bazin, graham) was computed; it is
-	// stored as the version's inputs JSON. Ignored for scenario_dcf.
+	// stored as the version's inputs JSON. For scenario_dcf the keys are added
+	// next to the computed dcf and result (for example an analyst run id).
 	Inputs map[string]any
 }
 
@@ -158,7 +159,13 @@ func (s *Service) Create(ctx context.Context, assetID int64, in CreateInput) (Fa
 			return FairValue{}, err
 		}
 		value = money.New(res.ValuePerShare)
-		if inputs, err = json.Marshal(map[string]any{"dcf": in.DCF, "result": res}); err != nil {
+		stored := map[string]any{"dcf": in.DCF, "result": res}
+		for k, v := range in.Inputs { // extra provenance, such as the analyst run id
+			if _, taken := stored[k]; !taken {
+				stored[k] = v
+			}
+		}
+		if inputs, err = json.Marshal(stored); err != nil {
 			return FairValue{}, err
 		}
 	case MethodBazin, MethodGraham, MethodManual, MethodTargetPrice:

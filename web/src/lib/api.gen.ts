@@ -72,6 +72,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/analyst/runs/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One analyst run */
+        get: operations["getAnalystRun"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/analyst/runs/{id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Apply selected parts of a draft into notes and fair value versions */
+        post: operations["approveAnalystRun"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/analyst/runs/{id}/discard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Discard a draft */
+        post: operations["discardAnalystRun"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/analyst/usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Month-to-date AI spend, the cap and whether a run may start */
+        get: operations["getAnalystUsage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/assets": {
         parameters: {
             query?: never;
@@ -106,6 +174,24 @@ export interface paths {
         head?: never;
         /** Update name, sleeve, benchmark, CNPJ or CIK */
         patch: operations["updateAsset"];
+        trace?: never;
+    };
+    "/api/assets/{id}/analyst/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** An asset's analyst runs, newest first */
+        get: operations["listAnalystRuns"];
+        put?: never;
+        /** Run the AI analyst on an asset (refused when the key is missing or the monthly cap is reached) */
+        post: operations["startAnalystRun"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/assets/{id}/beta": {
@@ -1368,6 +1454,38 @@ export interface components {
             /** @description BRL */
             amount: string;
         };
+        AnalystRun: {
+            approvals: components["schemas"]["Approvals"];
+            /** Format: int64 */
+            asset_id: number;
+            cost_usd: string;
+            created_at: string;
+            error?: string;
+            /** Format: int64 */
+            id: number;
+            /** Format: int64 */
+            input_tokens: number;
+            inputs: components["schemas"]["Inputs"];
+            model: string;
+            output?: components["schemas"]["Output"];
+            /** Format: int64 */
+            output_tokens: number;
+            /** @enum {string} */
+            status: "draft" | "approved" | "discarded" | "failed";
+        };
+        AnalystUsage: {
+            blocked_reason?: string;
+            can_run: boolean;
+            cap_usd: string;
+            key_configured: boolean;
+            model: string;
+            /** @description YYYY-MM, America/Sao_Paulo */
+            month: string;
+            remaining_usd: string;
+            /** Format: int64 */
+            runs: number;
+            spent_usd: string;
+        };
         AnnualReport: {
             b3_dividends: string;
             b3_jcp_gross: string;
@@ -1378,6 +1496,29 @@ export interface components {
             sales: components["schemas"]["ForeignSale"][] | null;
             /** Format: int64 */
             year: number;
+        };
+        Approvals: {
+            /** @description Indexes of catalysts turned into notes */
+            catalysts: number[] | null;
+            /** Format: int64 */
+            dcf_fair_value_id?: number;
+            market_size: boolean;
+            note_ids: number[] | null;
+            /** Format: int64 */
+            range_fair_value_id?: number;
+            thesis_check: boolean;
+        };
+        ApproveInput: {
+            /** @description Indexes of catalysts to save as notes */
+            catalysts?: number[] | null;
+            /** @description Create a manual fair value version at the range midpoint */
+            fair_value_range?: boolean;
+            /** @description Save the market size notes as a note */
+            market_size?: boolean;
+            /** @description Create a scenario DCF fair value version */
+            scenarios?: boolean;
+            /** @description Save the thesis check as a note */
+            thesis_check?: boolean;
         };
         Asset: {
             benchmark: string;
@@ -1454,6 +1595,13 @@ export interface components {
             text: string;
             updated_at: string;
         };
+        Catalyst: {
+            detail: string;
+            /** @description YYYY-MM-DD when known */
+            expected_date?: string;
+            source_urls: string[] | null;
+            title: string;
+        };
         ConditionText: {
             text: string;
         };
@@ -1479,6 +1627,11 @@ export interface components {
                 [key: string]: string;
             };
             unallocated: string;
+        };
+        DCFBase: {
+            base_revenue: string;
+            net_debt: string;
+            shares: string;
         };
         DCFInput: {
             base_revenue: string;
@@ -1544,6 +1697,16 @@ export interface components {
             /** @description Defaults to the rule (JCP 17.5%, dividends over R$50k/month 10%, US 30%) */
             withholding?: string;
         };
+        Document: {
+            /** Format: int64 */
+            chars: number;
+            /** @description YYYY-MM-DD */
+            date: string;
+            /** @description 10-K, 10-Q, 8-K, 8-K exhibit 99.1, fato relevante, comunicado ao mercado */
+            kind: string;
+            title: string;
+            url: string;
+        };
         Error: {
             /** @description Human-readable error message */
             error: string;
@@ -1592,6 +1755,18 @@ export interface components {
             note: string;
             sources: string[] | null;
             value_per_share: string;
+        };
+        FairValueInput: {
+            as_of: string;
+            currency: string;
+            method: string;
+            scenarios?: unknown;
+            value_per_share: string;
+        };
+        FairValueRange: {
+            currency: string;
+            high: string;
+            low: string;
         };
         ForeignSale: {
             /** Format: int64 */
@@ -1744,6 +1919,21 @@ export interface components {
             ticker: string;
             withheld_brl: string;
         };
+        Inputs: {
+            currency: string;
+            /** @description Base revenue, net debt and shares used when scenarios are approved into a DCF version */
+            dcf_base?: components["schemas"]["DCFBase"];
+            documents: components["schemas"]["Document"][] | null;
+            /** Format: int64 */
+            dropped_sources: number;
+            fair_value?: components["schemas"]["FairValueInput"];
+            /** @description Status of the fundamentals summary sent to the model */
+            fundamentals: string;
+            market: string;
+            skipped: string[] | null;
+            thesis?: components["schemas"]["ThesisInput"];
+            ticker: string;
+        };
         Instrument: {
             currency: string;
             /** Format: int64 */
@@ -1842,6 +2032,14 @@ export interface components {
              * @description The buy trade that executed this order
              */
             trade_id?: number;
+        };
+        Output: {
+            catalysts: components["schemas"]["Catalyst"][] | null;
+            fair_value_range: components["schemas"]["FairValueRange"];
+            market_size_notes: string;
+            scenarios: components["schemas"]["Scenarios"];
+            sources: components["schemas"]["Source"][] | null;
+            thesis_check: components["schemas"]["ThesisCheck"][] | null;
         };
         Overview: {
             ai: components["schemas"]["GroupAI"];
@@ -2018,6 +2216,15 @@ export interface components {
             revenue_growth: string[] | null;
             terminal_margin: string;
         };
+        ScenarioDraft: {
+            discount_rate: string;
+            exit_multiple: string;
+            probability: string;
+            rationale: string;
+            /** @description Yearly revenue growth for the 5 forecast years */
+            revenue_growth: string[] | null;
+            terminal_margin: string;
+        };
         ScenarioValue: {
             name: string;
             present_value: string;
@@ -2025,6 +2232,11 @@ export interface components {
             revenue_year5: string;
             terminal_value: string;
             value_per_share: string;
+        };
+        Scenarios: {
+            base: components["schemas"]["ScenarioDraft"];
+            bear: components["schemas"]["ScenarioDraft"];
+            bull: components["schemas"]["ScenarioDraft"];
         };
         Segment: {
             end_value: string;
@@ -2094,6 +2306,10 @@ export interface components {
              * @description RFC 3339 time the alert reopens
              */
             until: string;
+        };
+        Source: {
+            title: string;
+            url: string;
         };
         StatusChange: {
             status: string;
@@ -2237,6 +2453,17 @@ export interface components {
             status: string;
             text: string;
             updated_at: string;
+        };
+        ThesisCheck: {
+            condition: string;
+            evidence: string;
+            /** @enum {string} */
+            status: "holds" | "at_risk" | "broken";
+        };
+        ThesisInput: {
+            break_conditions: string[] | null;
+            status: string;
+            text: string;
         };
         ThesisPut: {
             /** @description YYYY-MM-DD */
@@ -2504,6 +2731,135 @@ export interface operations {
             };
         };
     };
+    getAnalystRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Resource id */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalystRun"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    approveAnalystRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Resource id */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApproveInput"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalystRun"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    discardAnalystRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Resource id */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalystRun"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getAnalystUsage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalystUsage"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     listAssets: {
         parameters: {
             query?: {
@@ -2625,6 +2981,70 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Asset"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listAnalystRuns: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Resource id */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalystRun"][] | null;
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    startAnalystRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Resource id */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalystRun"];
                 };
             };
             /** @description Error */

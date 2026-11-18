@@ -350,6 +350,115 @@
         ],
         "type": "object"
       },
+      "AnalystRun": {
+        "additionalProperties": false,
+        "properties": {
+          "approvals": {
+            "$ref": "#/components/schemas/Approvals"
+          },
+          "asset_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "cost_usd": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "error": {
+            "type": "string"
+          },
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "input_tokens": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "inputs": {
+            "$ref": "#/components/schemas/Inputs"
+          },
+          "model": {
+            "type": "string"
+          },
+          "output": {
+            "$ref": "#/components/schemas/Output"
+          },
+          "output_tokens": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "draft",
+              "approved",
+              "discarded",
+              "failed"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "asset_id",
+          "model",
+          "status",
+          "inputs",
+          "input_tokens",
+          "output_tokens",
+          "cost_usd",
+          "approvals",
+          "created_at"
+        ],
+        "type": "object"
+      },
+      "AnalystUsage": {
+        "additionalProperties": false,
+        "properties": {
+          "blocked_reason": {
+            "type": "string"
+          },
+          "can_run": {
+            "type": "boolean"
+          },
+          "cap_usd": {
+            "type": "string"
+          },
+          "key_configured": {
+            "type": "boolean"
+          },
+          "model": {
+            "type": "string"
+          },
+          "month": {
+            "description": "YYYY-MM, America/Sao_Paulo",
+            "type": "string"
+          },
+          "remaining_usd": {
+            "type": "string"
+          },
+          "runs": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "spent_usd": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "month",
+          "spent_usd",
+          "cap_usd",
+          "remaining_usd",
+          "runs",
+          "model",
+          "key_configured",
+          "can_run"
+        ],
+        "type": "object"
+      },
       "AnnualReport": {
         "additionalProperties": false,
         "properties": {
@@ -407,6 +516,86 @@
           "b3_jcp_gross",
           "b3_jcp_withheld"
         ],
+        "type": "object"
+      },
+      "Approvals": {
+        "additionalProperties": false,
+        "properties": {
+          "catalysts": {
+            "description": "Indexes of catalysts turned into notes",
+            "items": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "dcf_fair_value_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "market_size": {
+            "type": "boolean"
+          },
+          "note_ids": {
+            "items": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "range_fair_value_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "thesis_check": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "catalysts",
+          "market_size",
+          "thesis_check",
+          "note_ids"
+        ],
+        "type": "object"
+      },
+      "ApproveInput": {
+        "additionalProperties": false,
+        "properties": {
+          "catalysts": {
+            "description": "Indexes of catalysts to save as notes",
+            "items": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "fair_value_range": {
+            "description": "Create a manual fair value version at the range midpoint",
+            "type": "boolean"
+          },
+          "market_size": {
+            "description": "Save the market size notes as a note",
+            "type": "boolean"
+          },
+          "scenarios": {
+            "description": "Create a scenario DCF fair value version",
+            "type": "boolean"
+          },
+          "thesis_check": {
+            "description": "Save the thesis check as a note",
+            "type": "boolean"
+          }
+        },
         "type": "object"
       },
       "Asset": {
@@ -652,6 +841,36 @@
         ],
         "type": "object"
       },
+      "Catalyst": {
+        "additionalProperties": false,
+        "properties": {
+          "detail": {
+            "type": "string"
+          },
+          "expected_date": {
+            "description": "YYYY-MM-DD when known",
+            "type": "string"
+          },
+          "source_urls": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "detail",
+          "source_urls"
+        ],
+        "type": "object"
+      },
       "ConditionText": {
         "additionalProperties": false,
         "properties": {
@@ -768,6 +987,26 @@
           "unallocated",
           "pending_us_after",
           "skipped"
+        ],
+        "type": "object"
+      },
+      "DCFBase": {
+        "additionalProperties": false,
+        "properties": {
+          "base_revenue": {
+            "type": "string"
+          },
+          "net_debt": {
+            "type": "string"
+          },
+          "shares": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "base_revenue",
+          "net_debt",
+          "shares"
         ],
         "type": "object"
       },
@@ -995,6 +1234,37 @@
         ],
         "type": "object"
       },
+      "Document": {
+        "additionalProperties": false,
+        "properties": {
+          "chars": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "date": {
+            "description": "YYYY-MM-DD",
+            "type": "string"
+          },
+          "kind": {
+            "description": "10-K, 10-Q, 8-K, 8-K exhibit 99.1, fato relevante, comunicado ao mercado",
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "title",
+          "url",
+          "date",
+          "chars"
+        ],
+        "type": "object"
+      },
       "Error": {
         "additionalProperties": false,
         "properties": {
@@ -1156,6 +1426,51 @@
           "inputs",
           "sources",
           "note"
+        ],
+        "type": "object"
+      },
+      "FairValueInput": {
+        "additionalProperties": false,
+        "properties": {
+          "as_of": {
+            "type": "string"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "method": {
+            "type": "string"
+          },
+          "scenarios": {},
+          "value_per_share": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "method",
+          "value_per_share",
+          "currency",
+          "as_of"
+        ],
+        "type": "object"
+      },
+      "FairValueRange": {
+        "additionalProperties": false,
+        "properties": {
+          "currency": {
+            "type": "string"
+          },
+          "high": {
+            "type": "string"
+          },
+          "low": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "low",
+          "high",
+          "currency"
         ],
         "type": "object"
       },
@@ -1703,6 +2018,66 @@
         ],
         "type": "object"
       },
+      "Inputs": {
+        "additionalProperties": false,
+        "properties": {
+          "currency": {
+            "type": "string"
+          },
+          "dcf_base": {
+            "$ref": "#/components/schemas/DCFBase",
+            "description": "Base revenue, net debt and shares used when scenarios are approved into a DCF version"
+          },
+          "documents": {
+            "items": {
+              "$ref": "#/components/schemas/Document"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "dropped_sources": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "fair_value": {
+            "$ref": "#/components/schemas/FairValueInput"
+          },
+          "fundamentals": {
+            "description": "Status of the fundamentals summary sent to the model",
+            "type": "string"
+          },
+          "market": {
+            "type": "string"
+          },
+          "skipped": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "thesis": {
+            "$ref": "#/components/schemas/ThesisInput"
+          },
+          "ticker": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "ticker",
+          "market",
+          "currency",
+          "fundamentals",
+          "documents",
+          "skipped",
+          "dropped_sources"
+        ],
+        "type": "object"
+      },
       "Instrument": {
         "additionalProperties": false,
         "properties": {
@@ -2044,6 +2419,56 @@
         },
         "required": [
           "status"
+        ],
+        "type": "object"
+      },
+      "Output": {
+        "additionalProperties": false,
+        "properties": {
+          "catalysts": {
+            "items": {
+              "$ref": "#/components/schemas/Catalyst"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "fair_value_range": {
+            "$ref": "#/components/schemas/FairValueRange"
+          },
+          "market_size_notes": {
+            "type": "string"
+          },
+          "scenarios": {
+            "$ref": "#/components/schemas/Scenarios"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/Source"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "thesis_check": {
+            "items": {
+              "$ref": "#/components/schemas/ThesisCheck"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "catalysts",
+          "market_size_notes",
+          "scenarios",
+          "fair_value_range",
+          "thesis_check",
+          "sources"
         ],
         "type": "object"
       },
@@ -2699,6 +3124,45 @@
         ],
         "type": "object"
       },
+      "ScenarioDraft": {
+        "additionalProperties": false,
+        "properties": {
+          "discount_rate": {
+            "type": "string"
+          },
+          "exit_multiple": {
+            "type": "string"
+          },
+          "probability": {
+            "type": "string"
+          },
+          "rationale": {
+            "type": "string"
+          },
+          "revenue_growth": {
+            "description": "Yearly revenue growth for the 5 forecast years",
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "terminal_margin": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "revenue_growth",
+          "terminal_margin",
+          "exit_multiple",
+          "discount_rate",
+          "probability",
+          "rationale"
+        ],
+        "type": "object"
+      },
       "ScenarioValue": {
         "additionalProperties": false,
         "properties": {
@@ -2728,6 +3192,26 @@
           "terminal_value",
           "present_value",
           "value_per_share"
+        ],
+        "type": "object"
+      },
+      "Scenarios": {
+        "additionalProperties": false,
+        "properties": {
+          "base": {
+            "$ref": "#/components/schemas/ScenarioDraft"
+          },
+          "bear": {
+            "$ref": "#/components/schemas/ScenarioDraft"
+          },
+          "bull": {
+            "$ref": "#/components/schemas/ScenarioDraft"
+          }
+        },
+        "required": [
+          "bear",
+          "base",
+          "bull"
         ],
         "type": "object"
       },
@@ -3010,6 +3494,22 @@
         },
         "required": [
           "until"
+        ],
+        "type": "object"
+      },
+      "Source": {
+        "additionalProperties": false,
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "url"
         ],
         "type": "object"
       },
@@ -3528,6 +4028,57 @@
           "break_conditions",
           "created_at",
           "updated_at"
+        ],
+        "type": "object"
+      },
+      "ThesisCheck": {
+        "additionalProperties": false,
+        "properties": {
+          "condition": {
+            "type": "string"
+          },
+          "evidence": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "holds",
+              "at_risk",
+              "broken"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "condition",
+          "status",
+          "evidence"
+        ],
+        "type": "object"
+      },
+      "ThesisInput": {
+        "additionalProperties": false,
+        "properties": {
+          "break_conditions": {
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "status": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "text",
+          "status",
+          "break_conditions"
         ],
         "type": "object"
       },
@@ -4215,6 +4766,182 @@
         ]
       }
     },
+    "/api/analyst/runs/{id}": {
+      "get": {
+        "operationId": "getAnalystRun",
+        "parameters": [
+          {
+            "description": "Resource id",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Resource id",
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalystRun"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "One analyst run",
+        "tags": [
+          "analyst"
+        ]
+      }
+    },
+    "/api/analyst/runs/{id}/approve": {
+      "post": {
+        "operationId": "approveAnalystRun",
+        "parameters": [
+          {
+            "description": "Resource id",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Resource id",
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApproveInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalystRun"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Apply selected parts of a draft into notes and fair value versions",
+        "tags": [
+          "analyst"
+        ]
+      }
+    },
+    "/api/analyst/runs/{id}/discard": {
+      "post": {
+        "operationId": "discardAnalystRun",
+        "parameters": [
+          {
+            "description": "Resource id",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Resource id",
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalystRun"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Discard a draft",
+        "tags": [
+          "analyst"
+        ]
+      }
+    },
+    "/api/analyst/usage": {
+      "get": {
+        "operationId": "getAnalystUsage",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalystUsage"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Month-to-date AI spend, the cap and whether a run may start",
+        "tags": [
+          "analyst"
+        ]
+      }
+    },
     "/api/assets": {
       "get": {
         "operationId": "listAssets",
@@ -4412,6 +5139,100 @@
         "summary": "Update name, sleeve, benchmark, CNPJ or CIK",
         "tags": [
           "assets"
+        ]
+      }
+    },
+    "/api/assets/{id}/analyst/runs": {
+      "get": {
+        "operationId": "listAnalystRuns",
+        "parameters": [
+          {
+            "description": "Resource id",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Resource id",
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AnalystRun"
+                  },
+                  "type": [
+                    "array",
+                    "null"
+                  ]
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "An asset's analyst runs, newest first",
+        "tags": [
+          "analyst"
+        ]
+      },
+      "post": {
+        "operationId": "startAnalystRun",
+        "parameters": [
+          {
+            "description": "Resource id",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Resource id",
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalystRun"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Run the AI analyst on an asset (refused when the key is missing or the monthly cap is reached)",
+        "tags": [
+          "analyst"
         ]
       }
     },

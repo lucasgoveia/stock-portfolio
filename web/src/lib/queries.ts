@@ -68,3 +68,8 @@ export const ratingWeightsQuery = queryOptions({
   queryKey: ['settings', 'rating-weights'] as const,
   queryFn: () => unwrap(api.GET('/api/settings/rating-weights')),
 })
+
+export const analystUsageQuery = queryOptions({
+  queryKey: ['analyst', 'usage'] as const,
+  queryFn: () => unwrap(api.GET('/api/analyst/usage')),
+})

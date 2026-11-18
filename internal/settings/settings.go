@@ -45,7 +45,12 @@ func key(group string) string { return "params." + group }
 type Service struct {
 	q    *db.Queries
 	keys []config.KeyStatus
+	// usage reports this month's AI spend; nil means zero.
+	usage func(context.Context) (decimal.Decimal, error)
 }
+
+// UseUsage sets where Status reads the AI analyst's month-to-date spend from.
+func (s *Service) UseUsage(f func(context.Context) (decimal.Decimal, error)) { s.usage = f }
 
 // NewService builds a Service. keys is the API key status reported by
 // Status (from config.Config.KeyStatuses); it may be nil.
@@ -115,7 +120,7 @@ type Tactical struct {
 	MaxOpen int `json:"max_open" doc:"Open tactical positions before a warning"`
 }
 
-// AI holds the AI analyst settings (#33 reads them).
+// AI holds the AI analyst settings.
 type AI struct {
 	Model         string `json:"model" doc:"Model used by the AI analyst"`
 	MonthlyCapUSD Dec    `json:"monthly_cap_usd" doc:"Spending cap per month (USD)"`
@@ -519,8 +524,15 @@ type StatusReport struct {
 
 // Status reports which keys are configured (never their values) and the AI
 // analyst's month-to-date spend.
-func (s *Service) Status(context.Context) (StatusReport, error) {
+func (s *Service) Status(ctx context.Context) (StatusReport, error) {
 	keys := append([]config.KeyStatus{}, s.keys...)
-	// TODO(#33): fill from the AI analyst's usage ledger once it exists.
-	return StatusReport{Keys: keys, AIUsageUSD: money.New(zero)}, nil
+	spent := zero
+	if s.usage != nil {
+		v, err := s.usage(ctx)
+		if err != nil {
+			return StatusReport{}, err
+		}
+		spent = v
+	}
+	return StatusReport{Keys: keys, AIUsageUSD: money.New(spent)}, nil
 }

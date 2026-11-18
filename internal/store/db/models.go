@@ -21,6 +21,21 @@ type Alert struct {
 	ResolvedAt   sql.NullString
 }
 
+type AnalystRun struct {
+	ID           int64
+	AssetID      int64
+	Model        string
+	Status       string
+	Inputs       string
+	Output       string
+	InputTokens  int64
+	OutputTokens int64
+	CostUsd      string
+	Approvals    string
+	Error        string
+	CreatedAt    string
+}
+
 type Asset struct {
 	ID        int64
 	Ticker    string

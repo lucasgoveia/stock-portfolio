@@ -56,7 +56,7 @@ func OpenAPI(opts ...Option) *huma.OpenAPI {
 func AllRoutes() []Option {
 	return []Option{
 		WithAssets(nil), WithCash(nil), WithRatings(nil), WithResearch(nil), WithTrades(nil),
-		WithAlerts(nil), WithThesis(nil), WithValuation(nil), WithPortfolio(nil), WithJobs(nil), WithTactical(nil, nil), WithTaxes(nil), WithDividends(nil), WithCorporateActions(nil), WithPerformance(nil), WithSettings(nil), WithFundamentals(nil),
+		WithAlerts(nil), WithThesis(nil), WithValuation(nil), WithPortfolio(nil), WithJobs(nil), WithTactical(nil, nil), WithTaxes(nil), WithDividends(nil), WithCorporateActions(nil), WithPerformance(nil), WithSettings(nil), WithFundamentals(nil), WithAnalyst(nil),
 	}
 }
 
@@ -86,7 +86,7 @@ func build(opts ...Option) (chi.Router, huma.API) {
 // ambiguousNames are type names used by more than one domain package; their
 // schemas are prefixed with the package name (portfolio.Position becomes
 // PortfolioPosition).
-var ambiguousNames = map[string]bool{"Position": true}
+var ambiguousNames = map[string]bool{"Position": true, "Run": true, "Usage": true}
 
 func schemaName(t reflect.Type, hint string) string {
 	name := huma.DefaultSchemaNamer(t, hint)
