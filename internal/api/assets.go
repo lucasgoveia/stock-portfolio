@@ -2,7 +2,6 @@ package api
 
 import (
 	"encoding/json"
-	"errors"
 	"net/http"
 	"strconv"
 
@@ -28,29 +27,6 @@ type assetJSON struct {
 
 func toJSON(a db.Asset) assetJSON {
 	return assetJSON{a.ID, a.Ticker, a.Name, a.Market, a.Currency, a.Kind, a.Sleeve, a.Status, a.Benchmark, a.CreatedAt, a.UpdatedAt}
-}
-
-func writeJSON(w http.ResponseWriter, code int, v any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(code)
-	_ = json.NewEncoder(w).Encode(v)
-}
-
-func writeError(w http.ResponseWriter, err error) {
-	code := http.StatusInternalServerError
-	switch {
-	case errors.Is(err, assets.ErrValidation):
-		code = http.StatusBadRequest
-	case errors.Is(err, assets.ErrNotFound):
-		code = http.StatusNotFound
-	case errors.Is(err, assets.ErrDuplicate), errors.Is(err, assets.ErrInvalidTransition):
-		code = http.StatusConflict
-	}
-	msg := err.Error()
-	if code == http.StatusInternalServerError {
-		msg = "internal error"
-	}
-	writeJSON(w, code, map[string]string{"error": msg})
 }
 
 func badRequest(w http.ResponseWriter, msg string) {

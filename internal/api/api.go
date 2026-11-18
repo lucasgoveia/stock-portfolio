@@ -10,13 +10,15 @@ import (
 	"github.com/lucasgoveia/stock-portfolio/internal/assets"
 )
 
-// NewRouter builds the HTTP router. assetSvc may be nil only in tests that do
-// not touch asset routes.
-func NewRouter(assetSvc *assets.Service) http.Handler {
+// Option configures optional router dependencies.
+type Option func(chi.Router)
+
+// NewRouter builds the HTTP router.
+func NewRouter(opts ...Option) http.Handler {
 	r := chi.NewRouter()
 	r.Get("/api/health", health)
-	if assetSvc != nil {
-		mountAssets(r, assetSvc)
+	for _, o := range opts {
+		o(r)
 	}
 	return r
 }
@@ -24,4 +26,9 @@ func NewRouter(assetSvc *assets.Service) http.Handler {
 func health(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+}
+
+// WithAssets mounts the asset routes.
+func WithAssets(svc *assets.Service) Option {
+	return func(r chi.Router) { mountAssets(r, svc) }
 }

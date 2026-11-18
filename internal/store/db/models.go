@@ -4,6 +4,23 @@
 
 package db
 
+import (
+	"database/sql"
+)
+
+type Alert struct {
+	ID           int64
+	Type         string
+	AssetID      sql.NullInt64
+	DedupeKey    string
+	Payload      string
+	State        string
+	SnoozedUntil sql.NullString
+	CreatedAt    string
+	UpdatedAt    string
+	ResolvedAt   sql.NullString
+}
+
 type Asset struct {
 	ID        int64
 	Ticker    string

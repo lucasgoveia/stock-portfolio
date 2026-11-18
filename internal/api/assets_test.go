@@ -19,7 +19,7 @@ func newServer(t *testing.T) http.Handler {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = conn.Close() })
-	return NewRouter(assets.NewService(conn))
+	return NewRouter(WithAssets(assets.NewService(conn)))
 }
 
 func do(t *testing.T, h http.Handler, method, path, body string) (int, map[string]any, []map[string]any) {
