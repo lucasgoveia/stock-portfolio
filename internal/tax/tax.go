@@ -37,8 +37,9 @@ func NewService(a *assets.Service, t *trades.Service, d *dividends.Service, cloc
 // Params returns the tax rules in use.
 func (s *Service) Params() engine.TaxParams { return s.params }
 
-// Sales returns every realized B3 sale, oldest first. A sale is a day trade
-// when the same asset was also bought that day (spec §11.2: flagged).
+// Sales returns every realized B3 sale, oldest first. The part of a sale matched against
+// same-day buys is a day trade at those buys' cost (spec §11.2); the rest is
+// swing at the average cost.
 func (s *Service) Sales(ctx context.Context) ([]engine.TaxSale, error) {
 	list, err := s.assets.List(ctx, assets.Filter{Market: "B3"})
 	if err != nil {
@@ -46,26 +47,25 @@ func (s *Service) Sales(ctx context.Context) ([]engine.TaxSale, error) {
 	}
 	var out []engine.TaxSale
 	for _, a := range list {
-		ts, err := s.trades.List(ctx, a.ID)
-		if err != nil {
-			return nil, err
-		}
 		pos, err := s.trades.PositionAt(ctx, a.ID, "")
 		if err != nil {
 			return nil, err
 		}
-		boughtOn := map[string]bool{}
-		for _, t := range ts {
-			if t.Side == trades.SideBuy {
-				boughtOn[t.Date] = true
-			}
-		}
+		tactical := a.Sleeve == assets.SleeveTactical
+		id := strconv.FormatInt(a.ID, 10)
 		for _, sl := range pos.Sales {
-			out = append(out, engine.TaxSale{
-				AssetID: strconv.FormatInt(a.ID, 10), Date: sl.Date, Kind: a.Kind,
-				Proceeds: sl.Proceeds, Gain: sl.GainBRL, DayTrade: boughtOn[sl.Date],
-				Tactical: a.Sleeve == assets.SleeveTactical,
-			})
+			if sl.DayTradeQuantity.IsPositive() {
+				out = append(out, engine.TaxSale{
+					AssetID: id, Date: sl.Date, Kind: a.Kind, Proceeds: sl.DayTradeProceeds,
+					Gain: sl.DayTradeGainBRL, DayTrade: true, Tactical: tactical,
+				})
+			}
+			if sl.Quantity.GreaterThan(sl.DayTradeQuantity) {
+				out = append(out, engine.TaxSale{
+					AssetID: id, Date: sl.Date, Kind: a.Kind, Proceeds: sl.Proceeds.Sub(sl.DayTradeProceeds),
+					Gain: sl.GainBRL.Sub(sl.DayTradeGainBRL), Tactical: tactical,
+				})
+			}
 		}
 	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].Date < out[j].Date })

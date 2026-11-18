@@ -1889,6 +1889,15 @@
           "date": {
             "type": "string"
           },
+          "day_trade_gain_brl": {
+            "type": "string"
+          },
+          "day_trade_proceeds": {
+            "type": "string"
+          },
+          "day_trade_quantity": {
+            "type": "string"
+          },
           "gain": {
             "type": "string"
           },
@@ -1913,7 +1922,10 @@
           "proceeds",
           "cost_basis",
           "gain",
-          "gain_brl"
+          "gain_brl",
+          "day_trade_quantity",
+          "day_trade_proceeds",
+          "day_trade_gain_brl"
         ],
         "type": "object"
       },

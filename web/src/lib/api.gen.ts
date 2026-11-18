@@ -1580,6 +1580,9 @@ export interface components {
         Sale: {
             cost_basis: string;
             date: string;
+            day_trade_gain_brl: string;
+            day_trade_proceeds: string;
+            day_trade_quantity: string;
             gain: string;
             gain_brl: string;
             proceeds: string;
