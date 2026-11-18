@@ -17,6 +17,7 @@ import (
 	"github.com/lucasgoveia/stock-portfolio/internal/assets"
 	"github.com/lucasgoveia/stock-portfolio/internal/config"
 	"github.com/lucasgoveia/stock-portfolio/internal/store"
+	"github.com/lucasgoveia/stock-portfolio/web"
 )
 
 func main() {
@@ -43,6 +44,7 @@ func run() error {
 	srv := &http.Server{Addr: cfg.ListenAddr, Handler: api.NewRouter(
 		api.WithAssets(assets.NewService(conn)),
 		api.WithAlerts(alerts.New(conn, nil)),
+		api.WithUI(web.Dist()),
 	), ReadHeaderTimeout: 10 * time.Second}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
