@@ -92,6 +92,20 @@ type ContributionOrder struct {
 	UpdatedAt      string
 }
 
+type CorporateAction struct {
+	ID           int64
+	AssetID      int64
+	Kind         string
+	ExDate       string
+	Factor       string
+	CostPerShare string
+	Status       string
+	Source       string
+	PriceRatio   sql.NullString
+	Note         string
+	CreatedAt    string
+}
+
 type Dividend struct {
 	ID             int64
 	AssetID        int64

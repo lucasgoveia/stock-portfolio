@@ -18,6 +18,7 @@ import (
 	"github.com/lucasgoveia/stock-portfolio/internal/assets"
 	"github.com/lucasgoveia/stock-portfolio/internal/cash"
 	"github.com/lucasgoveia/stock-portfolio/internal/config"
+	"github.com/lucasgoveia/stock-portfolio/internal/corpactions"
 	"github.com/lucasgoveia/stock-portfolio/internal/dividends"
 	"github.com/lucasgoveia/stock-portfolio/internal/jobs"
 	"github.com/lucasgoveia/stock-portfolio/internal/marketdata"
@@ -81,6 +82,8 @@ func run() error {
 	dividendSvc := dividends.NewService(conn, assetSvc, tradeSvc, cashSvc, nil)
 	taxSvc := tax.NewService(assetSvc, tradeSvc, dividendSvc, nil)
 	deps.Dividends = dividendSvc
+	actionSvc := corpactions.NewService(conn, assetSvc, tradeSvc, alertSvc, nil)
+	deps.Actions = actionSvc
 	portfolioSvc := portfolio.NewService(portfolio.Deps{
 		Conn: conn, Assets: assetSvc, Trades: tradeSvc, Cash: cashSvc, Rates: rateStore, Ratings: ratingSvc,
 		Valuation: valuationSvc, Thesis: thesisSvc, Research: researchSvc, Alerts: alertSvc, Tactical: tacticalSvc, Tax: taxSvc, Dividends: dividendSvc,
@@ -89,6 +92,7 @@ func run() error {
 		{Name: "thesis", Run: thesisSvc.Evaluate},
 		{Name: "fair_value", Run: valuationSvc.Evaluate},
 		{Name: "portfolio", Run: portfolioSvc.Evaluate},
+		{Name: "corporate_actions", Run: actionSvc.Evaluate},
 	}
 
 	if cmd == "backfill" {
@@ -121,6 +125,7 @@ func run() error {
 		api.WithTactical(tacticalSvc, portfolioSvc),
 		api.WithTaxes(taxSvc),
 		api.WithDividends(dividendSvc),
+		api.WithCorporateActions(actionSvc),
 		api.WithUI(web.Dist()),
 	), ReadHeaderTimeout: 10 * time.Second}
 	go func() {

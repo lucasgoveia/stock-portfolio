@@ -56,9 +56,11 @@ const SEVERITY: Record<string, number> = {
   deploy_cash: 11,
   tactical_count: 12,
   tax_pool_conflict: 4.5,
+  price_jump_unexplained: 1.5,
+  corporate_action_pending: 1.6,
 }
 
-const SEVERE = new Set(['tactical_stop_hit', 'thesis_broken', 'raise_cash', 'overweight', 'below_floor', 'data_fetch_failed'])
+const SEVERE = new Set(['price_jump_unexplained', 'tactical_stop_hit', 'thesis_broken', 'raise_cash', 'overweight', 'below_floor', 'data_fetch_failed'])
 
 function AlertsPage() {
   const search = Route.useSearch()
@@ -234,6 +236,10 @@ function describe(a: Alert): string {
       return `The setup expired on ${str(p.expires_on)} without the catalyst. Exit, or extend the setup.`
     case 'tactical_count':
       return `${str(p.open)} open tactical positions; the rules allow ${str(p.max)}.`
+    case 'price_jump_unexplained':
+      return `Raw close moved from ${money(str(p.before))} to ${money(str(p.after))} on ${str(p.date)} (ratio ${str(p.ratio)}) with no split or bonus on record. Enter the event if there was one.`
+    case 'corporate_action_pending':
+      return `${str(p.count)} announced event(s) wait for confirmation before the position changes.`
     case 'tax_pool_conflict':
       return 'Tactical exits this month used exemption room the core trims need. Delay the trims to next month or accept the tax.'
     case 'data_fetch_failed':
@@ -383,6 +389,13 @@ function AlertAction({ alert: a }: { alert: Alert }) {
       return (
         <Link to="/contributions" className={actionClass}>
           Plan a contribution
+        </Link>
+      )
+    case 'price_jump_unexplained':
+    case 'corporate_action_pending':
+      return (
+        <Link to="/trades" search={{ tab: 'actions' }} className={actionClass}>
+          Review corporate actions
         </Link>
       )
     case 'missing_fair_value':

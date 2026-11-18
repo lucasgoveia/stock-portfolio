@@ -173,7 +173,7 @@ func (s *Service) Create(ctx context.Context, assetID int64, in CreateInput) (Tr
 	if err != nil {
 		return Trade{}, err
 	}
-	pos, err := Replay(assetID, all)
+	pos, err := replay(ctx, q, assetID, all)
 	if err != nil {
 		return Trade{}, err // tx rolled back
 	}
@@ -212,7 +212,7 @@ func (s *Service) Delete(ctx context.Context, id int64) error {
 	if err != nil {
 		return err
 	}
-	pos, err := Replay(row.AssetID, all)
+	pos, err := replay(ctx, q, row.AssetID, all)
 	if err != nil {
 		return err
 	}
@@ -244,6 +244,94 @@ func (s *Service) syncStatus(ctx context.Context, a db.Asset, pos Position) erro
 	return nil
 }
 
+// events loads an asset's confirmed corporate actions.
+func events(ctx context.Context, q *db.Queries, assetID int64) ([]Event, error) {
+	rows, err := q.ConfirmedCorporateActions(ctx, assetID)
+	if err != nil {
+		return nil, fmt.Errorf("corporate actions: %w", err)
+	}
+	out := make([]Event, 0, len(rows))
+	for _, r := range rows {
+		f, err := decimal.NewFromString(r.Factor)
+		if err != nil {
+			return nil, err
+		}
+		c, err := decimal.NewFromString(r.CostPerShare)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, Event{Date: r.ExDate, Kind: r.Kind, Factor: f, CostPerShare: c})
+	}
+	return out, nil
+}
+
+// replay replays an asset's trades with its confirmed corporate actions.
+// Bonus shares of USD assets are converted at the FX of the last trade
+// before the event (no rate store here).
+func replay(ctx context.Context, q *db.Queries, assetID int64, ts []Trade) (Position, error) {
+	ev, err := events(ctx, q, assetID)
+	if err != nil {
+		return Position{}, err
+	}
+	for i := range ev {
+		for _, t := range ts {
+			if t.Date < ev[i].Date {
+				ev[i].FXRate = t.FXRate
+			}
+		}
+	}
+	return ReplayWithEvents(assetID, ts, ev)
+}
+
+// PositionAt replays an asset's trades and events up to and including date
+// (empty: all), for dividends on a record date and year-end reports.
+func (s *Service) PositionAt(ctx context.Context, assetID int64, date string) (Position, error) {
+	ts, err := s.List(ctx, assetID)
+	if err != nil {
+		return Position{}, err
+	}
+	q := db.New(s.conn)
+	if date == "" {
+		return replay(ctx, q, assetID, ts)
+	}
+	var upTo []Trade
+	for _, t := range ts {
+		if t.Date <= date {
+			upTo = append(upTo, t)
+		}
+	}
+	ev, err := events(ctx, q, assetID)
+	if err != nil {
+		return Position{}, err
+	}
+	var evUpTo []Event
+	for _, e := range ev {
+		if e.Date <= date {
+			for _, t := range upTo {
+				if t.Date < e.Date {
+					e.FXRate = t.FXRate
+				}
+			}
+			evUpTo = append(evUpTo, e)
+		}
+	}
+	return ReplayWithEvents(assetID, upTo, evUpTo)
+}
+
+// Revalidate replays an asset's history after a corporate action changes and
+// syncs the lifecycle status. It fails when the history becomes invalid.
+func (s *Service) Revalidate(ctx context.Context, assetID int64) error {
+	a, err := s.assets.Get(ctx, assetID)
+	if err != nil {
+		return err
+	}
+	pos, err := s.PositionAt(ctx, assetID, "")
+	if err != nil {
+		return err
+	}
+	return s.syncStatus(ctx, a, pos)
+}
+
 // List returns an asset's trades ordered by date.
 func (s *Service) List(ctx context.Context, assetID int64) ([]Trade, error) {
 	if _, err := s.assets.Get(ctx, assetID); err != nil {
@@ -266,7 +354,7 @@ func (s *Service) Position(ctx context.Context, assetID int64) (Position, error)
 	if err != nil {
 		return Position{}, err
 	}
-	p, err := Replay(assetID, ts)
+	p, err := replay(ctx, db.New(s.conn), assetID, ts)
 	if err != nil {
 		return Position{}, err
 	}
@@ -292,7 +380,7 @@ func (s *Service) Positions(ctx context.Context) ([]Position, error) {
 		for j < len(all) && all[j].AssetID == all[i].AssetID {
 			j++
 		}
-		p, err := Replay(all[i].AssetID, all[i:j])
+		p, err := replay(ctx, db.New(s.conn), all[i].AssetID, all[i:j])
 		if err != nil {
 			return nil, err
 		}

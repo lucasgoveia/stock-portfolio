@@ -10,7 +10,6 @@ import (
 	"github.com/lucasgoveia/stock-portfolio/internal/assets"
 	"github.com/lucasgoveia/stock-portfolio/internal/dividends"
 	"github.com/lucasgoveia/stock-portfolio/internal/engine"
-	"github.com/lucasgoveia/stock-portfolio/internal/trades"
 )
 
 // ForeignRate is the annual rate on foreign applications (Lei 14.754/2023).
@@ -88,17 +87,7 @@ func (s *Service) Annual(ctx context.Context, year int) (AnnualReport, error) {
 	market := map[int64]string{}
 	for _, a := range list {
 		ticker[a.ID], market[a.ID] = a.Ticker, a.Market
-		ts, err := s.trades.List(ctx, a.ID)
-		if err != nil {
-			return r, err
-		}
-		var upTo []trades.Trade
-		for _, t := range ts {
-			if t.Date <= yearEnd {
-				upTo = append(upTo, t)
-			}
-		}
-		pos, err := trades.Replay(a.ID, upTo)
+		pos, err := s.trades.PositionAt(ctx, a.ID, yearEnd)
 		if err != nil {
 			return r, err
 		}
@@ -109,7 +98,11 @@ func (s *Service) Annual(ctx context.Context, year int) (AnnualReport, error) {
 		if a.Market != assets.MarketUS {
 			continue
 		}
-		for _, sl := range pos.Sales {
+		all, err := s.trades.PositionAt(ctx, a.ID, "")
+		if err != nil {
+			return r, err
+		}
+		for _, sl := range all.Sales {
 			y, _ := strconv.Atoi(sl.Date[:4])
 			tot(y).gains = tot(y).gains.Add(sl.GainBRL)
 			if y == year {

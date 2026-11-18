@@ -47,10 +47,48 @@ const avgScale = 8
 // do not change the average cost. Selling more than held returns
 // ErrInsufficientQuantity.
 func Replay(assetID int64, ts []Trade) (Position, error) {
+	return ReplayWithEvents(assetID, ts, nil)
+}
+
+// Event is a confirmed corporate action (spec §11.1). Factor multiplies the
+// shares held before Date; total cost is unchanged except for bonus shares,
+// which enter at CostPerShare (asset currency, BRL via FXRate).
+type Event struct {
+	Date         string
+	Kind         string // split, reverse_split, bonus
+	Factor       decimal.Decimal
+	CostPerShare decimal.Decimal
+	FXRate       decimal.Decimal // BRL per asset currency unit; zero means 1
+}
+
+// ReplayWithEvents is Replay with corporate actions, sorted by date. An event
+// applies before the trades of its date (Date is the ex-date).
+func ReplayWithEvents(assetID int64, ts []Trade, events []Event) (Position, error) {
 	p := Position{AssetID: assetID, Sales: []Sale{}}
 	zero := decimal.Zero
 	qty, cost, costBRL := zero, zero, zero
+	ei := 0
+	apply := func(before string) {
+		for ; ei < len(events) && (before == "" || events[ei].Date <= before); ei++ {
+			e := events[ei]
+			if !e.Factor.IsPositive() {
+				continue
+			}
+			newQty := qty.Mul(e.Factor)
+			if e.Kind == "bonus" {
+				added := newQty.Sub(qty)
+				fx := e.FXRate
+				if fx.IsZero() {
+					fx = decimal.NewFromInt(1)
+				}
+				cost = cost.Add(added.Mul(e.CostPerShare))
+				costBRL = costBRL.Add(added.Mul(e.CostPerShare).Mul(fx))
+			}
+			qty = newQty
+		}
+	}
 	for _, t := range ts {
+		apply(t.Date)
 		p.Currency = t.Currency
 		switch t.Side {
 		case SideBuy:
@@ -84,6 +122,7 @@ func Replay(assetID int64, ts []Trade) (Position, error) {
 			return Position{}, validationf("unknown side %q", t.Side)
 		}
 	}
+	apply("")
 	p.Quantity = qty
 	p.TotalCost = cost.Round(avgScale)
 	p.TotalCostBRL = costBRL.Round(avgScale)

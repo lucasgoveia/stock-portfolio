@@ -50,7 +50,7 @@ func (s *Service) Sales(ctx context.Context) ([]engine.TaxSale, error) {
 		if err != nil {
 			return nil, err
 		}
-		pos, err := trades.Replay(a.ID, ts)
+		pos, err := s.trades.PositionAt(ctx, a.ID, "")
 		if err != nil {
 			return nil, err
 		}

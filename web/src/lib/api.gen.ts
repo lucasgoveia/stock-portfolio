@@ -125,6 +125,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/assets/{id}/corporate-actions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Enter a split, reverse split or bonus by hand */
+        post: operations["recordCorporateAction"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/assets/{id}/dividends": {
         parameters: {
             query?: never;
@@ -579,6 +596,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/corporate-actions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Corporate actions, newest first */
+        get: operations["listCorporateActions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/corporate-actions/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete an action (refused when later sales need it) */
+        delete: operations["deleteCorporateAction"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/corporate-actions/{id}/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Apply a detected action to the position */
+        post: operations["confirmCorporateAction"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/corporate-actions/{id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Dismiss a detected action */
+        post: operations["rejectCorporateAction"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/dividends": {
         parameters: {
             query?: never;
@@ -943,6 +1028,39 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        Action: {
+            /** Format: int64 */
+            asset_id: number;
+            cost_per_share: string;
+            created_at: string;
+            ex_date: string;
+            factor: string;
+            /** Format: int64 */
+            id: number;
+            /** @enum {string} */
+            kind: "split" | "reverse_split" | "bonus";
+            note: string;
+            price_ratio: string | null;
+            ratio_matches: boolean | null;
+            source: string;
+            /** @enum {string} */
+            status: "detected" | "confirmed" | "rejected";
+        };
+        ActionConfirm: {
+            /** @description Required for a bonus */
+            cost_per_share?: string;
+        };
+        ActionCreate: {
+            /** @description Bonus only: cost per new share declared by the company */
+            cost_per_share?: string;
+            /** @description First trading day without the right, YYYY-MM-DD */
+            ex_date: string;
+            /** @description Shares multiplier: 2 for 2-for-1, 0.1 for 1-for-10, 1.1 for a 10% bonus */
+            factor: string;
+            /** @enum {string} */
+            kind: "split" | "reverse_split" | "bonus";
+            note?: string;
+        };
         Alert: {
             /** Format: int64 */
             asset_id: number | null;
@@ -2007,6 +2125,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Beta"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    recordCorporateAction: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Resource id */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ActionCreate"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Action"];
                 };
             };
             /** @description Error */
@@ -3272,6 +3426,136 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Contribution"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listCorporateActions: {
+        parameters: {
+            query?: {
+                status?: "detected" | "confirmed" | "rejected" | "";
+                asset_id?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Action"][] | null;
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteCorporateAction: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Resource id */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    confirmCorporateAction: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Resource id */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ActionConfirm"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Action"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    rejectCorporateAction: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Resource id */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Action"];
                 };
             };
             /** @description Error */

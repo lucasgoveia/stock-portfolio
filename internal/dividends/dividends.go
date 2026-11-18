@@ -118,24 +118,14 @@ func validDate(s string) bool {
 
 func nullStr(s string) sql.NullString { return sql.NullString{String: s, Valid: s != ""} }
 
-// HeldAt is the quantity of an asset held at the end of date.
+// HeldAt is the quantity of an asset held at the end of date, after
+// confirmed corporate actions.
 func (s *Service) HeldAt(ctx context.Context, assetID int64, date string) (decimal.Decimal, error) {
-	ts, err := s.trades.List(ctx, assetID)
+	p, err := s.trades.PositionAt(ctx, assetID, date)
 	if err != nil {
 		return decimal.Zero, err
 	}
-	q := decimal.Zero
-	for _, t := range ts {
-		if t.Date > date {
-			break
-		}
-		if t.Side == trades.SideBuy {
-			q = q.Add(t.Quantity)
-		} else {
-			q = q.Sub(t.Quantity)
-		}
-	}
-	return q, nil
+	return p.Quantity, nil
 }
 
 // payerMonthBefore is the gross BRL dividends already confirmed from the same

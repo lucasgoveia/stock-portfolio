@@ -56,7 +56,7 @@ func OpenAPI(opts ...Option) *huma.OpenAPI {
 func AllRoutes() []Option {
 	return []Option{
 		WithAssets(nil), WithCash(nil), WithRatings(nil), WithResearch(nil), WithTrades(nil),
-		WithAlerts(nil), WithThesis(nil), WithValuation(nil), WithPortfolio(nil), WithJobs(nil), WithTactical(nil, nil), WithTaxes(nil), WithDividends(nil),
+		WithAlerts(nil), WithThesis(nil), WithValuation(nil), WithPortfolio(nil), WithJobs(nil), WithTactical(nil, nil), WithTaxes(nil), WithDividends(nil), WithCorporateActions(nil),
 	}
 }
 

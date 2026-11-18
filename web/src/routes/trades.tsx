@@ -4,6 +4,7 @@ import { Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 
+import { ActionsTab } from '@/components/actions-tab'
 import { DividendsTab } from '@/components/dividends-tab'
 import { Field, FormError, NativeSelect } from '@/components/form'
 import { PageHeader } from '@/components/page-header'
@@ -25,6 +26,7 @@ const TABS = [
   { id: 'trades', label: 'Trades' },
   { id: 'cash', label: 'Cash' },
   { id: 'dividends', label: 'Dividends' },
+  { id: 'actions', label: 'Corporate actions' },
   { id: 'positions', label: 'Positions' },
 ] as const
 
@@ -38,7 +40,7 @@ function Page() {
         title="Trades & cash"
         description="Record what you executed at the broker. Positions and average cost follow from these entries."
       />
-      <div role="tablist" aria-label="Section" className="bg-muted mb-5 inline-flex rounded-lg p-1">
+      <div role="tablist" aria-label="Section" className="bg-muted mb-5 inline-flex max-w-full overflow-x-auto rounded-lg p-1 [scrollbar-width:none]">
         {TABS.map((t) => (
           <button
             key={t.id}
@@ -46,7 +48,7 @@ function Page() {
             aria-selected={tab === t.id}
             onClick={() => navigate({ search: { tab: t.id === 'trades' ? undefined : t.id } })}
             className={cn(
-              'rounded-md px-3 py-1 text-sm transition-colors',
+              'shrink-0 rounded-md px-3 py-1 text-sm transition-colors',
               tab === t.id ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
             )}
           >
@@ -57,6 +59,7 @@ function Page() {
       {tab === 'trades' && <TradesTab search={search} />}
       {tab === 'cash' && <CashTab />}
       {tab === 'dividends' && <DividendsTab />}
+      {tab === 'actions' && <ActionsTab />}
       {tab === 'positions' && <PositionsTab />}
     </>
   )

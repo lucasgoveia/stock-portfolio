@@ -1,6 +1,124 @@
 {
   "components": {
     "schemas": {
+      "Action": {
+        "additionalProperties": false,
+        "properties": {
+          "asset_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "cost_per_share": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "ex_date": {
+            "type": "string"
+          },
+          "factor": {
+            "type": "string"
+          },
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "kind": {
+            "enum": [
+              "split",
+              "reverse_split",
+              "bonus"
+            ],
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          },
+          "price_ratio": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "ratio_matches": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "source": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "detected",
+              "confirmed",
+              "rejected"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "asset_id",
+          "kind",
+          "ex_date",
+          "factor",
+          "cost_per_share",
+          "status",
+          "source",
+          "price_ratio",
+          "ratio_matches",
+          "note",
+          "created_at"
+        ],
+        "type": "object"
+      },
+      "ActionConfirm": {
+        "additionalProperties": false,
+        "properties": {
+          "cost_per_share": {
+            "description": "Required for a bonus",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ActionCreate": {
+        "additionalProperties": false,
+        "properties": {
+          "cost_per_share": {
+            "description": "Bonus only: cost per new share declared by the company",
+            "type": "string"
+          },
+          "ex_date": {
+            "description": "First trading day without the right, YYYY-MM-DD",
+            "type": "string"
+          },
+          "factor": {
+            "description": "Shares multiplier: 2 for 2-for-1, 0.1 for 1-for-10, 1.1 for a 10% bonus",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "split",
+              "reverse_split",
+              "bonus"
+            ],
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "ex_date",
+          "factor"
+        ],
+        "type": "object"
+      },
       "Alert": {
         "additionalProperties": false,
         "properties": {
@@ -3323,6 +3441,61 @@
         ]
       }
     },
+    "/api/assets/{id}/corporate-actions": {
+      "post": {
+        "operationId": "recordCorporateAction",
+        "parameters": [
+          {
+            "description": "Resource id",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Resource id",
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ActionCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Action"
+                }
+              }
+            },
+            "description": "Created"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Enter a split, reverse split or bonus by hand",
+        "tags": [
+          "corporate-actions"
+        ]
+      }
+    },
     "/api/assets/{id}/dividends": {
       "post": {
         "operationId": "recordDividend",
@@ -5156,6 +5329,207 @@
         "summary": "Mark a plan order done, skipped or open",
         "tags": [
           "portfolio"
+        ]
+      }
+    },
+    "/api/corporate-actions": {
+      "get": {
+        "operationId": "listCorporateActions",
+        "parameters": [
+          {
+            "explode": false,
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "enum": [
+                "detected",
+                "confirmed",
+                "rejected",
+                ""
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "explode": false,
+            "in": "query",
+            "name": "asset_id",
+            "schema": {
+              "format": "int64",
+              "minimum": 0,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Action"
+                  },
+                  "type": [
+                    "array",
+                    "null"
+                  ]
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Corporate actions, newest first",
+        "tags": [
+          "corporate-actions"
+        ]
+      }
+    },
+    "/api/corporate-actions/{id}": {
+      "delete": {
+        "operationId": "deleteCorporateAction",
+        "parameters": [
+          {
+            "description": "Resource id",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Resource id",
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Delete an action (refused when later sales need it)",
+        "tags": [
+          "corporate-actions"
+        ]
+      }
+    },
+    "/api/corporate-actions/{id}/confirm": {
+      "post": {
+        "operationId": "confirmCorporateAction",
+        "parameters": [
+          {
+            "description": "Resource id",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Resource id",
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ActionConfirm"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Action"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Apply a detected action to the position",
+        "tags": [
+          "corporate-actions"
+        ]
+      }
+    },
+    "/api/corporate-actions/{id}/reject": {
+      "post": {
+        "operationId": "rejectCorporateAction",
+        "parameters": [
+          {
+            "description": "Resource id",
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "description": "Resource id",
+              "format": "int64",
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Action"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Dismiss a detected action",
+        "tags": [
+          "corporate-actions"
         ]
       }
     },

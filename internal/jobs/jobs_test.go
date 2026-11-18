@@ -200,7 +200,7 @@ func TestDailyRunPersistsAndIsIdempotent(t *testing.T) {
 		t.Fatalf("evaluators ran %d times", *e.evals)
 	}
 	last, err := e.runner.Last(ctx)
-	if err != nil || last.Status != RunOK || len(last.Steps) != 10 || last.FinishedAt == "" {
+	if err != nil || last.Status != RunOK || len(last.Steps) != 11 || last.FinishedAt == "" {
 		t.Fatalf("last = %+v, %v", last, err)
 	}
 }
@@ -358,7 +358,10 @@ type fakeFeed struct{}
 
 func (fakeFeed) CorporateActions(_ context.Context, ticker string, _, _ time.Time) (marketdata.CorporateActions, error) {
 	pay := date(2026, 12, 5)
-	return marketdata.CorporateActions{Ticker: ticker, CashDividends: []marketdata.CashDividend{
+	return marketdata.CorporateActions{Ticker: ticker, StockDividends: []marketdata.StockDividend{
+		{Label: "DESDOBRAMENTO", Factor: m("2"), CompleteFactor: "2 para 1", LastDatePrior: date(2026, 10, 23)},
+		{Label: "SUBSCRICAO", Factor: m("1")},
+	}, CashDividends: []marketdata.CashDividend{
 		{Label: "JCP", Rate: m("0.5"), LastDatePrior: date(2026, 11, 10), PaymentDate: &pay},
 		{Label: "DIVIDENDO", Rate: m("0.2"), LastDatePrior: date(2026, 11, 10)},
 	}}, nil
@@ -389,5 +392,31 @@ func TestDividendStep(t *testing.T) {
 	if err != nil || len(sink.got) == 0 || !strings.Contains(sink.got[0], "jcp 2026-11-10 2026-12-05 0.5 brapi") ||
 		!strings.Contains(sink.got[1], "dividend 2026-11-10  0.2 brapi") {
 		t.Fatalf("detect: %q %v %v", note, sink.got, err)
+	}
+}
+
+type fakeActions struct{ got []string }
+
+func (f *fakeActions) Detect(_ context.Context, id int64, kind, ex string, factor decimal.Decimal, src, note string) (bool, error) {
+	f.got = append(f.got, fmt.Sprintf("%d %s %s %s %s %s", id, kind, ex, factor, src, note))
+	return true, nil
+}
+
+func TestCorporateActionStep(t *testing.T) {
+	e := setup(t)
+	ctx := context.Background()
+	sink := &fakeActions{}
+	d := e.deps
+	d.DividendFeed, d.Actions = fakeFeed{}, sink
+	p := &pipeline{d: d, q: db.New(d.Conn)}
+	if _, err := e.conn.Exec(`UPDATE assets SET status = 'holding' WHERE ticker = 'WEGE3'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.corporateActions(ctx, date(2026, 11, 18)); err != nil {
+		t.Fatal(err)
+	}
+	// Friday 2026-10-23 is the last day with the right: ex-date Monday 10-26.
+	if len(sink.got) != 1 || !strings.Contains(sink.got[0], "split 2026-10-26 2 brapi DESDOBRAMENTO 2 para 1") {
+		t.Fatalf("detected = %v", sink.got)
 	}
 }

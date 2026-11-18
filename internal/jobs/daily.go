@@ -13,6 +13,7 @@ import (
 	"github.com/shopspring/decimal"
 
 	"github.com/lucasgoveia/stock-portfolio/internal/assets"
+	"github.com/lucasgoveia/stock-portfolio/internal/corpactions"
 	"github.com/lucasgoveia/stock-portfolio/internal/engine"
 	"github.com/lucasgoveia/stock-portfolio/internal/marketdata"
 	"github.com/lucasgoveia/stock-portfolio/internal/store/db"
@@ -63,13 +64,20 @@ type Deps struct {
 	// confirmation (spec §8.5). Either nil skips the step.
 	DividendFeed marketdata.DividendSource
 	Dividends    DividendSink
-	Evaluators   []Evaluator
-	Now          func() time.Time
+	// Actions queues splits, reverse splits and bonificações from the same feed.
+	Actions    ActionSink
+	Evaluators []Evaluator
+	Now        func() time.Time
 }
 
 // DividendSink queues detected payments (dividends.Service).
 type DividendSink interface {
 	Detect(ctx context.Context, assetID int64, kind, recordDate, payDate string, perShare decimal.Decimal, source string) (bool, error)
+}
+
+// ActionSink queues detected corporate actions (corpactions.Service).
+type ActionSink interface {
+	Detect(ctx context.Context, assetID int64, kind, exDate string, factor decimal.Decimal, source, note string) (bool, error)
 }
 
 // BetaWriter stores computed betas (ratings.Service).
@@ -102,6 +110,7 @@ func DailySteps(d Deps) []Step {
 		{"us_prices", p.usPrices},
 		{"indices", p.indices},
 		{"dividends", p.dividends},
+		{"corporate_actions", p.corporateActions},
 		{"beta", p.beta},
 		{"evaluate", p.evaluate},
 	}
@@ -270,6 +279,54 @@ func (p *pipeline) dividends(ctx context.Context, day time.Time) (string, error)
 		}
 	}
 	note := fmt.Sprintf("%d new payments to confirm", found)
+	if len(failed) > 0 {
+		return note, errors.New(strings.Join(failed, "; "))
+	}
+	return note, nil
+}
+
+// corporateActions queues share events announced for B3 holdings. brapi
+// gives the last day with the right; the ex-date is the next business day.
+func (p *pipeline) corporateActions(ctx context.Context, day time.Time) (string, error) {
+	if p.d.DividendFeed == nil || p.d.Actions == nil {
+		return "", ErrSkipped
+	}
+	held, err := p.d.Assets.List(ctx, assets.Filter{Status: assets.StatusHolding, Market: "B3"})
+	if err != nil {
+		return "", err
+	}
+	if len(held) == 0 {
+		return "no B3 holdings", ErrSkipped
+	}
+	found := 0
+	var failed []string
+	for _, a := range held {
+		ca, err := p.d.DividendFeed.CorporateActions(ctx, a.Ticker, day.Add(-dividendLookback), time.Time{})
+		if err != nil {
+			failed = append(failed, fmt.Sprintf("%s: %v", a.Ticker, err))
+			continue
+		}
+		for _, sd := range ca.StockDividends {
+			kind, ok := corpactions.KindFromLabel(sd.Label)
+			if !ok {
+				continue
+			}
+			ex := corpactions.NextBusinessDay(sd.LastDatePrior)
+			if sd.ExDate != nil {
+				ex = *sd.ExDate
+			}
+			note := strings.TrimSpace(sd.Label + " " + sd.CompleteFactor)
+			ok, err := p.d.Actions.Detect(ctx, a.ID, kind, ex.Format("2006-01-02"), sd.Factor.Decimal, "brapi", note)
+			if err != nil {
+				failed = append(failed, fmt.Sprintf("%s: %v", a.Ticker, err))
+				continue
+			}
+			if ok {
+				found++
+			}
+		}
+	}
+	note := fmt.Sprintf("%d new events to confirm", found)
 	if len(failed) > 0 {
 		return note, errors.New(strings.Join(failed, "; "))
 	}
