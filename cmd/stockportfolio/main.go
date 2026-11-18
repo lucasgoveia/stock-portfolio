@@ -67,7 +67,9 @@ func run() error {
 	rateStore := cash.NewRateStore(conn)
 	thesisSvc := thesis.NewService(conn, assetSvc, alertSvc, nil)
 	valuationSvc := valuation.NewService(conn, assetSvc, alertSvc, nil)
+	ratingSvc := ratings.NewService(conn, assetSvc, nil)
 	deps := marketDeps(cfg, conn, assetSvc, rateStore)
+	deps.Betas = ratingSvc
 	deps.Evaluators = []jobs.Evaluator{
 		{Name: "thesis", Run: thesisSvc.Evaluate},
 		{Name: "fair_value", Run: valuationSvc.Evaluate},
@@ -92,7 +94,7 @@ func run() error {
 	srv := &http.Server{Addr: cfg.ListenAddr, Handler: api.NewRouter(
 		api.WithAssets(assetSvc),
 		api.WithCash(cash.NewService(conn, rateStore, nil)),
-		api.WithRatings(ratings.NewService(conn, assetSvc, nil)),
+		api.WithRatings(ratingSvc),
 		api.WithResearch(research.NewService(conn, assetSvc, nil)),
 		api.WithTrades(trades.NewService(conn, assetSvc)),
 		api.WithAlerts(alertSvc),

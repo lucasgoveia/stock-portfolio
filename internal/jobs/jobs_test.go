@@ -159,7 +159,7 @@ func TestDailyRunPersistsAndIsIdempotent(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := map[string]string{"fx": "ok", "cdi": "ok", "tesouro_selic": "ok", "b3_quotes": "ok", "cotahist": "ok",
-		"us_prices": "skipped", "indices": "ok", "evaluate": "ok"}
+		"us_prices": "skipped", "indices": "ok", "beta": "skipped", "evaluate": "ok"}
 	got := stepStatus(res)
 	for k, v := range want {
 		if got[k] != v {
@@ -197,7 +197,7 @@ func TestDailyRunPersistsAndIsIdempotent(t *testing.T) {
 		t.Fatalf("evaluators ran %d times", *e.evals)
 	}
 	last, err := e.runner.Last(ctx)
-	if err != nil || last.Status != RunOK || len(last.Steps) != 8 || last.FinishedAt == "" {
+	if err != nil || last.Status != RunOK || len(last.Steps) != 9 || last.FinishedAt == "" {
 		t.Fatalf("last = %+v, %v", last, err)
 	}
 }
@@ -307,5 +307,46 @@ func TestNextRun(t *testing.T) {
 	}
 	if _, _, err := parseClock("7pm"); err == nil {
 		t.Error("bad clock must fail")
+	}
+}
+
+type fakeBetas struct{ got map[int64]string }
+
+func (f *fakeBetas) ApplyBeta(_ context.Context, id int64, ix string, b decimal.Decimal, weeks int) (bool, error) {
+	f.got[id] = ix + " " + b.StringFixed(2)
+	return true, nil
+}
+
+func TestBetaStep(t *testing.T) {
+	ctx := context.Background()
+	e := setup(t)
+	fb := &fakeBetas{got: map[int64]string{}}
+	e.deps.Betas = fb
+	// 70 weekly Fridays of ITUB4 (asset 2) moving exactly 2x IBOV.
+	start := date(2025, 7, 18)
+	a, ix := 30.0, 100000.0
+	for i := 0; i < 70; i++ {
+		day := start.AddDate(0, 0, 7*i).Format(dateLayout)
+		r := 0.01
+		if i%2 == 0 {
+			r = -0.012
+		}
+		ix *= 1 + r
+		a *= 1 + 2*r
+		if _, err := e.conn.Exec(`INSERT INTO asset_prices (asset_id, ref_date, source, close, fetched_at) VALUES (2, ?, 'cotahist', ?, 'x')`, day, decimal.NewFromFloat(a).String()); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := e.conn.Exec(`INSERT INTO index_points (index_code, ref_date, close) VALUES ('IBOV', ?, ?)`, day, decimal.NewFromFloat(ix).String()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	r := NewRunner(e.conn, e.alerts, DailySteps(e.deps), func() time.Time { return now })
+	res, err := r.Run(ctx)
+	if err != nil || stepStatus(res)["beta"] != StepOK {
+		t.Fatalf("run = %+v, %v", res.Steps, err)
+	}
+	// ITUB4 (asset 2) has history; WEGE3 and MSFT do not.
+	if len(fb.got) != 1 || fb.got[2][:5] != "IBOV " {
+		t.Fatalf("betas = %v", fb.got)
 	}
 }

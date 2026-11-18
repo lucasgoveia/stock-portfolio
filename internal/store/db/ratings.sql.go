@@ -10,9 +10,9 @@ import (
 )
 
 const createRating = `-- name: CreateRating :one
-INSERT INTO ratings (asset_id, rated_on, volatility, understanding, moat, predictability, horizon, reason)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-RETURNING id, asset_id, rated_on, volatility, understanding, moat, predictability, horizon, reason, created_at
+INSERT INTO ratings (asset_id, rated_on, volatility, understanding, moat, predictability, horizon, reason, volatility_auto)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+RETURNING id, asset_id, rated_on, volatility, understanding, moat, predictability, horizon, reason, volatility_auto, created_at
 `
 
 type CreateRatingParams struct {
@@ -24,6 +24,7 @@ type CreateRatingParams struct {
 	Predictability int64
 	Horizon        int64
 	Reason         string
+	VolatilityAuto int64
 }
 
 func (q *Queries) CreateRating(ctx context.Context, arg CreateRatingParams) (Rating, error) {
@@ -36,6 +37,7 @@ func (q *Queries) CreateRating(ctx context.Context, arg CreateRatingParams) (Rat
 		arg.Predictability,
 		arg.Horizon,
 		arg.Reason,
+		arg.VolatilityAuto,
 	)
 	var i Rating
 	err := row.Scan(
@@ -48,13 +50,31 @@ func (q *Queries) CreateRating(ctx context.Context, arg CreateRatingParams) (Rat
 		&i.Predictability,
 		&i.Horizon,
 		&i.Reason,
+		&i.VolatilityAuto,
 		&i.CreatedAt,
 	)
 	return i, err
 }
 
+const getAssetBeta = `-- name: GetAssetBeta :one
+SELECT asset_id, index_code, beta, weeks, computed_on FROM asset_betas WHERE asset_id = ?
+`
+
+func (q *Queries) GetAssetBeta(ctx context.Context, assetID int64) (AssetBeta, error) {
+	row := q.db.QueryRowContext(ctx, getAssetBeta, assetID)
+	var i AssetBeta
+	err := row.Scan(
+		&i.AssetID,
+		&i.IndexCode,
+		&i.Beta,
+		&i.Weeks,
+		&i.ComputedOn,
+	)
+	return i, err
+}
+
 const latestRatingByAsset = `-- name: LatestRatingByAsset :one
-SELECT id, asset_id, rated_on, volatility, understanding, moat, predictability, horizon, reason, created_at FROM ratings WHERE asset_id = ? ORDER BY rated_on DESC, id DESC LIMIT 1
+SELECT id, asset_id, rated_on, volatility, understanding, moat, predictability, horizon, reason, volatility_auto, created_at FROM ratings WHERE asset_id = ? ORDER BY rated_on DESC, id DESC LIMIT 1
 `
 
 func (q *Queries) LatestRatingByAsset(ctx context.Context, assetID int64) (Rating, error) {
@@ -70,13 +90,14 @@ func (q *Queries) LatestRatingByAsset(ctx context.Context, assetID int64) (Ratin
 		&i.Predictability,
 		&i.Horizon,
 		&i.Reason,
+		&i.VolatilityAuto,
 		&i.CreatedAt,
 	)
 	return i, err
 }
 
 const listRatingsByAsset = `-- name: ListRatingsByAsset :many
-SELECT id, asset_id, rated_on, volatility, understanding, moat, predictability, horizon, reason, created_at FROM ratings WHERE asset_id = ? ORDER BY rated_on DESC, id DESC
+SELECT id, asset_id, rated_on, volatility, understanding, moat, predictability, horizon, reason, volatility_auto, created_at FROM ratings WHERE asset_id = ? ORDER BY rated_on DESC, id DESC
 `
 
 func (q *Queries) ListRatingsByAsset(ctx context.Context, assetID int64) ([]Rating, error) {
@@ -98,6 +119,7 @@ func (q *Queries) ListRatingsByAsset(ctx context.Context, assetID int64) ([]Rati
 			&i.Predictability,
 			&i.Horizon,
 			&i.Reason,
+			&i.VolatilityAuto,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err
@@ -111,4 +133,29 @@ func (q *Queries) ListRatingsByAsset(ctx context.Context, assetID int64) ([]Rati
 		return nil, err
 	}
 	return items, nil
+}
+
+const upsertAssetBeta = `-- name: UpsertAssetBeta :exec
+INSERT INTO asset_betas (asset_id, index_code, beta, weeks, computed_on) VALUES (?, ?, ?, ?, ?)
+ON CONFLICT (asset_id) DO UPDATE
+SET index_code = excluded.index_code, beta = excluded.beta, weeks = excluded.weeks, computed_on = excluded.computed_on
+`
+
+type UpsertAssetBetaParams struct {
+	AssetID    int64
+	IndexCode  string
+	Beta       string
+	Weeks      int64
+	ComputedOn string
+}
+
+func (q *Queries) UpsertAssetBeta(ctx context.Context, arg UpsertAssetBetaParams) error {
+	_, err := q.db.ExecContext(ctx, upsertAssetBeta,
+		arg.AssetID,
+		arg.IndexCode,
+		arg.Beta,
+		arg.Weeks,
+		arg.ComputedOn,
+	)
+	return err
 }

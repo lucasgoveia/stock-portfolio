@@ -43,14 +43,16 @@ const (
 // Rating is one appended rating row with its weighted score (computed with
 // the weights in force when read).
 type Rating struct {
-	ID             int64           `json:"id"`
-	AssetID        int64           `json:"asset_id"`
-	RatedOn        string          `json:"rated_on"`
-	Volatility     int             `json:"volatility"`
-	Understanding  int             `json:"understanding"`
-	Moat           int             `json:"moat"`
-	Predictability int             `json:"predictability"`
-	Horizon        int             `json:"horizon"`
+	ID             int64  `json:"id"`
+	AssetID        int64  `json:"asset_id"`
+	RatedOn        string `json:"rated_on"`
+	Volatility     int    `json:"volatility"`
+	Understanding  int    `json:"understanding"`
+	Moat           int    `json:"moat"`
+	Predictability int    `json:"predictability"`
+	Horizon        int    `json:"horizon"`
+	// VolatilityAuto is true when volatility came from beta, false when set by hand.
+	VolatilityAuto bool            `json:"volatility_auto"`
 	Reason         string          `json:"reason"`
 	Score          decimal.Decimal `json:"score"`
 	CreatedAt      string          `json:"created_at"`
@@ -62,7 +64,9 @@ func (r Rating) Factors() engine.Factors {
 		Predictability: r.Predictability, Horizon: r.Horizon}
 }
 
-// AddInput is a new rating. RatedOn defaults to today.
+// AddInput is a new rating. RatedOn defaults to today. Volatility 0 means
+// "automatic": it is taken from the asset's beta (spec 5.2); a value 1-5 is a
+// manual override that the daily beta no longer changes.
 type AddInput struct {
 	RatedOn        string
 	Volatility     int
@@ -101,7 +105,7 @@ func toRating(r db.Rating, w engine.Weights) (Rating, error) {
 	out := Rating{
 		ID: r.ID, AssetID: r.AssetID, RatedOn: r.RatedOn, Volatility: int(r.Volatility),
 		Understanding: int(r.Understanding), Moat: int(r.Moat), Predictability: int(r.Predictability),
-		Horizon: int(r.Horizon), Reason: r.Reason, CreatedAt: r.CreatedAt,
+		Horizon: int(r.Horizon), Reason: r.Reason, CreatedAt: r.CreatedAt, VolatilityAuto: r.VolatilityAuto == 1,
 	}
 	score, err := engine.WeightedScore(out.Factors(), w)
 	out.Score = score
@@ -124,6 +128,21 @@ func (s *Service) Add(ctx context.Context, assetID int64, in AddInput) (Rating, 
 	if reason == "" {
 		return Rating{}, validationf("reason is required")
 	}
+	auto := int64(0)
+	if in.Volatility == 0 {
+		b, err := s.q.GetAssetBeta(ctx, assetID)
+		if errors.Is(err, sql.ErrNoRows) {
+			return Rating{}, validationf("volatility is required: no automatic beta yet (needs 1 year of weekly prices)")
+		}
+		if err != nil {
+			return Rating{}, fmt.Errorf("asset beta: %w", err)
+		}
+		beta, err := decimal.NewFromString(b.Beta)
+		if err != nil {
+			return Rating{}, fmt.Errorf("asset beta: %w", err)
+		}
+		in.Volatility, auto = engine.VolatilityScore(beta), 1
+	}
 	for name, v := range map[string]int{"volatility": in.Volatility, "understanding": in.Understanding,
 		"moat": in.Moat, "predictability": in.Predictability, "horizon": in.Horizon} {
 		if v < 1 || v > 5 {
@@ -137,6 +156,7 @@ func (s *Service) Add(ctx context.Context, assetID int64, in AddInput) (Rating, 
 	row, err := s.q.CreateRating(ctx, db.CreateRatingParams{
 		AssetID: assetID, RatedOn: on, Volatility: int64(in.Volatility), Understanding: int64(in.Understanding),
 		Moat: int64(in.Moat), Predictability: int64(in.Predictability), Horizon: int64(in.Horizon), Reason: reason,
+		VolatilityAuto: auto,
 	})
 	if err != nil {
 		return Rating{}, fmt.Errorf("create rating: %w", err)
@@ -251,4 +271,68 @@ func (s *Service) SetWeights(ctx context.Context, in WeightsInput) (engine.Weigh
 		}
 	}
 	return w, nil
+}
+
+// Beta is the stored automatic beta of an asset.
+type Beta struct {
+	AssetID    int64           `json:"asset_id"`
+	IndexCode  string          `json:"index_code"`
+	Beta       decimal.Decimal `json:"beta"`
+	Weeks      int64           `json:"weeks"`
+	ComputedOn string          `json:"computed_on"`
+	Score      int             `json:"volatility_score"`
+}
+
+// GetBeta returns the stored beta or ErrNotFound.
+func (s *Service) GetBeta(ctx context.Context, assetID int64) (Beta, error) {
+	b, err := s.q.GetAssetBeta(ctx, assetID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Beta{}, ErrNotFound
+	}
+	if err != nil {
+		return Beta{}, fmt.Errorf("asset beta: %w", err)
+	}
+	v, err := decimal.NewFromString(b.Beta)
+	if err != nil {
+		return Beta{}, fmt.Errorf("asset beta: %w", err)
+	}
+	return Beta{AssetID: b.AssetID, IndexCode: b.IndexCode, Beta: v, Weeks: b.Weeks, ComputedOn: b.ComputedOn,
+		Score: engine.VolatilityScore(v)}, nil
+}
+
+// ApplyBeta stores a freshly computed beta. When the asset's latest rating
+// has an automatic volatility that differs from the new bucket, a new rating
+// is appended with only volatility changed (history stays append-only).
+// Manual overrides are left alone. It reports whether a rating was appended.
+func (s *Service) ApplyBeta(ctx context.Context, assetID int64, indexCode string, beta decimal.Decimal, weeks int) (bool, error) {
+	today := s.now().Format(dateLayout)
+	if err := s.q.UpsertAssetBeta(ctx, db.UpsertAssetBetaParams{
+		AssetID: assetID, IndexCode: indexCode, Beta: beta.String(), Weeks: int64(weeks), ComputedOn: today,
+	}); err != nil {
+		return false, fmt.Errorf("store beta: %w", err)
+	}
+	last, err := s.q.LatestRatingByAsset(ctx, assetID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("latest rating: %w", err)
+	}
+	score := engine.VolatilityScore(beta)
+	if last.VolatilityAuto != 1 || int(last.Volatility) == score {
+		return false, nil
+	}
+	if _, err := s.q.CreateRating(ctx, db.CreateRatingParams{
+		AssetID: assetID, RatedOn: today, Volatility: int64(score), Understanding: last.Understanding,
+		Moat: last.Moat, Predictability: last.Predictability, Horizon: last.Horizon,
+		Reason: fmt.Sprintf("auto: beta %s over %d weeks vs %s", beta.StringFixed(2), weeks, indexCode), VolatilityAuto: 1,
+	}); err != nil {
+		return false, fmt.Errorf("auto rating: %w", err)
+	}
+	for _, h := range s.hooks {
+		if err := h(ctx, assetID); err != nil {
+			slog.Warn("rating change hook failed", "asset_id", assetID, "err", err)
+		}
+	}
+	return true, nil
 }

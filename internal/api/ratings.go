@@ -43,6 +43,18 @@ func WithRatings(svc *ratings.Service) Option {
 			}
 			writeJSON(w, http.StatusCreated, rt)
 		})
+		r.Get("/api/assets/{id}/beta", func(w http.ResponseWriter, req *http.Request) {
+			id, ok := assetID(w, req)
+			if !ok {
+				return
+			}
+			b, err := svc.GetBeta(req.Context(), id)
+			if err != nil {
+				writeError(w, err)
+				return
+			}
+			writeJSON(w, http.StatusOK, b)
+		})
 		r.Get("/api/assets/{id}/ratings", func(w http.ResponseWriter, req *http.Request) {
 			id, ok := assetID(w, req)
 			if !ok {

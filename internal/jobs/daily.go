@@ -13,6 +13,7 @@ import (
 	"github.com/shopspring/decimal"
 
 	"github.com/lucasgoveia/stock-portfolio/internal/assets"
+	"github.com/lucasgoveia/stock-portfolio/internal/engine"
 	"github.com/lucasgoveia/stock-portfolio/internal/marketdata"
 	"github.com/lucasgoveia/stock-portfolio/internal/store/db"
 )
@@ -57,8 +58,14 @@ type Deps struct {
 	US         marketdata.USPriceSource
 	IBOV       marketdata.IndexSource
 	SP500      marketdata.IndexSource
+	Betas      BetaWriter
 	Evaluators []Evaluator
 	Now        func() time.Time
+}
+
+// BetaWriter stores computed betas (ratings.Service).
+type BetaWriter interface {
+	ApplyBeta(ctx context.Context, assetID int64, indexCode string, beta decimal.Decimal, weeks int) (bool, error)
 }
 
 // Evaluator is a named alert evaluation run at the end of the pipeline.
@@ -85,6 +92,7 @@ func DailySteps(d Deps) []Step {
 		{"cotahist", p.cotahist},
 		{"us_prices", p.usPrices},
 		{"indices", p.indices},
+		{"beta", p.beta},
 		{"evaluate", p.evaluate},
 	}
 }
@@ -338,4 +346,86 @@ func latestNote(n int, date func(int) time.Time) string {
 		}
 	}
 	return fmt.Sprintf("%d points, latest %s", n, latest.Format(dateLayout))
+}
+
+// beta recomputes the 2-year weekly beta of every tracked asset against its
+// benchmark (B3: raw COTAHIST closes vs IBOV; US: Tiingo adjusted closes vs
+// S&P 500) and lets the ratings service refresh automatic volatility.
+func (p *pipeline) beta(ctx context.Context, day time.Time) (string, error) {
+	if p.d.Betas == nil {
+		return "", ErrSkipped
+	}
+	from, to := day.AddDate(-2, 0, 0).Format(dateLayout), day.Format(dateLayout)
+	var list []db.Asset
+	for _, mkt := range []string{"B3", "US"} {
+		l, err := p.tracked(ctx, mkt)
+		if err != nil {
+			return "", err
+		}
+		list = append(list, l...)
+	}
+	if len(list) == 0 {
+		return "no assets", ErrSkipped
+	}
+	indexCache := map[string][]engine.PricePoint{}
+	computed, short, changed := 0, 0, 0
+	for _, a := range list {
+		ix, ok := indexCache[a.Benchmark]
+		if !ok {
+			rows, err := p.q.IndexHistory(ctx, db.IndexHistoryParams{IndexCode: a.Benchmark, FromDate: from, ToDate: to})
+			if err != nil {
+				return "", err
+			}
+			for _, r := range rows {
+				if pt, ok := point(r.RefDate, r.Close); ok {
+					ix = append(ix, pt)
+				}
+			}
+			indexCache[a.Benchmark] = ix
+		}
+		source := "cotahist"
+		if a.Market == "US" {
+			source = "tiingo"
+		}
+		rows, err := p.q.AssetPriceHistory(ctx, db.AssetPriceHistoryParams{AssetID: a.ID, Source: source, FromDate: from, ToDate: to})
+		if err != nil {
+			return "", err
+		}
+		var px []engine.PricePoint
+		for _, r := range rows {
+			v := r.Close
+			if r.AdjClose.Valid && r.AdjClose.String != "" {
+				v = r.AdjClose.String
+			}
+			if pt, ok := point(r.RefDate, v); ok {
+				px = append(px, pt)
+			}
+		}
+		res := engine.WeeklyBeta(px, ix)
+		if !res.OK {
+			short++
+			continue
+		}
+		computed++
+		ch, err := p.d.Betas.ApplyBeta(ctx, a.ID, a.Benchmark, res.Beta, res.Weeks)
+		if err != nil {
+			return "", err
+		}
+		if ch {
+			changed++
+		}
+	}
+	return fmt.Sprintf("%d computed, %d short history, %d ratings updated", computed, short, changed), nil
+}
+
+func point(date, v string) (engine.PricePoint, bool) {
+	t, err := time.Parse(dateLayout, date)
+	if err != nil {
+		return engine.PricePoint{}, false
+	}
+	d, err := decimal.NewFromString(v)
+	if err != nil {
+		return engine.PricePoint{}, false
+	}
+	return engine.PricePoint{Date: t, Close: d}, true
 }

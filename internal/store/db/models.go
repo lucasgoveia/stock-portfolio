@@ -35,6 +35,14 @@ type Asset struct {
 	UpdatedAt string
 }
 
+type AssetBeta struct {
+	AssetID    int64
+	IndexCode  string
+	Beta       string
+	Weeks      int64
+	ComputedOn string
+}
+
 type AssetPrice struct {
 	AssetID   int64
 	RefDate   string
@@ -113,6 +121,7 @@ type Rating struct {
 	Predictability int64
 	Horizon        int64
 	Reason         string
+	VolatilityAuto int64
 	CreatedAt      string
 }
 
