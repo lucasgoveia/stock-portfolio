@@ -617,7 +617,8 @@
           }
         },
         "required": [
-          "kind"
+          "kind",
+          "name"
         ],
         "type": "object"
       },
@@ -662,7 +663,7 @@
             "type": "string"
           },
           "date": {
-            "description": "YYYY-MM-DD; defaults to today",
+            "description": "YYYY-MM-DD",
             "type": "string"
           },
           "quantity": {
@@ -670,11 +671,12 @@
             "type": "string"
           },
           "type": {
-            "description": "deposit, withdraw or yield",
+            "description": "deposit, withdraw, yield_adjust or balance (Tesouro Selic: deposit or withdraw only)",
             "type": "string"
           }
         },
         "required": [
+          "date",
           "type",
           "amount"
         ],
@@ -1685,7 +1687,7 @@
             "type": "string"
           },
           "date": {
-            "description": "YYYY-MM-DD; defaults to today",
+            "description": "YYYY-MM-DD",
             "type": "string"
           },
           "fees": {
@@ -1708,6 +1710,7 @@
           }
         },
         "required": [
+          "date",
           "side",
           "quantity",
           "price"

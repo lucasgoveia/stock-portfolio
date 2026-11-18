@@ -868,7 +868,7 @@ export interface components {
         InstrumentCreate: {
             /** @description tesouro_selic, cdi or usd_cash */
             kind: string;
-            name?: string;
+            name: string;
             /** @description Percent of CDI (cdi kind only, default 100) */
             pct_cdi?: string;
         };
@@ -884,11 +884,11 @@ export interface components {
         };
         MovementCreate: {
             amount: string;
-            /** @description YYYY-MM-DD; defaults to today */
-            date?: string;
+            /** @description YYYY-MM-DD */
+            date: string;
             /** @description Title units (Tesouro Selic) */
             quantity?: string;
-            /** @description deposit, withdraw or yield */
+            /** @description deposit, withdraw, yield_adjust or balance (Tesouro Selic: deposit or withdraw only) */
             type: string;
         };
         Note: {
@@ -1162,8 +1162,8 @@ export interface components {
         TradeCreate: {
             /** @description Defaults to the asset's currency */
             currency?: string;
-            /** @description YYYY-MM-DD; defaults to today */
-            date?: string;
+            /** @description YYYY-MM-DD */
+            date: string;
             /** @description Defaults to 0 */
             fees?: string;
             /** @description USDBRL; required for USD trades */

@@ -12,7 +12,7 @@ import (
 
 // TradeCreate is the body of POST /api/assets/{id}/trades.
 type TradeCreate struct {
-	Date     string         `json:"date" required:"false" doc:"YYYY-MM-DD; defaults to today"`
+	Date     string         `json:"date" doc:"YYYY-MM-DD"`
 	Side     string         `json:"side" doc:"buy or sell"`
 	Quantity money.Decimal  `json:"quantity"`
 	Price    money.Decimal  `json:"price"`

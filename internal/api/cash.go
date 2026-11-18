@@ -23,14 +23,14 @@ type instrumentValueIn struct {
 // InstrumentCreate is the body of POST /api/cash/instruments.
 type InstrumentCreate struct {
 	Kind   string         `json:"kind" doc:"tesouro_selic, cdi or usd_cash"`
-	Name   string         `json:"name" required:"false"`
+	Name   string         `json:"name"`
 	PctCDI *money.Decimal `json:"pct_cdi,omitempty" doc:"Percent of CDI (cdi kind only, default 100)"`
 }
 
 // MovementCreate is the body of POST /api/cash/instruments/{id}/movements.
 type MovementCreate struct {
-	Date     string         `json:"date" required:"false" doc:"YYYY-MM-DD; defaults to today"`
-	Type     string         `json:"type" doc:"deposit, withdraw or yield"`
+	Date     string         `json:"date" doc:"YYYY-MM-DD"`
+	Type     string         `json:"type" doc:"deposit, withdraw, yield_adjust or balance (Tesouro Selic: deposit or withdraw only)"`
 	Amount   money.Decimal  `json:"amount"`
 	Quantity *money.Decimal `json:"quantity,omitempty" doc:"Title units (Tesouro Selic)"`
 }

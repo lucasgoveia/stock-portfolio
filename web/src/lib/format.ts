@@ -49,3 +49,11 @@ export function humanize(v: string): string {
   const s = v.replace(/_/g, ' ')
   return s.charAt(0).toUpperCase() + s.slice(1)
 }
+
+/** Accepts "1.234,56" or "1234.56" and returns a plain decimal string, or null. */
+export function decimalInput(v: string): string | null {
+  const s = v.trim().replace(/\s/g, '')
+  if (!s) return null
+  const normalized = s.includes(',') ? s.replace(/\./g, '').replace(',', '.') : s
+  return /^-?\d+(\.\d+)?$/.test(normalized) ? normalized : null
+}
