@@ -22,7 +22,7 @@ type instrumentValueIn struct {
 
 // InstrumentCreate is the body of POST /api/cash/instruments.
 type InstrumentCreate struct {
-	Kind   string         `json:"kind" doc:"tesouro_selic, cdi or usd"`
+	Kind   string         `json:"kind" doc:"tesouro_selic, cdi or usd_cash"`
 	Name   string         `json:"name" required:"false"`
 	PctCDI *money.Decimal `json:"pct_cdi,omitempty" doc:"Percent of CDI (cdi kind only, default 100)"`
 }

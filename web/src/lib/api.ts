@@ -27,3 +27,7 @@ export async function unwrap<T>(call: Promise<{ data?: T; error?: unknown; respo
 }
 
 export const fetchHealth = () => unwrap(api.GET('/api/health'))
+
+export function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}

@@ -6,3 +6,4 @@
 *.db-*
 config.local.toml
 .env
+.playwright-mcp/

@@ -41,7 +41,7 @@ export function AppSidebar() {
   const { setOpenMobile } = useSidebar()
   return (
     <Sidebar>
-      <SidebarHeader className="px-4 py-3 text-base font-semibold">Stock Portfolio</SidebarHeader>
+      <SidebarHeader className="display px-4 py-3 text-lg font-semibold">Stock Portfolio</SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
           <SidebarGroupContent>

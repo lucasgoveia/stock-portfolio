@@ -605,7 +605,7 @@
         "additionalProperties": false,
         "properties": {
           "kind": {
-            "description": "tesouro_selic, cdi or usd",
+            "description": "tesouro_selic, cdi or usd_cash",
             "type": "string"
           },
           "name": {

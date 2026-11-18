@@ -866,7 +866,7 @@ export interface components {
             pct_cdi: string;
         };
         InstrumentCreate: {
-            /** @description tesouro_selic, cdi or usd */
+            /** @description tesouro_selic, cdi or usd_cash */
             kind: string;
             name?: string;
             /** @description Percent of CDI (cdi kind only, default 100) */
