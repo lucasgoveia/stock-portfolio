@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/lucasgoveia/stock-portfolio/internal/money"
+	"github.com/shopspring/decimal"
 )
 
 // QuarterlyFinancials returns the Q1 to Q3 income statement figures of the
@@ -92,8 +93,21 @@ func parseITR(zr *zip.Reader, cnpj string, year int) ([]QuarterFact, []string, e
 		return nil, nil, err
 	}
 
+	financial := isFinancialLayout(dre)
+	if financial {
+		notes = append(notes, fmt.Sprintf("%d ITR: financial-institution chart of accounts: revenue is gross financial-intermediation income", year))
+	}
+	byRefer := latestVersion(dre)
+	hints := map[string]int{}
+	for refer, rows := range byRefer {
+		if cr, ok := capByRefer[refer]; ok {
+			hints[refer] = shareScaleHint(rows, cr.Total)
+		}
+	}
+	fileHint := fallbackHint(hints)
+
 	var out []QuarterFact
-	for refer, rows := range latestVersion(dre) {
+	for refer, rows := range byRefer {
 		if len(rows) == 0 {
 			continue
 		}
@@ -114,7 +128,11 @@ func parseITR(zr *zip.Reader, cnpj string, year int) ([]QuarterFact, []string, e
 			q.Filed = d
 		}
 		if cr, ok := capByRefer[refer]; ok {
-			sh := cr.Total.Sub(cr.Treasury)
+			f := hints[refer]
+			if f == 0 {
+				f = fileHint
+			}
+			sh := cr.Total.Sub(cr.Treasury).Mul(decimal.NewFromInt(int64(f)))
 			if sh.IsPositive() {
 				q.Values[ConceptShares] = money.New(sh)
 				for _, m := range []map[string]money.Decimal{q.Values, q.YTD} {
@@ -171,10 +189,8 @@ func splitQuarter(rows []cvmRow, end time.Time) (QuarterFact, bool) {
 		if v := at(a, "3.01"); v != nil {
 			dst[ConceptRevenue] = money.New(*v)
 		}
-		if v := at(a, "3.11.01"); v != nil {
-			dst[ConceptNetIncome] = money.New(*v)
-		} else if v := at(a, "3.11"); v != nil {
-			dst[ConceptNetIncome] = money.New(*v)
+		if v, ok := netIncome(rs); ok {
+			dst[ConceptNetIncome] = money.New(v)
 		}
 	}
 	fill(q.Values, three)

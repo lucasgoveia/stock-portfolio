@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"os"
 	"regexp"
@@ -261,27 +262,49 @@ func parseDFP(zr *zip.Reader, cnpj string, year int) ([]FinancialPeriod, string,
 			}
 		}
 	}
+	financial := isFinancialLayout(dre)
+	if financial {
+		notes = append(notes, fmt.Sprintf("%d: financial-institution chart of accounts: revenue is gross financial-intermediation income and net income and equity are the controlling shareholders' share; EBIT, debt, capex and operating cash flow are omitted (not comparable with industrial companies)", year))
+	}
+	capByRefer := latestCapital(caps)
+	hints := map[string]int{}
 	apply(dre, func(p *FinancialPeriod, rs []cvmRow) {
 		a := accounts(rs)
 		set(p, ConceptRevenue, at(a, "3.01"))
-		set(p, ConceptEBIT, at(a, "3.05"))
-		if v, ok := a["3.11.01"]; ok {
-			set(p, ConceptNetIncome, &v)
-		} else {
-			set(p, ConceptNetIncome, at(a, "3.11"))
+		if !financial {
+			set(p, ConceptEBIT, at(a, "3.05"))
 		}
-	})
-	apply(bpa, func(p *FinancialPeriod, rs []cvmRow) {
-		a := accounts(rs)
-		if c, ok := a["1.01.01"]; ok {
-			if f, ok := a["1.01.02"]; ok {
-				c = c.Add(f)
+		if ni, ok := netIncome(rs); ok {
+			set(p, ConceptNetIncome, &ni)
+		}
+		if rev, ok := a["3.01"]; ok && rev.IsZero() {
+			if ni, ok := p.Values[ConceptNetIncome]; ok && !ni.IsZero() {
+				notes = append(notes, fmt.Sprintf("%s: revenue is zero (typically a holding company whose income comes from equity-method results); revenue-based metrics are not meaningful", p.End.Format("2006-01-02")))
 			}
-			set(p, ConceptCash, &c)
+		}
+		if cr, ok := capByRefer[rs[0].Refer]; ok {
+			hints[rs[0].Refer] = shareScaleHint(rs, cr.Total)
 		}
 	})
+	if !financial {
+		apply(bpa, func(p *FinancialPeriod, rs []cvmRow) {
+			a := accounts(rs)
+			if c, ok := a["1.01.01"]; ok {
+				if f, ok := a["1.01.02"]; ok {
+					c = c.Add(f)
+				}
+				set(p, ConceptCash, &c)
+			}
+		})
+	}
 	apply(bpp, func(p *FinancialPeriod, rs []cvmRow) {
 		a := accounts(rs)
+		if financial {
+			if eq, ok := controllerEquity(rs); ok {
+				set(p, ConceptEquity, &eq)
+			}
+			return
+		}
 		debt, found := decimal.Zero, false
 		for _, code := range []string{"2.01.04", "2.02.01"} {
 			if v, ok := a[code]; ok {
@@ -298,19 +321,26 @@ func parseDFP(zr *zip.Reader, cnpj string, year int) ([]FinancialPeriod, string,
 			set(p, ConceptEquity, &eq)
 		}
 	})
-	apply(dfc, func(p *FinancialPeriod, rs []cvmRow) {
-		a := accounts(rs)
-		set(p, ConceptOCF, at(a, "6.01"))
-		if v, ok := capex(rs); ok {
-			set(p, ConceptCapex, &v)
-		}
-		if v, ok := depreciation(rs); ok {
-			set(p, ConceptDA, &v)
-		}
-	})
-	for refer, cr := range latestCapital(caps) {
+	if !financial {
+		apply(dfc, func(p *FinancialPeriod, rs []cvmRow) {
+			a := accounts(rs)
+			set(p, ConceptOCF, at(a, "6.01"))
+			if v, ok := capex(rs); ok {
+				set(p, ConceptCapex, &v)
+			}
+			if v, ok := depreciation(rs); ok {
+				set(p, ConceptDA, &v)
+			}
+		})
+	}
+	fileHint := fallbackHint(hints)
+	for refer, cr := range capByRefer {
 		if p := period(refer, cr.Version); p != nil {
-			sh := cr.Total.Sub(cr.Treasury)
+			f := hints[refer]
+			if f == 0 {
+				f = fileHint
+			}
+			sh := cr.Total.Sub(cr.Treasury).Mul(decimal.NewFromInt(int64(f)))
 			set(p, ConceptShares, &sh)
 		}
 	}
@@ -321,6 +351,171 @@ func parseDFP(zr *zip.Reader, cnpj string, year int) ([]FinancialPeriod, string,
 	}
 	sortPeriods(out)
 	return out, entity, notes, nil
+}
+
+var (
+	attributableCode = regexp.MustCompile(`^3\.\d\d\.01$`)
+	topEquityCode    = regexp.MustCompile(`^2\.\d\d$`)
+)
+
+// isFinancialLayout reports whether the DRE rows follow the bank or insurer
+// chart of accounts (3.01 is intermediation income or insurance revenue,
+// not sales of goods and services).
+func isFinancialLayout(rows []cvmRow) bool {
+	for _, r := range rows {
+		if r.Code != "3.01" {
+			continue
+		}
+		d := fold(r.Desc)
+		return strings.Contains(d, "intermediacao financeira") || strings.Contains(d, "seguradora")
+	}
+	return false
+}
+
+// netIncome returns the net income attributable to the controlling
+// shareholders. The attributable line sits under the consolidated result
+// (3.11.01 in the industrial layout, 3.09.01 or 3.11.01 for banks, 3.13.01 for
+// insurers), so the highest 3.NN.01 line described as attributable to the
+// controlling shareholders is used. Some filers leave it at zero while
+// reporting the whole result in the parent line (Klabin, Taesa), so a zero
+// falls back to the consolidated result less the non-controlling share.
+func netIncome(rs []cvmRow) (decimal.Decimal, bool) {
+	a := accounts(rs)
+	best := ""
+	for _, r := range rs {
+		d := fold(r.Desc)
+		if attributableCode.MatchString(r.Code) && strings.Contains(d, "controlad") && !strings.Contains(d, "nao controlad") && r.Code > best {
+			best = r.Code
+		}
+	}
+	if best == "" {
+		v, ok := a["3.11"]
+		return v, ok
+	}
+	v := a[best]
+	if !v.IsZero() {
+		return v, true
+	}
+	if total, ok := a[best[:4]]; ok {
+		return total.Sub(a[best[:4]+".02"]), true
+	}
+	return v, true
+}
+
+// controllerEquity returns the shareholders' equity attributable to the
+// controlling shareholders in a bank or insurer balance sheet: the explicit
+// controller line when present, otherwise the equity total (the first 2.NN
+// line named "Patrimônio Líquido") less the non-controlling interest.
+func controllerEquity(rs []cvmRow) (decimal.Decimal, bool) {
+	total := ""
+	for _, r := range rs {
+		if topEquityCode.MatchString(r.Code) && strings.HasPrefix(fold(r.Desc), "patrimonio liquido") {
+			total = r.Code
+			break
+		}
+	}
+	if total == "" {
+		return decimal.Zero, false
+	}
+	a := accounts(rs)
+	var nci *decimal.Decimal
+	for _, r := range rs {
+		if len(r.Code) != len(total)+3 || !strings.HasPrefix(r.Code, total+".") {
+			continue
+		}
+		d := fold(r.Desc)
+		switch {
+		case strings.Contains(d, "nao controlador"):
+			v := r.Value
+			nci = &v
+		case strings.Contains(d, "controlador"):
+			return r.Value, true
+		}
+	}
+	eq := a[total]
+	if nci != nil {
+		eq = eq.Sub(*nci)
+	}
+	return eq, true
+}
+
+// epsOf picks the reported earnings per share of one DRE column: the first
+// non-zero class line (3.99.01.xx basic, then 3.99.02.xx diluted), then the
+// 3.99 total. Class lines come first because some filers (Itaú) report the
+// 3.99 total on a different basis. EPS is a per-share amount, so the monetary
+// ESCALA_MOEDA that readStatement applied to every value is undone.
+func epsOf(rs []cvmRow) decimal.Decimal {
+	unscaled := func(r cvmRow) decimal.Decimal {
+		if r.Scale.IsPositive() {
+			return r.Value.Div(r.Scale)
+		}
+		return r.Value
+	}
+	for _, r := range rs {
+		if strings.HasPrefix(r.Code, "3.99.") && len(r.Code) == 10 && !r.Value.IsZero() {
+			return unscaled(r)
+		}
+	}
+	for _, r := range rs {
+		if r.Code == "3.99" {
+			return unscaled(r)
+		}
+	}
+	return decimal.Zero
+}
+
+// shareScaleHint infers whether the composicao_capital quantity qty is in
+// thousands. CVM has no scale field for it and some issuers file thousands of
+// shares (VALE, Taesa, Itaú), so the quantity is compared with the share count
+// implied by the DRE: net income over reported EPS. It returns 1000 when qty
+// times 1000 is closer to the implied count (in log distance), 1 when qty is
+// closer, and 0 when there is no usable signal.
+func shareScaleHint(rows []cvmRow, qty decimal.Decimal) int {
+	if !qty.IsPositive() {
+		return 0
+	}
+	byStart := map[string][]cvmRow{}
+	var starts []string
+	for _, r := range rows {
+		if _, ok := byStart[r.Start]; !ok {
+			starts = append(starts, r.Start)
+		}
+		byStart[r.Start] = append(byStart[r.Start], r)
+	}
+	sort.Strings(starts)
+	q, _ := qty.Float64()
+	for _, s := range starts {
+		rs := byStart[s]
+		ni, ok := netIncome(rs)
+		eps := epsOf(rs)
+		if !ok || ni.IsZero() || eps.IsZero() {
+			continue
+		}
+		n, _ := ni.Abs().Float64()
+		e, _ := eps.Abs().Float64()
+		implied := n / e
+		if implied <= 0 {
+			continue
+		}
+		if math.Abs(math.Log(q*1000/implied)) < math.Abs(math.Log(q/implied)) {
+			return 1000
+		}
+		return 1
+	}
+	return 0
+}
+
+// fallbackHint is the scale for periods without an EPS signal: the filer
+// uses one convention across periods, so the hint of the latest period that
+// has one applies. Without any hint quantities are taken as units.
+func fallbackHint(hints map[string]int) int {
+	latest, f := "", 1
+	for refer, h := range hints {
+		if h != 0 && refer > latest {
+			latest, f = refer, h
+		}
+	}
+	return f
 }
 
 func at(a map[string]decimal.Decimal, code string) *decimal.Decimal {
