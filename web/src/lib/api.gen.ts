@@ -1700,11 +1700,14 @@ export interface components {
         };
         DCFInput: {
             base_revenue: string;
+            initiatives?: components["schemas"]["Initiative"][] | null;
             net_debt?: string;
             scenarios: components["schemas"]["Scenario"][] | null;
             shares: string;
         };
         DCFResult: {
+            core_value_per_share: string;
+            initiatives_value_per_share: string;
             scenarios: components["schemas"]["ScenarioValue"][] | null;
             value_per_share: string;
         };
@@ -1997,6 +2000,21 @@ export interface components {
             ticker: string;
             withheld_brl: string;
         };
+        Initiative: {
+            margin: string;
+            name: string;
+            rationale?: string;
+            revenue_year5: string;
+            sources?: string[] | null;
+            /** Format: int64 */
+            start_year: number;
+            success_probability: components["schemas"]["InitiativeProbabilities"];
+        };
+        InitiativeProbabilities: {
+            base: string;
+            bear: string;
+            bull: string;
+        };
         Inputs: {
             currency: string;
             /** @description Base revenue, net debt and shares used when scenarios are approved into a DCF version */
@@ -2114,6 +2132,7 @@ export interface components {
         Output: {
             catalysts: components["schemas"]["Catalyst"][] | null;
             fair_value_range: components["schemas"]["FairValueRange"];
+            initiatives?: components["schemas"]["Initiative"][] | null;
             market_size_notes: string;
             scenarios: components["schemas"]["Scenarios"];
             sources: components["schemas"]["Source"][] | null;
@@ -2289,6 +2308,11 @@ export interface components {
             sp500_brl: string | null;
         };
         ReverseDCF: {
+            /**
+             * @description ebit_ev when the margin is the EBIT margin (net debt subtracted), net_pe when it is the net margin
+             * @enum {string}
+             */
+            basis: "ebit_ev" | "net_pe";
             discount_rate: string;
             exit_multiple: string;
             /** @description Constant yearly revenue growth over 5 years, as a fraction */
@@ -2333,23 +2357,42 @@ export interface components {
             trade_id: number;
         };
         Scenario: {
+            /**
+             * @description Empty means ebit_ev
+             * @enum {string}
+             */
+            basis?: "ebit_ev" | "net_pe";
+            cash_conversion?: string;
             discount_rate: string;
             exit_multiple: string;
             name: string;
             probability: string;
             revenue_growth: string[] | null;
+            start_margin?: string;
+            tax_rate?: string;
             terminal_margin: string;
         };
         ScenarioDraft: {
+            /** @enum {string} */
+            basis?: "ebit_ev" | "net_pe";
+            cash_conversion?: string;
             discount_rate: string;
             exit_multiple: string;
             probability: string;
             rationale: string;
             /** @description Yearly revenue growth for the 5 forecast years */
             revenue_growth: string[] | null;
+            start_margin?: string;
+            tax_rate?: string;
             terminal_margin: string;
         };
         ScenarioValue: {
+            /** @enum {string} */
+            basis: "ebit_ev" | "net_pe";
+            core_value_per_share: string;
+            initiatives_revenue_year5: string;
+            initiatives_value_per_share: string;
+            interim_present_value: string;
             name: string;
             present_value: string;
             probability: string;

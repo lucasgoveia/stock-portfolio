@@ -13,6 +13,7 @@ import (
 
 	"github.com/lucasgoveia/stock-portfolio/internal/alerts"
 	"github.com/lucasgoveia/stock-portfolio/internal/assets"
+	"github.com/lucasgoveia/stock-portfolio/internal/engine"
 	"github.com/lucasgoveia/stock-portfolio/internal/fundamentals"
 	"github.com/lucasgoveia/stock-portfolio/internal/marketdata"
 	"github.com/lucasgoveia/stock-portfolio/internal/money"
@@ -30,10 +31,14 @@ const goodOutput = `{
  ],
  "market_size_notes": "Large installed base.",
  "scenarios": {
-  "bear": {"revenue_growth": [0.01,0.01,0.01,0.01,0.01], "terminal_margin": 0.2, "exit_multiple": 12, "discount_rate": 0.1, "probability": 0.25, "rationale": "slow"},
-  "base": {"revenue_growth": [0.06,0.06,0.05,0.05,0.04], "terminal_margin": 0.25, "exit_multiple": 18, "discount_rate": 0.09, "probability": 0.5, "rationale": "steady"},
-  "bull": {"revenue_growth": [0.1,0.1,0.09,0.08,0.07], "terminal_margin": 0.3, "exit_multiple": 24, "discount_rate": 0.09, "probability": 0.25, "rationale": "fast"}
+  "bear": {"basis": "net_pe", "start_margin": 0.25, "cash_conversion": 0.6, "tax_rate": 0.21, "revenue_growth": [0.01,0.01,0.01,0.01,0.01], "terminal_margin": 0.2, "exit_multiple": 12, "discount_rate": 0.1, "probability": 0.25, "rationale": "slow"},
+  "base": {"basis": "net_pe", "start_margin": 0.25, "cash_conversion": 0.6, "tax_rate": 0.21, "revenue_growth": [0.06,0.06,0.05,0.05,0.04], "terminal_margin": 0.25, "exit_multiple": 18, "discount_rate": 0.09, "probability": 0.5, "rationale": "steady"},
+  "bull": {"basis": "net_pe", "start_margin": 0.25, "cash_conversion": 0.6, "tax_rate": 0.21, "revenue_growth": [0.1,0.1,0.09,0.08,0.07], "terminal_margin": 0.3, "exit_multiple": 24, "discount_rate": 0.09, "probability": 0.25, "rationale": "fast"}
  },
+ "initiatives": [
+  {"name": "Vision hardware", "rationale": "New segment in the 10-K", "sources": ["https://sec.test/10k.htm", "https://evil.test/x"], "start_year": 3, "revenue_year5": 20000000, "margin": 0.15,
+   "success_probability": {"bear": 0.1, "base": 0.4, "bull": 0.7}}
+ ],
  "fair_value_range": {"low": 150, "high": 210, "currency": "USD"},
  "thesis_check": [
   {"condition": "Services growth below 5%", "status": "holds", "evidence": "Grew 12%"},
@@ -177,7 +182,7 @@ func TestRunDraftUS(t *testing.T) {
 		t.Fatalf("output = %+v", run.Output)
 	}
 	// Only provided documents may be cited.
-	if len(run.Output.Sources) != 1 || run.Output.Sources[0].URL != "https://sec.test/10k.htm" || run.Inputs.DroppedSources != 2 {
+	if len(run.Output.Sources) != 1 || run.Output.Sources[0].URL != "https://sec.test/10k.htm" || run.Inputs.DroppedSources != 3 {
 		t.Errorf("sources not restricted: %+v dropped=%d", run.Output.Sources, run.Inputs.DroppedSources)
 	}
 	if len(run.Output.Catalysts[0].SourceURLs) != 1 {
@@ -303,6 +308,11 @@ func TestInvalidOutputStoresFailedRun(t *testing.T) {
 		"growth len":  strings.Replace(goodOutput, `[0.01,0.01,0.01,0.01,0.01]`, `[0.01,0.01]`, 1),
 		"range":       strings.Replace(goodOutput, `"low": 150, "high": 210`, `"low": 300, "high": 210`, 1),
 		"check state": strings.Replace(goodOutput, `"holds"`, `"fine"`, 1),
+		"no basis":    strings.Replace(goodOutput, `"basis": "net_pe"`, `"basis": ""`, 1),
+		"bad basis":   strings.Replace(goodOutput, `"basis": "net_pe"`, `"basis": "fcf"`, 1),
+		"cash conv":   strings.Replace(goodOutput, `"cash_conversion": 0.6`, `"cash_conversion": 1.6`, 1),
+		"init year":   strings.Replace(goodOutput, `"start_year": 3`, `"start_year": 7`, 1),
+		"init prob":   strings.Replace(goodOutput, `"bull": 0.7`, `"bull": 1.7`, 1),
 	}
 	for name, text := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -404,6 +414,24 @@ func TestApproveToFairValues(t *testing.T) {
 	var in map[string]json.RawMessage
 	if err := json.Unmarshal(dcf.Inputs, &in); err != nil || string(in["analyst_run_id"]) != "1" || in["dcf"] == nil || in["result"] == nil {
 		t.Errorf("dcf inputs = %s", dcf.Inputs)
+	}
+	// The basis, margins, cash conversion, tax and initiatives reach the version.
+	var stored struct {
+		DCF engine.DCFInput `json:"dcf"`
+	}
+	if err := json.Unmarshal(dcf.Inputs, &stored); err != nil {
+		t.Fatal(err)
+	}
+	base := stored.DCF.Scenarios[1]
+	if base.Basis != engine.BasisNetPE || base.StartMargin == nil || base.StartMargin.String() != "0.25" ||
+		base.CashConversion.String() != "0.6" || base.TaxRate.String() != "0.21" {
+		t.Errorf("stored base scenario = %+v", base)
+	}
+	if len(stored.DCF.Initiatives) != 1 || stored.DCF.Initiatives[0].StartYear != 3 || stored.DCF.Initiatives[0].SuccessProbability.Base.String() != "0.4" {
+		t.Errorf("stored initiatives = %+v", stored.DCF.Initiatives)
+	}
+	if srcs := stored.DCF.Initiatives[0].Sources; len(srcs) != 1 || srcs[0] != "https://sec.test/10k.htm" {
+		t.Errorf("initiative sources = %v (the unprovided URL must be dropped)", srcs)
 	}
 	man, err := e.vals.Get(ctx, *got.Approvals.RangeFairValue)
 	if err != nil || man.Method != valuation.MethodManual || man.ValuePerShare.String() != "180" || man.Currency != "USD" {

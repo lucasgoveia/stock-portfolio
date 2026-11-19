@@ -64,7 +64,7 @@ func TestReverseDCFRoundTrip(t *testing.T) {
 	for i := range sc.RevenueGrowth {
 		sc.RevenueGrowth[i] = growth
 	}
-	_, _, _, vps := scenarioValue(base.BaseRevenue, base.NetDebt, base.Shares, sc)
+	vps := calcScenario(base.BaseRevenue, base.NetDebt, base.Shares, sc, nil).vps
 	base.Price = vps
 	res, err := ReverseDCF(base)
 	if err != nil {

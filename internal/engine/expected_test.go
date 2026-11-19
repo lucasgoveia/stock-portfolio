@@ -201,3 +201,80 @@ func TestMissStreak(t *testing.T) {
 		}
 	}
 }
+
+func TestExpectedForInitiatives(t *testing.T) {
+	// Flat core of 400 a year; an initiative of 100 revenue in year 5 (20% a
+	// year ramp from year 1) at a 20% margin, base success 50%: year 1 adds
+	// 20 x 0.5 = 10 of revenue and 10 x 0.2 = 2 of earnings.
+	ini := []Initiative{{Name: "X", StartYear: 1, RevenueYear5: d("100"), Margin: d("0.2"), SuccessProbability: InitiativeProbabilities{Base: d("0.5")}}}
+	in := ExpectedPathInput{BaseRevenue: d("400"), BaseNetMargin: dp("0.05"), Shares: d("10"), Base: baseScenario("0", "0", "0", "0", "0"), Initiatives: ini}
+	sumRev, sumEPS := d("0"), d("0")
+	var first, last ExpectedQuarter
+	for n := 1; n <= 4; n++ {
+		q, err := ExpectedFor(in, n)
+		if err != nil {
+			t.Fatal(err)
+		}
+		sumRev, sumEPS = sumRev.Add(q.Revenue), sumEPS.Add(*q.EPS)
+		if n == 1 {
+			first = q
+		}
+		last = q
+	}
+	if sumRev.Sub(d("410")).Abs().GreaterThan(d("0.05")) {
+		t.Errorf("year 1 revenue = %s, want 410", sumRev)
+	}
+	// Earnings (400 x 6% + 2) over 10 shares = 2.6, within rounding of the quarters.
+	if sumEPS.Sub(d("2.6")).Abs().GreaterThan(d("0.001")) {
+		t.Errorf("year 1 EPS = %s, want 2.6", sumEPS)
+	}
+	if !last.Revenue.GreaterThan(first.Revenue) {
+		t.Errorf("growing total: q4 %s should exceed q1 %s", last.Revenue, first.Revenue)
+	}
+	// Year 5: 400 + 100 x 0.5 = 450 in total.
+	var y5 = d("0")
+	for n := 17; n <= 20; n++ {
+		q, _ := ExpectedFor(in, n)
+		y5 = y5.Add(q.Revenue)
+	}
+	if y5.Sub(d("450")).Abs().GreaterThan(d("0.05")) {
+		t.Errorf("year 5 revenue = %s, want 450", y5)
+	}
+	// Without initiatives the path is the original one.
+	in.Initiatives = nil
+	q, _ := ExpectedFor(in, 1)
+	eqD(t, "no initiatives", q.Revenue, d("100"))
+}
+
+func TestExpectedForEPSBasis(t *testing.T) {
+	flat := func(mod func(s *Scenario)) ExpectedPathInput {
+		s := baseScenario("0", "0", "0", "0", "0")
+		mod(&s)
+		return ExpectedPathInput{BaseRevenue: d("400"), BaseNetMargin: dp("0.05"), Shares: d("10"), Base: s}
+	}
+	tests := []struct {
+		name string
+		mod  func(s *Scenario)
+		n    int
+		eps  string
+	}{
+		// Legacy: no start margin, net margin 5% to terminal 10%, year 5 = 10%: 100 x 10% / 10.
+		{"legacy untaxed", func(s *Scenario) {}, 20, "1"},
+		// ebit_ev taxed at 20%: terminal 10% x 0.8 = 8% in year 5.
+		{"ebit_ev taxed terminal", func(s *Scenario) { s.TaxRate = d("0.2") }, 20, "0.8"},
+		// net_pe: tax rate is ignored, net margin is already after tax.
+		{"net_pe ignores tax", func(s *Scenario) { s.Basis, s.TaxRate = BasisNetPE, d("0.2") }, 20, "1"},
+		// start margin 8% to 10%: year 1 = 8.4%; ebit_ev tax 25% -> 6.3%; 100 x 6.3% / 10.
+		{"start margin after tax", func(s *Scenario) { s.StartMargin, s.TaxRate = dp("0.08"), d("0.25") }, 1, "0.63"},
+		{"start margin net_pe", func(s *Scenario) { s.StartMargin, s.Basis = dp("0.08"), BasisNetPE }, 1, "0.84"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			q, err := ExpectedFor(flat(tc.mod), tc.n)
+			if err != nil {
+				t.Fatal(err)
+			}
+			eqD(t, "eps", *q.EPS, d(tc.eps))
+		})
+	}
+}

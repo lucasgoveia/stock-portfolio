@@ -63,6 +63,17 @@ type ReverseDCFInput struct {
 	TerminalMargin decimal.Decimal `json:"terminal_margin"`
 	ExitMultiple   decimal.Decimal `json:"exit_multiple"`
 	DiscountRate   decimal.Decimal `json:"discount_rate"`
+	// Basis, StartMargin, TaxRate, CashConversion and Initiatives are the
+	// scenario fields of the same name (see Scenario); all optional. Empty
+	// Basis is ebit_ev.
+	Basis          string           `json:"basis,omitempty" enum:"ebit_ev,net_pe"`
+	StartMargin    *decimal.Decimal `json:"start_margin,omitempty"`
+	TaxRate        decimal.Decimal  `json:"tax_rate" required:"false"`
+	CashConversion decimal.Decimal  `json:"cash_conversion" required:"false"`
+	// Initiatives are held fixed while the core growth is solved; their success
+	// probability is the Scenario one (default base).
+	Initiatives []Initiative `json:"initiatives,omitempty"`
+	Scenario    string       `json:"scenario,omitempty" enum:"bear,base,bull" doc:"Which initiative success probability to use; default base"`
 }
 
 // Reverse DCF outcomes.
@@ -104,23 +115,40 @@ func (in ReverseDCFInput) Validate() error {
 	case !in.DiscountRate.IsPositive():
 		return invalidf("discount_rate must be positive")
 	}
-	return nil
+	sc := in.scenario()
+	sc.Name = ScenarioBase
+	if err := sc.validateBasisFields(); err != nil {
+		return err
+	}
+	return validateInitiatives(in.Initiatives)
+}
+
+// scenario is the scenario the reverse DCF evaluates, without growth.
+func (in ReverseDCFInput) scenario() Scenario {
+	name := in.Scenario
+	if name == "" {
+		name = ScenarioBase
+	}
+	return Scenario{
+		Name: name, TerminalMargin: in.TerminalMargin, ExitMultiple: in.ExitMultiple, DiscountRate: in.DiscountRate,
+		Basis: in.Basis, StartMargin: in.StartMargin, TaxRate: in.TaxRate, CashConversion: in.CashConversion,
+	}
 }
 
 // ReverseDCF solves, by bisection, the constant 5-year revenue growth at which
-// the scenario DCF value per share (same formula as ScenarioDCF) equals the
+// the scenario DCF value per share (the same calcScenario as ScenarioDCF, with
+// the given basis, margin path, cash conversion and initiatives) equals the
 // price. The value rises with growth, so the root is unique.
 func ReverseDCF(in ReverseDCFInput) (ReverseDCFResult, error) {
 	if err := in.Validate(); err != nil {
 		return ReverseDCFResult{}, err
 	}
 	value := func(g decimal.Decimal) decimal.Decimal {
-		s := Scenario{TerminalMargin: in.TerminalMargin, ExitMultiple: in.ExitMultiple, DiscountRate: in.DiscountRate}
+		s := in.scenario()
 		for i := range s.RevenueGrowth {
 			s.RevenueGrowth[i] = g
 		}
-		_, _, _, vps := scenarioValue(in.BaseRevenue, in.NetDebt, in.Shares, s)
-		return vps
+		return calcScenario(in.BaseRevenue, in.NetDebt, in.Shares, s, in.Initiatives).vps
 	}
 	lo, hi := reverseLow, reverseHigh
 	if vlo := value(lo); in.Price.LessThan(vlo) {

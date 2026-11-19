@@ -15,9 +15,22 @@ import (
 // R_k x r^(i-1) / (1 + r + r^2 + r^3). Splitting evenly (R_k / 4) would put
 // every early quarter of a growing business below its expected value.
 //
-// EPS: the net margin moves linearly from the base year's net margin to the
-// terminal margin over 5 years, m_k = m_0 + (m_T - m_0) x k / 5 for year k, and
-// quarter earnings are quarter revenue x m_k, over the version's share count.
+// Initiatives: the base scenario's new businesses are part of the expectation,
+// each weighted by its base success probability w. Year k revenue becomes
+// T_k = R_k + sum_i w_i x initiative_i,k (the linear ramp of
+// Initiative.RevenueInYear), and the quarterly split uses the growth T_k /
+// T_(k-1) of that total.
+//
+// EPS: earnings are compared after tax and after the basis. With m_k the
+// scenario's margin path, quarter EPS is quarter revenue x blended margin over
+// the version's share count, where for year k the blended margin is
+// (R_k x m_k x a + sum_i w_i x initiative_i,k x margin_i x a) / T_k, and a =
+// 1 - tax_rate for ebit_ev (EBIT is taxed; interest is ignored, so it is an
+// approximation) and a = 1 for net_pe (net margin already is after tax).
+// m_k = s + (m_T - s) x k / 5 where s is the scenario's start margin or, when it
+// has none, the base year's net margin m_0 (the original behaviour; for it the
+// terminal margin is taxed as m_T x a so that stored versions, whose tax rate
+// is 0, give the same value as before).
 
 // ExpectedPathInput is the base scenario of one scenario DCF version.
 type ExpectedPathInput struct {
@@ -28,8 +41,10 @@ type ExpectedPathInput struct {
 	BaseNetMargin *decimal.Decimal
 	// Shares is the share count the EPS is spread over; zero leaves EPS undefined.
 	Shares decimal.Decimal
-	// Base is the base scenario: yearly growth and terminal margin are used.
+	// Base is the base scenario: growth, margins, basis and tax are used.
 	Base Scenario
+	// Initiatives of the version, weighted by their base success probability.
+	Initiatives []Initiative
 }
 
 // ExpectedQuarter is the base scenario's expectation for one quarter.
@@ -58,16 +73,39 @@ func ExpectedFor(in ExpectedPathInput, n int) (ExpectedQuarter, error) {
 	one := decimal.NewFromInt(1)
 	year := (n-1)/4 + 1
 	i := (n-1)%4 + 1 // quarter within the year
+	if err := validateInitiatives(in.Initiatives); err != nil {
+		return ExpectedQuarter{}, err
+	}
 
-	annual := in.BaseRevenue
-	for k := 0; k < year; k++ {
-		g := in.Base.RevenueGrowth[k]
+	// Core revenue per year, and the same with initiatives added.
+	core, prev := in.BaseRevenue, in.BaseRevenue // prev is the total of the year before
+	var total decimal.Decimal
+	var initRev, initEarn decimal.Decimal // weighted initiative revenue and earnings in the year
+	for k := 1; k <= year; k++ {
+		g := in.Base.RevenueGrowth[k-1]
 		if g.LessThanOrEqual(one.Neg()) {
 			return ExpectedQuarter{}, invalidf("revenue growth must be greater than -100%%")
 		}
-		annual = annual.Mul(one.Add(g))
+		core = core.Mul(one.Add(g))
+		initRev, initEarn = decimal.Zero, decimal.Zero
+		for _, ini := range in.Initiatives {
+			w := ini.SuccessProbability.For(ScenarioBase)
+			r := ini.RevenueInYear(k).Mul(w)
+			initRev = initRev.Add(r)
+			initEarn = initEarn.Add(r.Mul(ini.Margin))
+		}
+		total = core.Add(initRev)
+		if k < year {
+			prev = total
+		}
 	}
-	r := sqrt(sqrt(one.Add(in.Base.RevenueGrowth[year-1])))
+	// Growth of the year's total revenue; the core rate when there are no
+	// initiatives so that the path is exactly the original one.
+	ratio := one.Add(in.Base.RevenueGrowth[year-1])
+	if initRev.IsPositive() {
+		ratio = total.Div(prev)
+	}
+	r := sqrt(sqrt(ratio))
 	sum, pow, weight := decimal.Zero, one, one // pow is r^(j-1)
 	for j := 1; j <= 4; j++ {
 		sum = sum.Add(pow)
@@ -76,12 +114,28 @@ func ExpectedFor(in ExpectedPathInput, n int) (ExpectedQuarter, error) {
 		}
 		pow = pow.Mul(r)
 	}
-	rev := annual.Mul(weight).Div(sum)
+	rev := total.Mul(weight).Div(sum)
 
 	out := ExpectedQuarter{Quarter: n, Year: year, Revenue: rev.Round(expectedRevenuePlaces)}
 	if in.BaseNetMargin != nil && in.Shares.IsPositive() {
-		m0 := *in.BaseNetMargin
-		margin := m0.Add(in.Base.TerminalMargin.Sub(m0).Mul(decimal.NewFromInt(int64(year))).Div(decimal.NewFromInt(DCFYears)))
+		a := decimal.NewFromInt(1) // after-tax factor
+		if in.Base.EffectiveBasis() == BasisEBITEV {
+			a = one.Sub(in.Base.TaxRate)
+		}
+		start := *in.BaseNetMargin
+		if in.Base.StartMargin != nil {
+			start = *in.Base.StartMargin
+		}
+		var margin decimal.Decimal
+		if in.Base.StartMargin == nil {
+			// Legacy path from the reported net margin to the (taxed) terminal margin.
+			margin = start.Add(in.Base.TerminalMargin.Mul(a).Sub(start).Mul(decimal.NewFromInt(int64(year))).Div(decimal.NewFromInt(DCFYears)))
+		} else {
+			margin = start.Add(in.Base.TerminalMargin.Sub(start).Mul(decimal.NewFromInt(int64(year))).Div(decimal.NewFromInt(DCFYears))).Mul(a)
+		}
+		if initRev.IsPositive() {
+			margin = core.Mul(margin).Add(initEarn.Mul(a)).Div(total)
+		}
 		eps := rev.Mul(margin).Div(in.Shares).Round(DCFValuePrecision)
 		out.EPS = &eps
 	}

@@ -449,12 +449,15 @@ func (in computeInput) helpers(c *computed, havePrice bool, price decimal.Decima
 	}
 
 	// Reverse DCF defaults come from the latest fiscal year.
-	margin := DefaultTerminalMargin
+	// The basis follows the margin: an EBIT margin is read with EV/EBIT and the
+	// net debt subtracted (ebit_ev); a net margin with P/E and no net debt
+	// subtracted (net_pe).
+	margin, basis := DefaultTerminalMargin, engine.BasisEBITEV
 	switch {
 	case haveRev && revenue.IsPositive() && haveEBIT && ebit.IsPositive():
 		margin = ebit.Div(revenue).Round(ratioPlaces)
 	case haveRev && revenue.IsPositive() && haveNI && ni.IsPositive():
-		margin = ni.Div(revenue).Round(ratioPlaces)
+		margin, basis = ni.Div(revenue).Round(ratioPlaces), engine.BasisNetPE
 	}
 	exit, disc := DefaultExitMultiple, DefaultDiscountRate(in.Market)
 	if in.Params.TerminalMargin != nil {
@@ -467,7 +470,7 @@ func (in computeInput) helpers(c *computed, havePrice bool, price decimal.Decima
 		disc = *in.Params.DiscountRate
 	}
 	rd := &ReverseDCF{
-		TerminalMargin: *dp(margin, ratioPlaces), ExitMultiple: *dp(exit, multiplePlaces), DiscountRate: *dp(disc, ratioPlaces),
+		Basis: basis, TerminalMargin: *dp(margin, ratioPlaces), ExitMultiple: *dp(exit, multiplePlaces), DiscountRate: *dp(disc, ratioPlaces),
 		Status: "unavailable",
 	}
 	h.ReverseDCF = rd
@@ -478,7 +481,7 @@ func (in computeInput) helpers(c *computed, havePrice bool, price decimal.Decima
 		rd.Note = "needs positive annual revenue"
 	default:
 		res, err := engine.ReverseDCF(engine.ReverseDCFInput{
-			Price: price, BaseRevenue: revenue, NetDebt: netDebt, Shares: shares,
+			Price: price, BaseRevenue: revenue, NetDebt: netDebt, Shares: shares, Basis: basis,
 			TerminalMargin: margin, ExitMultiple: exit, DiscountRate: disc,
 		})
 		if err != nil {

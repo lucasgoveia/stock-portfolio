@@ -390,8 +390,10 @@ function RunView({ run, asset }: { run: Run; asset: Asset }) {
                 <th className="py-1 pr-3 font-medium">Scenario</th>
                 <th className="py-1 pr-3 text-right font-medium">Prob.</th>
                 <th className="py-1 pr-3 text-right font-medium">Growth, years 1 to 5</th>
-                <th className="py-1 pr-3 text-right font-medium">Margin</th>
+                <th className="py-1 pr-3 font-medium">Basis</th>
+                <th className="py-1 pr-3 text-right font-medium">Margin start → end</th>
                 <th className="py-1 pr-3 text-right font-medium">Exit</th>
+                <th className="py-1 pr-3 text-right font-medium">Cash conv.</th>
                 <th className="py-1 text-right font-medium">Discount</th>
               </tr>
             </thead>
@@ -405,8 +407,13 @@ function RunView({ run, asset }: { run: Run; asset: Asset }) {
                     <td className="num py-1.5 pr-3 text-right whitespace-nowrap">
                       {(s.revenue_growth ?? []).map((g) => pct(g, 1)).join(' · ')}
                     </td>
-                    <td className="num py-1.5 pr-3 text-right">{pct(s.terminal_margin, 1)}</td>
+                    <td className="py-1.5 pr-3 whitespace-nowrap">{s.basis === 'net_pe' ? 'Net income × P/E' : 'EBIT × EV/EBIT'}</td>
+                    <td className="num py-1.5 pr-3 text-right whitespace-nowrap">
+                      {s.start_margin != null ? `${pct(s.start_margin, 1)} → ` : ''}
+                      {pct(s.terminal_margin, 1)}
+                    </td>
                     <td className="num py-1.5 pr-3 text-right">{multiple(s.exit_multiple)}</td>
+                    <td className="num py-1.5 pr-3 text-right">{pct(s.cash_conversion ?? '0', 0)}</td>
                     <td className="num py-1.5 text-right">{pct(s.discount_rate, 1)}</td>
                   </tr>
                 )
@@ -422,6 +429,23 @@ function RunView({ run, asset }: { run: Run; asset: Asset }) {
             </div>
           ))}
         </dl>
+        {(o.initiatives ?? []).length > 0 && (
+          <div className="mt-3 border-t pt-3">
+            <div className="eyebrow">New businesses</div>
+            <ul className="mt-2 space-y-2 text-sm">
+              {(o.initiatives ?? []).map((i) => (
+                <li key={i.name}>
+                  <span className="font-medium">{i.name}</span>{' '}
+                  <span className="text-muted-foreground num text-xs">
+                    from year {i.start_year}, {money(i.revenue_year5, cur)} revenue in year 5 at {pct(i.margin, 0)} margin; success{' '}
+                    {pct(i.success_probability.bear, 0)} / {pct(i.success_probability.base, 0)} / {pct(i.success_probability.bull, 0)}
+                  </span>
+                  <p className="text-muted-foreground">{i.rationale}</p>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
         <div className="mt-3 border-t pt-3">
           <Check
             checked={dcf || ap.dcf_fair_value_id != null}

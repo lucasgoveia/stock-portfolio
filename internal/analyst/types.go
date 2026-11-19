@@ -3,6 +3,7 @@ package analyst
 import (
 	"github.com/shopspring/decimal"
 
+	"github.com/lucasgoveia/stock-portfolio/internal/engine"
 	"github.com/lucasgoveia/stock-portfolio/internal/money"
 )
 
@@ -97,6 +98,13 @@ type ScenarioDraft struct {
 	DiscountRate   decimal.Decimal   `json:"discount_rate"`
 	Probability    decimal.Decimal   `json:"probability"`
 	Rationale      string            `json:"rationale"`
+	// Basis, StartMargin, CashConversion and TaxRate are the engine scenario
+	// fields of the same name. Runs stored before they existed have an empty
+	// basis (read as ebit_ev), no start margin and zeros.
+	Basis          string           `json:"basis,omitempty" enum:"ebit_ev,net_pe"`
+	StartMargin    *decimal.Decimal `json:"start_margin,omitempty"`
+	CashConversion decimal.Decimal  `json:"cash_conversion" required:"false"`
+	TaxRate        decimal.Decimal  `json:"tax_rate" required:"false"`
 }
 
 // Scenarios are the three proposed scenarios.
@@ -128,12 +136,15 @@ type Source struct {
 
 // Output is the validated structured answer of the model.
 type Output struct {
-	Catalysts       []Catalyst     `json:"catalysts"`
-	MarketSizeNotes string         `json:"market_size_notes"`
-	Scenarios       Scenarios      `json:"scenarios"`
-	FairValueRange  FairValueRange `json:"fair_value_range"`
-	ThesisCheck     []ThesisCheck  `json:"thesis_check"`
-	Sources         []Source       `json:"sources"`
+	Catalysts       []Catalyst `json:"catalysts"`
+	MarketSizeNotes string     `json:"market_size_notes"`
+	Scenarios       Scenarios  `json:"scenarios"`
+	// Initiatives are new businesses not reflected in history, shared by the
+	// three scenarios (each has a success probability per scenario).
+	Initiatives    []engine.Initiative `json:"initiatives,omitempty"`
+	FairValueRange FairValueRange      `json:"fair_value_range"`
+	ThesisCheck    []ThesisCheck       `json:"thesis_check"`
+	Sources        []Source            `json:"sources"`
 }
 
 // Approvals records what has been applied from a run.

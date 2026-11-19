@@ -3,18 +3,29 @@ import { Trash2 } from 'lucide-react'
 import { useDeferredValue, useState } from 'react'
 import { toast } from 'sonner'
 
+import { BreakdownTable, InitiativesEditor, BasisTable, type MarginHints } from '@/components/asset/dcf-parts'
+import {
+  SCENARIOS,
+  blankDraft,
+  defaultTax,
+  draftFrom,
+  toInput,
+  type DCFDraft,
+  type DCFInput,
+  type ScenarioDraft,
+  type ScenarioName,
+} from '@/components/asset/dcf-draft'
 import { Panel } from '@/components/asset/panel'
 import { Field, FormError, NativeSelect } from '@/components/form'
 import { ErrorBlock, LoadingBlock } from '@/components/query-state'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { api, errorMessage, unwrap, type Schemas } from '@/lib/api'
-import { decimalInput, fractionToPercent, humanize, money, percentToFraction, scaled, today, upside } from '@/lib/format'
+import { decimalInput, fractionToPercent, humanize, money, scaled, today, upside } from '@/lib/format'
 import { qk } from '@/lib/queries'
 import { cn } from '@/lib/utils'
 
 type FairValue = Schemas['FairValue']
-type DCFInput = Schemas['DCFInput']
 
 const METHOD: Record<string, string> = {
   scenario_dcf: 'Scenario DCF',
@@ -24,105 +35,17 @@ const METHOD: Record<string, string> = {
   target_price: 'Target price',
 }
 
-const SCENARIOS = ['bear', 'base', 'bull'] as const
-type ScenarioName = (typeof SCENARIOS)[number]
-
-/** Editor state: every rate as a percent string, as typed. */
-interface ScenarioDraft {
-  growth: string[]
-  margin: string
-  multiple: string
-  discount: string
-  probability: string
-}
-interface DCFDraft {
-  baseRevenue: string
-  netDebt: string
-  shares: string
-  scenarios: Record<ScenarioName, ScenarioDraft>
-}
-
-const blankScenario = (probability: string, growth: string): ScenarioDraft => ({
-  growth: Array(5).fill(growth),
-  margin: '',
-  multiple: '',
-  discount: '12',
-  probability,
-})
-
-const blankDraft = (): DCFDraft => ({
-  baseRevenue: '',
-  netDebt: '0',
-  shares: '',
-  scenarios: { bear: blankScenario('25', '0'), base: blankScenario('50', '5'), bull: blankScenario('25', '10') },
-})
-
-function draftFrom(dcf: DCFInput): DCFDraft {
-  const d = blankDraft()
-  d.baseRevenue = dcf.base_revenue
-  d.netDebt = dcf.net_debt ?? '0'
-  d.shares = dcf.shares
-  for (const s of dcf.scenarios ?? []) {
-    if (!SCENARIOS.includes(s.name as ScenarioName)) continue
-    d.scenarios[s.name as ScenarioName] = {
-      growth: (s.revenue_growth ?? []).map(fractionToPercent),
-      margin: fractionToPercent(s.terminal_margin),
-      multiple: s.exit_multiple,
-      discount: fractionToPercent(s.discount_rate),
-      probability: fractionToPercent(s.probability),
-    }
-  }
-  return d
-}
-
-/** Converts the draft to API input, or returns the first problem in plain words. */
-function toInput(d: DCFDraft): { input?: DCFInput; error?: string } {
-  const rev = decimalInput(d.baseRevenue)
-  const shares = decimalInput(d.shares)
-  const debt = decimalInput(d.netDebt || '0')
-  if (!rev || Number(rev) <= 0) return { error: 'Enter the latest annual revenue.' }
-  if (!shares || Number(shares) <= 0) return { error: 'Enter shares outstanding.' }
-  if (debt == null) return { error: 'Net debt must be a number (negative for net cash).' }
-  const probTotal = SCENARIOS.reduce((sum, n) => sum + scaled(d.scenarios[n].probability, 2), 0)
-  if (probTotal !== 10000) {
-    return { error: `Probabilities add up to ${(probTotal / 100).toString()}%; they must total 100%.` }
-  }
-  const scenarios = []
-  for (const n of SCENARIOS) {
-    const s = d.scenarios[n]
-    const growth = s.growth.map(percentToFraction)
-    if (growth.some((g) => g == null)) return { error: `${humanize(n)}: every year needs a growth rate.` }
-    const margin = percentToFraction(s.margin)
-    const discount = percentToFraction(s.discount)
-    const multiple = decimalInput(s.multiple)
-    const probability = percentToFraction(s.probability)
-    if (margin == null) return { error: `${humanize(n)}: enter the terminal margin.` }
-    if (!multiple || Number(multiple) <= 0) return { error: `${humanize(n)}: enter the exit multiple.` }
-    if (!discount || Number(discount) <= 0) return { error: `${humanize(n)}: enter the discount rate.` }
-    if (probability == null) return { error: `${humanize(n)}: enter the probability.` }
-    scenarios.push({
-      name: n,
-      revenue_growth: growth as string[],
-      terminal_margin: margin,
-      exit_multiple: multiple,
-      discount_rate: discount,
-      probability,
-    })
-  }
-  return { input: { base_revenue: rev, net_debt: debt, shares, scenarios } }
-}
-
 export function ValuationTab({ assetId, currency, price }: { assetId: number; currency: string; price?: string | null }) {
   const versions = useQuery({
     queryKey: [...qk.asset(assetId), 'fair-values'],
     queryFn: () => unwrap(api.GET('/api/assets/{id}/fair-values', { params: { path: { id: assetId } } })),
   })
-  const [draft, setDraft] = useState<DCFDraft>(blankDraft)
+  const [draft, setDraft] = useState<DCFDraft>(() => blankDraft(defaultTax(currency)))
   const [editorKey, setEditorKey] = useState(0)
   const loadIntoEditor = (fv: FairValue) => {
     const dcf = (fv.inputs as { dcf?: DCFInput } | null)?.dcf
     if (!dcf) return
-    setDraft(draftFrom(dcf))
+    setDraft(draftFrom(dcf, defaultTax(currency)))
     setEditorKey((k) => k + 1)
     toast.info(`Loaded the ${fv.as_of} model into the editor`)
   }
@@ -291,6 +214,12 @@ function DCFEditor({
   const [note, setNote] = useState('')
   const [saveError, setSaveError] = useState<string | null>(null)
   const { input, error } = toInput(d)
+  const fundamentals = useQuery({
+    queryKey: [...qk.asset(assetId), 'fundamentals', 'margins'],
+    queryFn: () => unwrap(api.GET('/api/assets/{id}/fundamentals', { params: { path: { id: assetId } } })),
+    staleTime: 5 * 60_000,
+  })
+  const hints = marginHints(fundamentals.data?.history)
   const deferred = useDeferredValue(input)
   const preview = useQuery({
     queryKey: ['dcf-preview', deferred],
@@ -327,13 +256,14 @@ function DCFEditor({
     setD((prev) => ({ ...prev, scenarios: { ...prev.scenarios, [n]: { ...prev.scenarios[n], ...patch } } }))
   const probTotal = SCENARIOS.reduce((sum, n) => sum + scaled(d.scenarios[n].probability, 2), 0)
   const result = input && preview.data ? preview.data : null
-  const byName = new Map((result?.scenarios ?? []).map((s) => [s.name, s]))
 
   return (
     <Panel title="Scenario DCF">
       <p className="text-muted-foreground mb-4 max-w-prose text-xs">
         Revenue grows for five years, then earns the terminal margin and is sold at the exit multiple, discounted back
-        to today. Rates are in percent. Growth can come from research and exceed history.
+        to today, together with the cash returned along the way. Pick the basis that matches your margin and multiple:
+        EBIT with EV/EBIT subtracts net debt; net income with P/E does not. Rates are in percent. Growth can come from
+        research and exceed history.
       </p>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         <Field label={`Revenue, last year (${currency})`}>
@@ -359,7 +289,7 @@ function DCFEditor({
                   Y{y} growth %
                 </th>
               ))}
-              <th className="px-1 py-1 font-medium">Margin %</th>
+              <th className="px-1 py-1 font-medium">Terminal margin %</th>
               <th className="px-1 py-1 font-medium">Exit ×</th>
               <th className="px-1 py-1 font-medium">Discount %</th>
               <th className="px-1 py-1 font-medium">Prob. %</th>
@@ -423,6 +353,9 @@ function DCFEditor({
         </table>
       </div>
 
+      <BasisTable scenarios={d.scenarios} hints={hints} onChange={setScenario} />
+      <InitiativesEditor initiatives={d.initiatives} currency={currency} onChange={(initiatives) => setD((prev) => ({ ...prev, initiatives }))} />
+
       <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <div aria-live="polite">
           {error ? (
@@ -438,14 +371,7 @@ function DCFEditor({
                   <span className="num text-muted-foreground text-sm">{upside(result.value_per_share, price)} vs price</span>
                 )}
               </div>
-              <dl className="mt-3 grid grid-cols-3 gap-2 text-sm">
-                {SCENARIOS.map((n) => (
-                  <div key={n} className="border-l-2 pl-2">
-                    <dt className="text-muted-foreground text-xs capitalize">{n}</dt>
-                    <dd className="num">{money(byName.get(n)?.value_per_share, currency)}</dd>
-                  </div>
-                ))}
-              </dl>
+              <BreakdownTable result={result} currency={currency} draft={d} />
             </div>
           ) : (
             <p className="text-muted-foreground text-sm">Computing…</p>
@@ -482,4 +408,13 @@ function DCFEditor({
       </div>
     </Panel>
   )
+}
+
+/** Latest reported EBIT and net margins (percent) from the fundamentals history. */
+function marginHints(history: Schemas['HistoryPoint'][] | null | undefined): MarginHints {
+  const last = [...(history ?? [])].sort((a, b) => a.period_end.localeCompare(b.period_end)).at(-1)
+  return {
+    ebit: last?.ebit_margin ? fractionToPercent(last.ebit_margin) : undefined,
+    net: last?.net_margin ? fractionToPercent(last.net_margin) : undefined,
+  }
 }

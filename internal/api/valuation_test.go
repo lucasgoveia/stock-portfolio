@@ -32,6 +32,19 @@ func TestValuationAPI(t *testing.T) {
 	if code != 200 || r["value_per_share"] != "18.1402" {
 		t.Fatalf("preview: %d %v", code, r)
 	}
+	// New fields: net_pe basis (no net debt), cash conversion and an initiative.
+	scen := func(name, p string) string {
+		return `{"name":"` + name + `","basis":"net_pe","start_margin":"0.1","tax_rate":"0.34","cash_conversion":"0.5","revenue_growth":["0","0","0","0","0"],"terminal_margin":"0.1","exit_multiple":"10","discount_rate":"0.1","probability":"` + p + `"}`
+	}
+	newJSON := `{"base_revenue":"100","net_debt":"50","shares":"10","scenarios":[` + scen("bear", "0.25") + `,` + scen("base", "0.5") + `,` + scen("bull", "0.25") + `],
+	 "initiatives":[{"name":"Fintech","start_year":3,"revenue_year5":"50","margin":"0.2","success_probability":{"bear":"0.2","base":"0.5","bull":"1"}}]}`
+	code, r, _ = do(t, h, "POST", "/api/valuation/dcf", newJSON)
+	if code != 200 || r["initiatives_value_per_share"] == nil {
+		t.Fatalf("preview with new fields: %d %v", code, r)
+	}
+	if sc, _ := r["scenarios"].([]any); len(sc) != 3 || sc[1].(map[string]any)["basis"] != "net_pe" {
+		t.Fatalf("scenarios = %v", r["scenarios"])
+	}
 	if code, _, _ := do(t, h, "POST", "/api/valuation/dcf", `{"base_revenue":"100","shares":"10","scenarios":[]}`); code != 400 {
 		t.Fatalf("invalid preview: %d", code)
 	}

@@ -24,12 +24,33 @@ func arr(items any, desc string) map[string]any {
 func scenarioSchema() map[string]any {
 	return obj(map[string]any{
 		"revenue_growth":  arr(map[string]any{"type": "number"}, "Exactly 5 yearly revenue growth rates as fractions (0.08 = 8%), year 1 first"),
-		"terminal_margin": num("Earnings (or FCF) margin on year-5 revenue, fraction between 0 and 1"),
-		"exit_multiple":   num("Multiple applied to year-5 earnings, positive"),
+		"basis":           map[string]any{"type": "string", "enum": []string{engine.BasisEBITEV, engine.BasisNetPE}, "description": "ebit_ev: terminal_margin and start_margin are EBIT margins, exit_multiple is EV/EBIT and net debt is subtracted. net_pe: they are net margins, exit_multiple is P/E and net debt is NOT subtracted. Pick one and keep margin and multiple consistent with it"},
+		"start_margin":    num("Margin today (year 0) on the same basis; the margin moves linearly to terminal_margin over the 5 years. Use the latest reported margin from the fundamentals; equal to terminal_margin if flat"),
+		"terminal_margin": num("Margin on year-5 revenue on the chosen basis (EBIT margin for ebit_ev, net margin for net_pe), fraction between 0 and 1"),
+		"exit_multiple":   num("Multiple applied to year-5 earnings on the chosen basis (EV/EBIT or P/E), positive"),
+		"cash_conversion": num("Fraction between 0 and 1 of each year's earnings returned or accumulated for shareholders (dividends, buybacks, FCF); 0 values only the exit"),
+		"tax_rate":        num("Tax rate as a fraction in [0, 1), used to turn EBIT into after-tax cash for ebit_ev (about 0.34 for Brazil, 0.21 for the US); ignored for net_pe"),
 		"discount_rate":   num("Annual discount rate as a fraction, positive"),
 		"probability":     num("Scenario weight as a fraction; the three probabilities must sum to 1"),
 		"rationale":       str("Why these assumptions, grounded in the provided documents"),
-	}, "revenue_growth", "terminal_margin", "exit_multiple", "discount_rate", "probability", "rationale")
+	}, "basis", "revenue_growth", "start_margin", "terminal_margin", "exit_multiple", "cash_conversion", "tax_rate", "discount_rate", "probability", "rationale")
+}
+
+func initiativeSchema() map[string]any {
+	prob := obj(map[string]any{
+		"bear": num("Probability the initiative succeeds in the bear scenario, fraction in [0, 1]"),
+		"base": num("Probability in the base scenario"),
+		"bull": num("Probability in the bull scenario"),
+	}, "bear", "base", "bull")
+	return obj(map[string]any{
+		"name":                str("Short name of the new business"),
+		"rationale":           str("Why it is credible and why it is not in past revenue"),
+		"sources":             arr(map[string]any{"type": "string"}, "URLs of the provided documents that support it"),
+		"start_year":          map[string]any{"type": "integer", "description": "First forecast year (1 to 5) in which it earns revenue"},
+		"revenue_year5":       num("Revenue in year 5 if it succeeds, in the asset's currency, positive; ramps linearly from start_year"),
+		"margin":              num("Earnings margin on the same basis as the scenarios, fraction in [0, 1], constant over its life"),
+		"success_probability": prob,
+	}, "name", "rationale", "sources", "start_year", "revenue_year5", "margin", "success_probability")
 }
 
 // outputSchema is the JSON schema the model's answer must follow.
@@ -45,6 +66,7 @@ func outputSchema() map[string]any {
 		"scenarios": obj(map[string]any{
 			"bear": scenarioSchema(), "base": scenarioSchema(), "bull": scenarioSchema(),
 		}, "bear", "base", "bull"),
+		"initiatives": arr(initiativeSchema(), "New businesses (new products, segments, R&D, capex programs, market entries) not reflected in historical revenue, found in the documents; empty when there is none. At most 10"),
 		"fair_value_range": obj(map[string]any{
 			"low":      num("Low fair value per share, positive"),
 			"high":     num("High fair value per share, not below low"),
@@ -59,7 +81,7 @@ func outputSchema() map[string]any {
 			"title": str("Document title"),
 			"url":   str("URL exactly as provided"),
 		}, "title", "url"), "Provided documents the answer relied on"),
-	}, "catalysts", "market_size_notes", "scenarios", "fair_value_range", "thesis_check", "sources")
+	}, "catalysts", "market_size_notes", "scenarios", "initiatives", "fair_value_range", "thesis_check", "sources")
 }
 
 // ErrInvalidOutput marks model output that failed server-side validation.
@@ -109,8 +131,14 @@ func (o *Output) validate() error {
 		}
 		dcf.Scenarios = append(dcf.Scenarios, p.s.toEngine(p.name))
 	}
+	dcf.Initiatives = o.Initiatives
 	if err := dcf.Validate(); err != nil {
 		return invalidf("%v", err)
+	}
+	for i, sc := range dcf.Scenarios {
+		if sc.Basis == "" {
+			return invalidf("%s must state its basis (ebit_ev or net_pe)", dcf.Scenarios[i].Name)
+		}
 	}
 	r := o.FairValueRange
 	if !r.Low.IsPositive() || r.High.LessThan(r.Low) {
@@ -143,6 +171,7 @@ func (s ScenarioDraft) toEngine(name string) engine.Scenario {
 		Name: name, TerminalMargin: s.TerminalMargin, ExitMultiple: s.ExitMultiple,
 		DiscountRate: s.DiscountRate, Probability: s.Probability,
 	}
+	sc.Basis, sc.StartMargin, sc.CashConversion, sc.TaxRate = s.Basis, s.StartMargin, s.CashConversion, s.TaxRate
 	copy(sc.RevenueGrowth[:], s.RevenueGrowth)
 	return sc
 }
@@ -156,6 +185,7 @@ func (o Output) DCF(b DCFBase) engine.DCFInput {
 			o.Scenarios.Base.toEngine(engine.ScenarioBase),
 			o.Scenarios.Bull.toEngine(engine.ScenarioBull),
 		},
+		Initiatives: o.Initiatives,
 	}
 }
 
@@ -182,6 +212,17 @@ func (o *Output) restrictSources(allowed map[string]bool) int {
 			}
 		}
 		o.Catalysts[i].SourceURLs = keep
+	}
+	for i := range o.Initiatives {
+		keep := make([]string, 0, len(o.Initiatives[i].Sources))
+		for _, u := range o.Initiatives[i].Sources {
+			if allowed[u] {
+				keep = append(keep, u)
+			} else {
+				dropped++
+			}
+		}
+		o.Initiatives[i].Sources = keep
 	}
 	return dropped
 }

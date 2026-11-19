@@ -339,7 +339,7 @@ func (s *Service) compare(row db.FundamentalQuarter, versions []dcfVersion, annu
 	n := engine.QuartersAfter(int(end.Sub(baseEnd).Hours() / 24))
 	q.QuartersAfter = n
 
-	in := engine.ExpectedPathInput{BaseRevenue: base.revenue, Shares: ver.dcf.Shares, Base: ver.base}
+	in := engine.ExpectedPathInput{BaseRevenue: base.revenue, Shares: ver.dcf.Shares, Base: ver.base, Initiatives: ver.dcf.Initiatives}
 	if base.netIncome != nil {
 		m := base.netIncome.Div(base.revenue)
 		in.BaseNetMargin = &m

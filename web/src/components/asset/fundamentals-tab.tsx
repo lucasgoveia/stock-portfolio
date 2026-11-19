@@ -580,7 +580,7 @@ function ReverseDCFBox({ panel: p, inputs, setInputs }: { panel: PanelData; inpu
         <div className="num text-3xl font-semibold">—</div>
       )}
       <div className="grid grid-cols-3 gap-2">
-        <Field label="Margin, %">
+        <Field label={r.basis === 'net_pe' ? 'Net margin, %' : 'EBIT margin, %'}>
           {(id) => (
             <Input
               id={id}
@@ -592,7 +592,7 @@ function ReverseDCFBox({ panel: p, inputs, setInputs }: { panel: PanelData; inpu
             />
           )}
         </Field>
-        <Field label="Exit ×">
+        <Field label={r.basis === 'net_pe' ? 'P/E ×' : 'EV/EBIT ×'}>
           {(id) => (
             <Input
               id={id}

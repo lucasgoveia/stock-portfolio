@@ -84,6 +84,7 @@ type HelperValue struct {
 type ReverseDCF struct {
 	Status         string         `json:"status" enum:"ok,below_range,above_range,unavailable"`
 	ImpliedGrowth  *money.Decimal `json:"implied_growth,omitempty" doc:"Constant yearly revenue growth over 5 years, as a fraction"`
+	Basis          string         `json:"basis" enum:"ebit_ev,net_pe" doc:"ebit_ev when the margin is the EBIT margin (net debt subtracted), net_pe when it is the net margin"`
 	TerminalMargin money.Decimal  `json:"terminal_margin"`
 	ExitMultiple   money.Decimal  `json:"exit_multiple"`
 	DiscountRate   money.Decimal  `json:"discount_rate"`
