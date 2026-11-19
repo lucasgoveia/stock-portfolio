@@ -316,7 +316,13 @@ After each earnings release, compare reported revenue and EPS against the base s
 ## 15. Performance
 
 - Daily snapshots of portfolio and per-position value in BRL.
-- Time-weighted return (sub-periods split at contributions/withdrawals; dividends are internal).
+- Time-weighted return, daily sub-periods: `r = (V_t - F_t) / V_{t-1} - 1`, flows at end of day. Dividends are internal (never a flow).
+- Flow model. All values in BRL (USD at the day's PTAX).
+  - A buy or sell is valued at the day's close (the same basis as `V_t`), so the move between execution price and close is neither return nor flow; fees do not enter the flow. Without a price on or before the day the cash amount is used.
+  - Position TWR: its own buys are inflows and sells outflows. Sleeve (core, tactical) and market (BR, US) TWR: buys/sells of assets in that group.
+  - Portfolio TWR: `F_t` = sum of trade flows + deposits - withdrawals on cash instruments (dividend credits excluded). A buy is therefore an external flow unless a cash instrument withdrawal of the same amount is recorded on the same date, which nets it to zero. A sale whose proceeds are not recorded as a cash deposit is an outflow.
+  - The first day of a series is its starting capital, reported as a net flow (start value 0).
+  - "Rebuild history" (`POST /api/performance/backfill`) deletes and recomputes every snapshot day, so changes to this model apply to existing databases.
 - Benchmarks: CDI, IBOV; S&P 500 in BRL for the US sleeve.
 - Views: total, core vs tactical, BR vs US, per position.
 

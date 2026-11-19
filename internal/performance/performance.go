@@ -101,16 +101,47 @@ func (s *Service) Snapshot(ctx context.Context, date string) error {
 		if err != nil {
 			return err
 		}
+		// Price on or before the day, in the asset's currency (nil: none yet).
+		var px *decimal.Decimal
+		if price, err := s.q.AssetPriceAt(ctx, db.AssetPriceAtParams{AssetID: a.ID, RefDate: date}); err == nil {
+			v, err := decimal.NewFromString(price.Close)
+			if err != nil {
+				return err
+			}
+			px = &v
+		} else if !errors.Is(err, sql.ErrNoRows) {
+			return err
+		}
+		fxToBRL := decimal.NewFromInt(1)
+		if a.Currency == "USD" && px != nil {
+			r, err := usdRate()
+			if err != nil {
+				return err
+			}
+			fxToBRL = r
+		}
+		// Trade flows (spec §15): a buy or sell is valued at the day's close,
+		// the same basis as the end-of-day value, so the move between the
+		// execution price and the close is neither return nor flow. Without
+		// a price the cash amount is used.
 		flow := decimal.Zero
 		for _, t := range ts {
 			if t.Date != date {
 				continue
 			}
-			amt := t.Quantity.Mul(t.Price)
+			var amt decimal.Decimal
+			switch {
+			case px != nil:
+				amt = t.Quantity.Mul(*px).Mul(fxToBRL)
+			case t.Side == trades.SideBuy:
+				amt = t.Quantity.Mul(t.Price).Add(t.Fees).Mul(t.FXRate)
+			default:
+				amt = t.Quantity.Mul(t.Price).Sub(t.Fees).Mul(t.FXRate)
+			}
 			if t.Side == trades.SideBuy {
-				flow = flow.Add(amt.Add(t.Fees).Mul(t.FXRate))
+				flow = flow.Add(amt)
 			} else {
-				flow = flow.Sub(amt.Sub(t.Fees).Mul(t.FXRate))
+				flow = flow.Sub(amt)
 			}
 		}
 		if pos.Quantity.IsZero() && flow.IsZero() {
@@ -118,25 +149,10 @@ func (s *Service) Snapshot(ctx context.Context, date string) error {
 		}
 		value := decimal.Zero
 		if pos.Quantity.IsPositive() {
-			price, err := s.q.AssetPriceAt(ctx, db.AssetPriceAtParams{AssetID: a.ID, RefDate: date})
-			switch {
-			case errors.Is(err, sql.ErrNoRows):
+			if px == nil {
 				value = pos.TotalCostBRL
-			case err != nil:
-				return err
-			default:
-				px, err := decimal.NewFromString(price.Close)
-				if err != nil {
-					return err
-				}
-				value = pos.Quantity.Mul(px)
-				if a.Currency == "USD" {
-					r, err := usdRate()
-					if err != nil {
-						return err
-					}
-					value = value.Mul(r)
-				}
+			} else {
+				value = pos.Quantity.Mul(*px).Mul(fxToBRL)
 			}
 		}
 		add(assetPrefix+strconv.FormatInt(a.ID, 10), value, flow)
@@ -282,8 +298,9 @@ func (s *Service) series(ctx context.Context, segment, from, to string) ([]engin
 	return out, nil
 }
 
-// periodTWR rebases a series to the first day of the period: the first
-// day's flow is the starting capital, so it does not move the index.
+// periodTWR chains the period's TWR. The first day's flow is the starting
+// capital: it is reported as a flow (start value 0), so start + flows + gain
+// reconcile to the end value.
 func periodTWR(pts []engine.FlowPoint) (engine.FlowPoint, engine.FlowPoint, decimal.Decimal, decimal.Decimal) {
 	if len(pts) == 0 {
 		z := engine.FlowPoint{}
@@ -291,10 +308,15 @@ func periodTWR(pts []engine.FlowPoint) (engine.FlowPoint, engine.FlowPoint, deci
 	}
 	idx := engine.TWR(pts)
 	flows := decimal.Zero
+	first := pts[0]
+	if first.Flow.IsPositive() {
+		flows = first.Flow
+		first.Value = decimal.Zero
+	}
 	for _, p := range pts[1:] {
 		flows = flows.Add(p.Flow)
 	}
-	return pts[0], pts[len(pts)-1], flows, idx[len(idx)-1].Index.Sub(decimal.NewFromInt(1))
+	return first, pts[len(pts)-1], flows, idx[len(idx)-1].Index.Sub(decimal.NewFromInt(1))
 }
 
 // Report computes every segment's TWR and the benchmark indexes between

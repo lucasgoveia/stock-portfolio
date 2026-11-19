@@ -47,3 +47,40 @@ func TestBenchmarkIndexes(t *testing.T) {
 		t.Fatalf("price = %+v", p)
 	}
 }
+
+// Table: flows are end-of-day external money; a buy valued at the close
+// leaves the day's index untouched, an unrecorded gain does not.
+func TestTWRFlowConventions(t *testing.T) {
+	cases := []struct {
+		name string
+		pts  []FlowPoint
+		want string
+	}{
+		{"buy at close value is no return", []FlowPoint{
+			{Date: "a", Value: d("1000"), Flow: d("1000")},
+			{Date: "b", Value: d("3000"), Flow: d("2000")},
+		}, "1"},
+		{"buy counted below its close value leaks a gain", []FlowPoint{
+			{Date: "a", Value: d("1000"), Flow: d("1000")},
+			{Date: "b", Value: d("3000"), Flow: d("1500")},
+		}, "1.5"},
+		{"sell is a negative flow", []FlowPoint{
+			{Date: "a", Value: d("2000"), Flow: d("2000")},
+			{Date: "b", Value: d("1000"), Flow: d("-1000")},
+		}, "1"},
+		{"flow netted to zero (funded from cash)", []FlowPoint{
+			{Date: "a", Value: d("1000"), Flow: d("1000")},
+			{Date: "b", Value: d("1000"), Flow: d("0")},
+		}, "1"},
+		{"flat series with no flows", []FlowPoint{
+			{Date: "a", Value: d("0"), Flow: d("0")},
+			{Date: "b", Value: d("0"), Flow: d("0")},
+		}, "1"},
+	}
+	for _, c := range cases {
+		got := TWR(c.pts)
+		if last := got[len(got)-1].Index; !last.Equal(d(c.want)) {
+			t.Errorf("%s: index %s, want %s", c.name, last, c.want)
+		}
+	}
+}
