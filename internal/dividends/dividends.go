@@ -287,8 +287,18 @@ func (s *Service) credit(ctx context.Context, a db.Asset, instrumentID int64, da
 }
 
 // Detect proposes a payment announced by a data source, sized by the shares
-// held at the record date. It returns false when nothing was held or the
-// source already proposed it.
+// held at the record date. It returns false when nothing was held, the source
+// already proposed it, or the proposal is held back.
+//
+// The source rate is gross per share on today's split-adjusted scale, while
+// the holding at the record date is on the scale of that day. Confirmed share
+// events with an ex-date after the record date (and up to today) convert the
+// holding: gross = rate x shares_on_record x factor (engine.ShareFactorAfter),
+// and the stored quantity is the equivalent current-scale holding so that
+// quantity x per_share = gross. If a detected (not yet confirmed) event exists
+// after the record date, the dividend is held back instead of sized silently:
+// nothing is stored, the corporate_action_pending alert already tells the user,
+// and the next daily run proposes it once the event is confirmed or rejected.
 func (s *Service) Detect(ctx context.Context, assetID int64, kind, recordDate, payDate string, perShare decimal.Decimal, source string) (bool, error) {
 	a, err := s.assets.Get(ctx, assetID)
 	if err != nil {
@@ -298,6 +308,23 @@ func (s *Service) Detect(ctx context.Context, assetID int64, kind, recordDate, p
 	if err != nil || !qty.IsPositive() {
 		return false, err
 	}
+	actions, err := s.q.ListCorporateActions(ctx, db.ListCorporateActionsParams{AssetID: assetID})
+	if err != nil {
+		return false, err
+	}
+	var events []engine.ShareEvent
+	for _, ca := range actions {
+		if ca.ExDate <= recordDate {
+			continue
+		}
+		switch ca.Status {
+		case "detected":
+			return false, nil // pending corporate action after record date
+		case "confirmed":
+			events = append(events, engine.ShareEvent{ExDate: ca.ExDate, Factor: dec(ca.Factor).Decimal})
+		}
+	}
+	qty = qty.Mul(engine.ShareFactorAfter(recordDate, s.now().Format(dateLayout), events))
 	gross := qty.Mul(perShare).Round(2)
 	wp, err := s.withholdingParams(ctx)
 	if err != nil {

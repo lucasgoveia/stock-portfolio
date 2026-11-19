@@ -11,6 +11,7 @@ import (
 
 	"github.com/lucasgoveia/stock-portfolio/internal/assets"
 	"github.com/lucasgoveia/stock-portfolio/internal/cash"
+	"github.com/lucasgoveia/stock-portfolio/internal/corpactions"
 	"github.com/lucasgoveia/stock-portfolio/internal/money"
 	"github.com/lucasgoveia/stock-portfolio/internal/store"
 	"github.com/lucasgoveia/stock-portfolio/internal/trades"
@@ -22,6 +23,7 @@ func mp(s string) *money.Decimal { v := m(s); return &v }
 type env struct {
 	svc            *Service
 	cash           *cash.Service
+	actions        *corpactions.Service
 	b3, us         int64
 	cdi, usd, selc int64
 }
@@ -38,7 +40,7 @@ func setup(t *testing.T) env {
 	as := assets.NewService(conn)
 	tr := trades.NewService(conn, as)
 	cs := cash.NewService(conn, cash.NewRateStore(conn), clock)
-	e := env{svc: NewService(conn, as, tr, cs, clock), cash: cs}
+	e := env{svc: NewService(conn, as, tr, cs, clock), cash: cs, actions: corpactions.NewService(conn, as, tr, nil, clock)}
 	for _, x := range []struct {
 		tk, market string
 		id         *int64
@@ -174,5 +176,57 @@ func TestDetectConfirmReject(t *testing.T) {
 	if err := e.svc.MarkDeployed(ctx, 0); err == nil {
 		// contribution 0 does not exist: the FK must refuse it
 		t.Fatal("mark deployed with a missing plan should fail")
+	}
+}
+
+func TestDetectSizesAcrossLaterSplit(t *testing.T) {
+	e := setup(t)
+	ctx := context.Background()
+	// 1000 shares on the record date; a confirmed 2:1 split follows. The brapi
+	// rate (0.25) is on the post-split scale, so gross = 0.25 x 1000 x 2.
+	if _, err := e.actions.Record(ctx, e.b3, corpactions.Input{Kind: corpactions.KindSplit, ExDate: "2026-09-01", Factor: m("2")}); err != nil {
+		t.Fatal(err)
+	}
+	ok, err := e.svc.Detect(ctx, e.b3, "dividend", "2026-08-20", "2026-09-15", decimal.RequireFromString("0.25"), "brapi")
+	if err != nil || !ok {
+		t.Fatalf("detect: %v %v", ok, err)
+	}
+	q, _ := e.svc.List(ctx, Filter{Status: StatusDetected})
+	if len(q) != 1 || !q[0].Gross.Equal(decimal.RequireFromString("500")) || !q[0].Quantity.Equal(decimal.RequireFromString("2000")) {
+		t.Fatalf("queue = %+v", q)
+	}
+	// A record date on or after the ex-date is already on the new scale.
+	if ok, err := e.svc.Detect(ctx, e.b3, "dividend", "2026-09-01", "", decimal.RequireFromString("0.25"), "brapi"); err != nil || !ok {
+		t.Fatalf("detect after split: %v %v", ok, err)
+	}
+	q, _ = e.svc.List(ctx, Filter{Status: StatusDetected})
+	if !q[0].Gross.Equal(decimal.RequireFromString("500")) { // newest record date first: 2000 shares x 0.25
+		t.Fatalf("post-split record = %+v", q[0])
+	}
+}
+
+func TestDetectHeldWhilePendingEvent(t *testing.T) {
+	e := setup(t)
+	ctx := context.Background()
+	if ok, err := e.actions.Detect(ctx, e.b3, corpactions.KindSplit, "2026-09-01", decimal.RequireFromString("2"), "brapi", "DESDOBRAMENTO"); err != nil || !ok {
+		t.Fatalf("detect action: %v %v", ok, err)
+	}
+	ok, err := e.svc.Detect(ctx, e.b3, "dividend", "2026-08-20", "2026-09-15", decimal.RequireFromString("0.25"), "brapi")
+	if err != nil || ok {
+		t.Fatalf("pending event should hold the proposal: %v %v", ok, err)
+	}
+	if q, _ := e.svc.List(ctx, Filter{}); len(q) != 0 {
+		t.Fatalf("nothing should be stored: %+v", q)
+	}
+	acts, _ := e.actions.List(ctx, corpactions.StatusDetected, e.b3)
+	if _, err := e.actions.Confirm(ctx, acts[0].ID, nil); err != nil {
+		t.Fatal(err)
+	}
+	if ok, err := e.svc.Detect(ctx, e.b3, "dividend", "2026-08-20", "2026-09-15", decimal.RequireFromString("0.25"), "brapi"); err != nil || !ok {
+		t.Fatalf("detect after confirm: %v %v", ok, err)
+	}
+	q, _ := e.svc.List(ctx, Filter{Status: StatusDetected})
+	if len(q) != 1 || !q[0].Gross.Equal(decimal.RequireFromString("500")) {
+		t.Fatalf("queue = %+v", q)
 	}
 }
