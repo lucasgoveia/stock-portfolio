@@ -10,6 +10,7 @@ import (
 	"github.com/lucasgoveia/stock-portfolio/internal/alerts"
 	"github.com/lucasgoveia/stock-portfolio/internal/analyst"
 	"github.com/lucasgoveia/stock-portfolio/internal/assets"
+	"github.com/lucasgoveia/stock-portfolio/internal/candidates"
 	"github.com/lucasgoveia/stock-portfolio/internal/cash"
 	"github.com/lucasgoveia/stock-portfolio/internal/corpactions"
 	"github.com/lucasgoveia/stock-portfolio/internal/dividends"
@@ -66,7 +67,7 @@ func apiError(err error) error {
 		errors.Is(err, thesis.ErrValidation), errors.Is(err, valuation.ErrValidation),
 		errors.Is(err, portfolio.ErrValidation), errors.Is(err, tactical.ErrValidation),
 		errors.Is(err, dividends.ErrValidation), errors.Is(err, corpactions.ErrValidation),
-		errors.Is(err, performance.ErrValidation), errors.Is(err, settings.ErrValidation), errors.Is(err, fundamentals.ErrValidation), errors.Is(err, analyst.ErrValidation):
+		errors.Is(err, performance.ErrValidation), errors.Is(err, settings.ErrValidation), errors.Is(err, fundamentals.ErrValidation), errors.Is(err, analyst.ErrValidation), errors.Is(err, candidates.ErrValidation):
 		status = http.StatusBadRequest
 	case errors.Is(err, assets.ErrNotFound), errors.Is(err, alerts.ErrNotFound),
 		errors.Is(err, trades.ErrNotFound), errors.Is(err, cash.ErrNotFound),
@@ -74,7 +75,7 @@ func apiError(err error) error {
 		errors.Is(err, thesis.ErrNotFound), errors.Is(err, valuation.ErrNotFound),
 		errors.Is(err, jobs.ErrNoRuns), errors.Is(err, portfolio.ErrNotFound),
 		errors.Is(err, tactical.ErrNotFound), errors.Is(err, dividends.ErrNotFound),
-		errors.Is(err, corpactions.ErrNotFound), errors.Is(err, settings.ErrNotFound), errors.Is(err, analyst.ErrNotFound):
+		errors.Is(err, corpactions.ErrNotFound), errors.Is(err, settings.ErrNotFound), errors.Is(err, analyst.ErrNotFound), errors.Is(err, candidates.ErrNotFound):
 		status = http.StatusNotFound
 	case errors.Is(err, assets.ErrDuplicate), errors.Is(err, assets.ErrInvalidTransition),
 		errors.Is(err, alerts.ErrResolved), errors.Is(err, trades.ErrInsufficientQuantity),
@@ -82,7 +83,7 @@ func apiError(err error) error {
 		errors.Is(err, portfolio.ErrNoFX), errors.Is(err, jobs.ErrRunning),
 		errors.Is(err, portfolio.ErrConflict), errors.Is(err, dividends.ErrConflict),
 		errors.Is(err, corpactions.ErrConflict), errors.Is(err, analyst.ErrConflict),
-		errors.Is(err, analyst.ErrNoKey), errors.Is(err, analyst.ErrCapReached):
+		errors.Is(err, analyst.ErrNoKey), errors.Is(err, analyst.ErrCapReached), errors.Is(err, candidates.ErrConflict):
 		status = http.StatusConflict
 	case errors.Is(err, fundamentals.ErrUpstream), errors.Is(err, analyst.ErrUpstream):
 		status = http.StatusBadGateway

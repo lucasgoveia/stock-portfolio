@@ -17,6 +17,14 @@ const (
 	StatusFailed = "failed"
 )
 
+// Run sources.
+const (
+	// SourceAPI is a run paid through the in-app API analyst.
+	SourceAPI = "api"
+	// SourceMCP is a draft submitted by the user's Claude client over MCP.
+	SourceMCP = "mcp"
+)
+
 // Thesis check statuses.
 const (
 	CheckHolds   = "holds"
@@ -36,6 +44,18 @@ type Document struct {
 	Chars int `json:"chars"`
 	// Text is the extracted text sent to the model (never stored or served).
 	Text string `json:"-"`
+}
+
+// MCPProvenance records where an MCP draft came from.
+type MCPProvenance struct {
+	// Client is the client name from the MCP initialize handshake.
+	Client string `json:"client"`
+	// Model is the model the client reported in the submission.
+	Model string `json:"model"`
+	// SubmittedAt is when the app received the submission.
+	SubmittedAt string `json:"submitted_at"`
+	// ExternalURLs are cited URLs the app did not serve ("external, unverified").
+	ExternalURLs []string `json:"external_urls"`
 }
 
 // ThesisInput is the thesis as given to the model.
@@ -76,6 +96,9 @@ type Inputs struct {
 	// DroppedSources counts sources in the output that were not among the
 	// provided documents and were removed.
 	DroppedSources int `json:"dropped_sources"`
+	// MCP is set on drafts submitted over MCP. Documents then lists the
+	// app-served documents the session read before submitting.
+	MCP *MCPProvenance `json:"mcp,omitempty"`
 
 	// fundamentalsJSON is the fundamentals summary sent to the model (not stored).
 	fundamentalsJSON string
@@ -132,10 +155,16 @@ type ThesisCheck struct {
 type Source struct {
 	Title string `json:"title"`
 	URL   string `json:"url"`
+	// External marks a source the app did not serve ("external, unverified");
+	// set only on MCP drafts.
+	External bool `json:"external,omitempty"`
 }
 
 // Output is the validated structured answer of the model.
 type Output struct {
+	// Summary is a free-form research note (markdown), used by MCP drafts and
+	// accepted candidates; approving it saves a research note.
+	Summary         string     `json:"summary,omitempty"`
 	Catalysts       []Catalyst `json:"catalysts"`
 	MarketSizeNotes string     `json:"market_size_notes"`
 	Scenarios       Scenarios  `json:"scenarios"`
@@ -152,6 +181,7 @@ type Approvals struct {
 	Catalysts      []int   `json:"catalysts" doc:"Indexes of catalysts turned into notes"`
 	MarketSize     bool    `json:"market_size"`
 	ThesisCheck    bool    `json:"thesis_check"`
+	Summary        bool    `json:"summary,omitempty"`
 	NoteIDs        []int64 `json:"note_ids"`
 	DCFFairValueID *int64  `json:"dcf_fair_value_id,omitempty"`
 	RangeFairValue *int64  `json:"range_fair_value_id,omitempty"`
@@ -159,9 +189,11 @@ type Approvals struct {
 
 // Run is one AI analyst run.
 type Run struct {
-	ID           int64         `json:"id"`
-	AssetID      int64         `json:"asset_id"`
-	Model        string        `json:"model"`
+	ID      int64  `json:"id"`
+	AssetID int64  `json:"asset_id"`
+	Model   string `json:"model"`
+	// Source is api (paid in-app run) or mcp (draft from the user's Claude client).
+	Source       string        `json:"source" enum:"api,mcp"`
 	Status       string        `json:"status" enum:"draft,approved,discarded,failed"`
 	Inputs       Inputs        `json:"inputs"`
 	Output       *Output       `json:"output,omitempty"`
@@ -191,6 +223,7 @@ type Usage struct {
 type ApproveInput struct {
 	Catalysts      []int `json:"catalysts,omitempty" doc:"Indexes of catalysts to save as notes"`
 	MarketSize     bool  `json:"market_size,omitempty" doc:"Save the market size notes as a note"`
+	Summary        bool  `json:"summary,omitempty" doc:"Save the research note as a note"`
 	ThesisCheck    bool  `json:"thesis_check,omitempty" doc:"Save the thesis check as a note"`
 	Scenarios      bool  `json:"scenarios,omitempty" doc:"Create a scenario DCF fair value version"`
 	FairValueRange bool  `json:"fair_value_range,omitempty" doc:"Create a manual fair value version at the range midpoint"`

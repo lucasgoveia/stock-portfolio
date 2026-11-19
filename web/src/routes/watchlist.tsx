@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { createFileRoute, Link } from '@tanstack/react-router'
 
+import { CandidatesSection } from '@/components/candidates-section'
 import { GateChecklist } from '@/components/asset/gate-checklist'
 import { NewAssetForm } from '@/components/asset/new-asset-form'
 import { Panel } from '@/components/asset/panel'
@@ -22,6 +23,7 @@ function Page() {
         title="Watchlist"
         description="Names you might buy. A name can only receive money once every buy gate check passes."
       />
+      <CandidatesSection />
       <Panel title="Add a name" className="mb-6">
         <NewAssetForm />
       </Panel>

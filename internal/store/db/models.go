@@ -34,6 +34,7 @@ type AnalystRun struct {
 	Approvals    string
 	Error        string
 	CreatedAt    string
+	Source       string
 }
 
 type Asset struct {
@@ -67,6 +68,23 @@ type AssetPrice struct {
 	Close     string
 	AdjClose  sql.NullString
 	FetchedAt string
+}
+
+type Candidate struct {
+	ID         int64
+	Ticker     string
+	Market     string
+	Name       string
+	Cnpj       string
+	Cik        string
+	Note       string
+	Output     string
+	Provenance string
+	Status     string
+	AssetID    sql.NullInt64
+	RunID      sql.NullInt64
+	CreatedAt  string
+	DecidedAt  string
 }
 
 type CashInstrument struct {
@@ -209,6 +227,18 @@ type JobRun struct {
 	FinishedAt sql.NullString
 	Status     string
 	Steps      string
+}
+
+type LookupCache struct {
+	Key       string
+	Payload   string
+	FetchedAt string
+}
+
+type LookupSymbol struct {
+	Day    string
+	Market string
+	Symbol string
 }
 
 type PerformanceSnapshot struct {

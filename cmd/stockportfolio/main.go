@@ -1,4 +1,5 @@
-// Command stockportfolio runs the server.
+// Command stockportfolio runs the web server (serve, the default), a data
+// backfill (backfill) and the MCP server over stdio (mcp).
 package main
 
 import (
@@ -6,17 +7,23 @@ import (
 	"database/sql"
 	"errors"
 	"flag"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/lucasgoveia/stock-portfolio/internal/alerts"
 	"github.com/lucasgoveia/stock-portfolio/internal/analyst"
 	"github.com/lucasgoveia/stock-portfolio/internal/api"
 	"github.com/lucasgoveia/stock-portfolio/internal/assets"
+	"github.com/lucasgoveia/stock-portfolio/internal/candidates"
 	"github.com/lucasgoveia/stock-portfolio/internal/cash"
 	"github.com/lucasgoveia/stock-portfolio/internal/config"
 	"github.com/lucasgoveia/stock-portfolio/internal/corpactions"
@@ -24,6 +31,7 @@ import (
 	"github.com/lucasgoveia/stock-portfolio/internal/fundamentals"
 	"github.com/lucasgoveia/stock-portfolio/internal/jobs"
 	"github.com/lucasgoveia/stock-portfolio/internal/marketdata"
+	"github.com/lucasgoveia/stock-portfolio/internal/mcpserver"
 	"github.com/lucasgoveia/stock-portfolio/internal/performance"
 	"github.com/lucasgoveia/stock-portfolio/internal/portfolio"
 	"github.com/lucasgoveia/stock-portfolio/internal/ratings"
@@ -51,7 +59,7 @@ func run() error {
 	cfgPath := fs.String("config", "config.local.toml", "path to config file (falls back to defaults if missing)")
 	args := os.Args[1:]
 	cmd := "serve"
-	if len(args) > 0 && (args[0] == "serve" || args[0] == "backfill") {
+	if len(args) > 0 && (args[0] == "serve" || args[0] == "backfill" || args[0] == "mcp") {
 		cmd, args = args[0], args[1:]
 	}
 	years := fs.Int("years", 2, "backfill: years of history to load")
@@ -59,9 +67,20 @@ func run() error {
 		return err
 	}
 
+	if cmd == "mcp" {
+		// The protocol owns stdout: everything we log goes to stderr.
+		slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, nil)))
+	}
 	cfg, err := config.Load(*cfgPath)
 	if err != nil {
 		return err
+	}
+	if cmd == "mcp" && os.Getenv("STOCKPORTFOLIO_DB_PATH") == "" && !filepath.IsAbs(cfg.DBPath) {
+		// A client starts the server from any directory: a relative db_path from
+		// the config file is relative to that file, not to the working directory.
+		if abs, err := filepath.Abs(*cfgPath); err == nil {
+			cfg.DBPath = filepath.Join(filepath.Dir(abs), cfg.DBPath)
+		}
 	}
 	conn, err := store.Open(cfg.DBPath)
 	if err != nil {
@@ -112,6 +131,7 @@ func run() error {
 		Research: researchSvc, Fundamentals: fundSvc, US: edgar, BR: cvm, Client: aiClient,
 	})
 	settingsSvc.UseUsage(analystSvc.MonthSpend)
+	candidateSvc := candidates.NewService(conn, assetSvc, analystSvc, nil)
 	trackSvc := tracking.NewService(conn, assetSvc, valuationSvc, alertSvc, thesisSvc, settingsSvc)
 	fundSvc.OnRefresh(trackSvc.Evaluate)
 	portfolioSvc := portfolio.NewService(portfolio.Deps{
@@ -125,6 +145,25 @@ func run() error {
 		{Name: "portfolio", Run: portfolioSvc.Evaluate},
 		{Name: "corporate_actions", Run: actionSvc.Evaluate},
 		{Name: "expected_vs_actual", Run: trackSvc.Evaluate},
+	}
+
+	if cmd == "mcp" {
+		var usPrices marketdata.USPriceSource
+		if cfg.TiingoToken != "" {
+			usPrices = marketdata.NewTiingo(nil, "", cfg.TiingoToken)
+		}
+		srv := mcpserver.New(mcpserver.Deps{
+			Conn: conn, Assets: assetSvc, Settings: settingsSvc, Thesis: thesisSvc, Valuation: valuationSvc,
+			Research: researchSvc, Ratings: ratingSvc, Fundamentals: fundSvc, Portfolio: portfolioSvc,
+			Alerts: alertSvc, Tracking: trackSvc, Analyst: analystSvc, Candidates: candidateSvc,
+			US: edgar, BR: cvm, Quotes: marketdata.NewBrapi(nil, "", cfg.BrapiToken), USPrices: usPrices,
+			Logger: slog.Default(),
+		})
+		slog.Info("mcp server on stdio", "db", cfg.DBPath)
+		if err := srv.Run(ctx, &mcp.StdioTransport{}); err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, mcp.ErrConnectionClosed) && ctx.Err() == nil {
+			return err
+		}
+		return nil
 	}
 
 	if cmd == "backfill" {
@@ -162,6 +201,8 @@ func run() error {
 		api.WithSettings(settingsSvc),
 		api.WithFundamentals(fundSvc),
 		api.WithAnalyst(analystSvc),
+		api.WithCandidates(candidateSvc, analystSvc),
+		api.WithMCPSetup(mcpSetup(*cfgPath, cfg.DBPath)),
 		api.WithExpectedVsActual(trackSvc),
 		api.WithUI(web.Dist()),
 	), ReadHeaderTimeout: 10 * time.Second}
@@ -199,4 +240,22 @@ func marketDeps(cfg config.Config, conn *sql.DB, a *assets.Service, rates *cash.
 		d.US = marketdata.NewTiingo(nil, "", cfg.TiingoToken)
 	}
 	return d
+}
+
+// mcpSetup resolves the absolute paths shown in the MCP setup snippets.
+func mcpSetup(cfgPath, dbPath string) api.MCPSetup {
+	var out api.MCPSetup
+	if exe, err := os.Executable(); err == nil && !strings.Contains(exe, "go-build") && !strings.HasPrefix(exe, os.TempDir()) {
+		out.Executable = exe
+	}
+	if abs, err := filepath.Abs(cfgPath); err == nil {
+		out.ConfigPath = abs
+		if _, err := os.Stat(abs); err == nil {
+			out.ConfigExists = true
+		}
+	}
+	if abs, err := filepath.Abs(dbPath); err == nil {
+		out.DBPath = abs
+	}
+	return out
 }

@@ -1,8 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Link } from '@tanstack/react-router'
 import { useState } from 'react'
 import { toast } from 'sonner'
 
 import { Panel } from '@/components/asset/panel'
+import { CopyBlock } from '@/components/copy-block'
 import { FormError } from '@/components/form'
 import { ErrorBlock, LoadingBlock } from '@/components/query-state'
 import { Button } from '@/components/ui/button'
@@ -38,6 +40,7 @@ export function AnalystTab({ asset }: { asset: Asset }) {
   const selected = list.find((r) => r.id === picked) ?? list[0]
   return (
     <div className="space-y-4">
+      <McpPanel asset={asset} />
       <RunPanel asset={asset} onStarted={(id) => setPicked(id)} />
       {runs.isPending ? (
         <LoadingBlock rows={3} />
@@ -45,8 +48,8 @@ export function AnalystTab({ asset }: { asset: Asset }) {
         <ErrorBlock error={runs.error} />
       ) : list.length === 0 ? (
         <p className="text-muted-foreground rounded-lg border border-dashed p-6 text-sm">
-          No analyst runs yet. A run reads the thesis, fair value, fundamentals and latest filings and proposes a draft
-          for you to review. Nothing is saved until you approve it.
+          No analyst runs yet. An analysis, from Claude over MCP or from the API, reads the thesis, fair value,
+          fundamentals and latest filings and proposes a draft for you to review. Nothing is saved until you approve it.
         </p>
       ) : (
         <div className="grid gap-4 lg:grid-cols-[minmax(0,15rem)_minmax(0,1fr)]">
@@ -55,6 +58,38 @@ export function AnalystTab({ asset }: { asset: Asset }) {
         </div>
       )}
     </div>
+  )
+}
+
+function McpPanel({ asset }: { asset: Asset }) {
+  const cmd = `/mcp__stock-portfolio__analyze_asset ${asset.ticker}`
+  return (
+    <Panel title="Run in Claude (MCP)">
+      <p className="text-sm">
+        Analyze {asset.ticker} in your own Claude (Claude Code or Claude Desktop), on your subscription at no API cost.
+        Claude reads the app&apos;s data and filings, searches the web for the rest, and submits a draft that shows up
+        below, labelled &ldquo;via MCP&rdquo;.
+      </p>
+      <ul className="text-muted-foreground mt-2 list-disc space-y-1 pl-5 text-sm">
+        <li>
+          <span className="text-foreground">Claude Code:</span> start <code>claude</code> in any directory and send:
+        </li>
+      </ul>
+      <CopyBlock text={cmd} label="Prompt command" />
+      <ul className="text-muted-foreground mt-2 list-disc space-y-1 pl-5 text-sm">
+        <li>
+          <span className="text-foreground">Claude Desktop:</span> open the prompt menu (the + button), choose
+          &ldquo;stock-portfolio&rdquo;, then <code>analyze_asset</code>, and enter {asset.ticker}.
+        </li>
+        <li>
+          Not set up yet? Copy the connection snippets from{' '}
+          <Link to="/settings" className="underline">
+            Settings
+          </Link>
+          .
+        </li>
+      </ul>
+    </Panel>
   )
 }
 
@@ -83,7 +118,7 @@ function RunPanel({ asset, onStarted }: { asset: Asset; onStarted: (id: number) 
   })
   const u = usage.data
   return (
-    <Panel title="AI analyst">
+    <Panel title="Run with the API (paid, per-asset fallback)">
       {usage.isPending ? (
         <LoadingBlock rows={1} />
       ) : usage.isError ? (
@@ -160,7 +195,9 @@ function RunList({ runs, selectedId, onPick }: { runs: Run[]; selectedId?: numbe
             <span className={cn('rounded-full border px-2 text-xs', STATUS_STYLE[r.status])}>{humanize(r.status)}</span>
           </div>
           <div className="text-muted-foreground num mt-1 text-xs">
-            {money(r.cost_usd, 'USD')} · {Number(r.input_tokens + r.output_tokens).toLocaleString('pt-BR')} tokens
+            {r.source === 'mcp'
+              ? `via MCP · ${r.model}`
+              : `${money(r.cost_usd, 'USD')} · ${Number(r.input_tokens + r.output_tokens).toLocaleString('pt-BR')} tokens`}
           </div>
         </button>
       ))}
@@ -193,18 +230,27 @@ function Check({
   )
 }
 
-function Sources({ urls }: { urls: string[] }) {
+function Sources({ urls, external = [] }: { urls: string[]; external?: string[] }) {
   if (urls.length === 0) return null
   return (
     <ul className="text-muted-foreground mt-1 space-y-0.5 text-xs">
       {urls.map((u) => (
-        <li key={u} className="truncate">
-          <a href={u} target="_blank" rel="noreferrer" className="underline">
+        <li key={u} className="flex min-w-0 items-baseline gap-2">
+          <a href={u} target="_blank" rel="noreferrer" className="min-w-0 truncate underline">
             {u}
           </a>
+          {external.includes(u) && <ExternalBadge />}
         </li>
       ))}
     </ul>
+  )
+}
+
+function ExternalBadge() {
+  return (
+    <span className="border-brass/50 text-brass shrink-0 rounded-full border px-1.5 text-[0.65rem] font-medium">
+      external, unverified
+    </span>
   )
 }
 
@@ -216,10 +262,11 @@ function RunView({ run, asset }: { run: Run; asset: Asset }) {
   const [catalysts, setCatalysts] = useState<number[]>([])
   const [market, setMarket] = useState(false)
   const [thesis, setThesis] = useState(false)
+  const [summary, setSummary] = useState(false)
   const [dcf, setDcf] = useState(false)
   const [range, setRange] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const count = catalysts.length + [market, thesis, dcf, range].filter(Boolean).length
+  const count = catalysts.length + [market, thesis, summary, dcf, range].filter(Boolean).length
   const refresh = () => {
     void qc.invalidateQueries({ queryKey: qk.asset(asset.id) })
     void qc.invalidateQueries({ queryKey: qk.portfolio })
@@ -230,7 +277,7 @@ function RunView({ run, asset }: { run: Run; asset: Asset }) {
       unwrap(
         api.POST('/api/analyst/runs/{id}/approve', {
           params: { path: { id: run.id } },
-          body: { catalysts, market_size: market, thesis_check: thesis, scenarios: dcf, fair_value_range: range },
+          body: { catalysts, market_size: market, thesis_check: thesis, summary, scenarios: dcf, fair_value_range: range },
         }),
       ),
     onSuccess: () => {
@@ -239,6 +286,7 @@ function RunView({ run, asset }: { run: Run; asset: Asset }) {
       setCatalysts([])
       setMarket(false)
       setThesis(false)
+      setSummary(false)
       setDcf(false)
       setRange(false)
       refresh()
@@ -268,8 +316,13 @@ function RunView({ run, asset }: { run: Run; asset: Asset }) {
     )
   }
 
-  const cur = o.fair_value_range.currency
-  const mid = (Number(o.fair_value_range.low) + Number(o.fair_value_range.high)) / 2
+  const mcp = run.source === 'mcp'
+  const prov = run.inputs.mcp
+  const hasScenarios = (o.scenarios?.base?.revenue_growth ?? []).length > 0
+  const hasRange = Number(o.fair_value_range?.high ?? 0) > 0
+  const cur = o.fair_value_range?.currency ?? asset.currency
+  const mid = (Number(o.fair_value_range?.low ?? 0) + Number(o.fair_value_range?.high ?? 0)) / 2
+  const external = prov?.external_urls ?? []
   const docs = run.inputs.documents ?? []
   const checks = o.thesis_check ?? []
   const cats = o.catalysts ?? []
@@ -285,13 +338,19 @@ function RunView({ run, asset }: { run: Run; asset: Asset }) {
           </span>
         }
       >
-        <p className="text-muted-foreground num text-xs">
-          {dateTime(run.created_at)} · {run.model} · {money(run.cost_usd, 'USD')} ·{' '}
-          {Number(run.input_tokens).toLocaleString('pt-BR')} in / {Number(run.output_tokens).toLocaleString('pt-BR')} out
-        </p>
+        {mcp ? (
+          <p className="text-muted-foreground num text-xs">
+            via MCP · {prov?.client ?? 'unknown client'} · {run.model} · {dateTime(prov?.submitted_at ?? run.created_at)} · no API cost
+          </p>
+        ) : (
+          <p className="text-muted-foreground num text-xs">
+            {dateTime(run.created_at)} · {run.model} · {money(run.cost_usd, 'USD')} ·{' '}
+            {Number(run.input_tokens).toLocaleString('pt-BR')} in / {Number(run.output_tokens).toLocaleString('pt-BR')} out
+          </p>
+        )}
         <details className="mt-2 text-sm">
           <summary className="cursor-pointer">
-            {docs.length} document{docs.length === 1 ? '' : 's'} given to the model
+            {docs.length} document{docs.length === 1 ? '' : 's'} {mcp ? 'served by the app and read in the session' : 'given to the model'}
           </summary>
           <ul className="mt-2 space-y-1 text-xs">
             {docs.map((d) => (
@@ -310,12 +369,31 @@ function RunView({ run, asset }: { run: Run; asset: Asset }) {
             ))}
           </ul>
         </details>
+        {mcp && external.length > 0 && (
+          <div className="mt-2 text-sm">
+            <p className="text-brass text-xs">
+              {external.length} cited source{external.length === 1 ? ' was' : 's were'} not served by the app: external, unverified.
+            </p>
+            <Sources urls={external} external={external} />
+          </div>
+        )}
         {run.inputs.dropped_sources > 0 && (
           <p className="text-brass mt-2 text-xs">
             {run.inputs.dropped_sources} citation{run.inputs.dropped_sources === 1 ? '' : 's'} of unprovided documents were removed.
           </p>
         )}
       </Panel>
+
+      {o.summary && (
+        <Panel title="Research note">
+          <p className="text-sm whitespace-pre-wrap">{o.summary}</p>
+          <div className="mt-3 border-t pt-3">
+            <Check checked={summary || ap.summary === true} disabled={!open || ap.summary === true} onChange={setSummary}>
+              Save as a research note{ap.summary && ' (saved)'}
+            </Check>
+          </div>
+        </Panel>
+      )}
 
       <Panel title="Thesis check">
         {checks.length === 0 ? (
@@ -362,7 +440,7 @@ function RunView({ run, asset }: { run: Run; asset: Asset }) {
                     {c.expected_date && <span className="num text-muted-foreground"> · {c.expected_date}</span>}
                     {saved && <span className="text-muted-foreground"> · saved as a note</span>}
                     <span className="text-muted-foreground block">{c.detail}</span>
-                    <Sources urls={c.source_urls ?? []} />
+                    <Sources urls={c.source_urls ?? []} external={external} />
                   </Check>
                 </li>
               )
@@ -382,6 +460,7 @@ function RunView({ run, asset }: { run: Run; asset: Asset }) {
         )}
       </Panel>
 
+      {hasScenarios && (
       <Panel title="Scenarios">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -449,19 +528,24 @@ function RunView({ run, asset }: { run: Run; asset: Asset }) {
         <div className="mt-3 border-t pt-3">
           <Check
             checked={dcf || ap.dcf_fair_value_id != null}
-            disabled={!open || ap.dcf_fair_value_id != null || !run.inputs.dcf_base}
+            disabled={!open || ap.dcf_fair_value_id != null || (!run.inputs.dcf_base && !mcp)}
             onChange={setDcf}
           >
             Create a scenario DCF fair value version{ap.dcf_fair_value_id != null && ' (saved)'}
             <span className="text-muted-foreground block text-xs">
               {run.inputs.dcf_base
                 ? 'Computed on the latest annual revenue, net debt and share count from fundamentals.'
-                : 'Needs fundamentals (revenue and share count); fetch them on the Fundamentals tab and run again.'}
+                : mcp
+                  ? 'Uses the latest annual revenue, net debt and share count from fundamentals when you approve: fetch them on the Fundamentals tab first.'
+                  : 'Needs fundamentals (revenue and share count); fetch them on the Fundamentals tab and run again.'}
             </span>
           </Check>
         </div>
       </Panel>
 
+      )}
+
+      {hasRange && (
       <Panel title="Fair value range">
         <p className="num text-lg">
           {money(o.fair_value_range.low, cur)} – {money(o.fair_value_range.high, cur)}
@@ -478,9 +562,14 @@ function RunView({ run, asset }: { run: Run; asset: Asset }) {
         </div>
       </Panel>
 
+      )}
+
       {sources.length > 0 && (
         <Panel title="Sources">
-          <Sources urls={sources.map((s) => s.url)} />
+          <Sources
+            urls={sources.map((s) => s.url)}
+            external={sources.filter((s) => s.external).map((s) => s.url)}
+          />
         </Panel>
       )}
 

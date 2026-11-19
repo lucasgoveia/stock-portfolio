@@ -566,30 +566,35 @@ func readCapital(f *zip.File, cnpj string) ([]capitalRow, error) {
 	}
 }
 
-// latin1Reader converts a Latin-1 byte stream to UTF-8 on the fly.
+// latin1Reader converts a Latin-1 byte stream to UTF-8 on the fly. It buffers
+// converted bytes, so it works with callers that read into a buffer of any
+// size, even a single byte (bufio does when its buffer is nearly full).
 type latin1Reader struct {
 	r   io.Reader
-	buf []byte
+	in  [4096]byte
+	out []byte
+	err error
 }
 
 func (l *latin1Reader) Read(p []byte) (int, error) {
-	if len(p) < 2 {
-		return 0, io.ErrShortBuffer
+	if len(p) == 0 {
+		return 0, nil
 	}
-	if cap(l.buf) < len(p)/2 {
-		l.buf = make([]byte, len(p)/2)
-	}
-	n, err := l.r.Read(l.buf[:len(p)/2])
-	w := 0
-	for _, b := range l.buf[:n] {
-		if b < 0x80 {
-			p[w] = b
-			w++
-			continue
+	for len(l.out) == 0 && l.err == nil {
+		var n int
+		n, l.err = l.r.Read(l.in[:])
+		for _, b := range l.in[:n] {
+			if b < 0x80 {
+				l.out = append(l.out, b)
+			} else {
+				l.out = append(l.out, 0xC0|b>>6, 0x80|b&0x3F)
+			}
 		}
-		p[w] = 0xC0 | b>>6
-		p[w+1] = 0x80 | b&0x3F
-		w += 2
 	}
-	return w, err
+	if len(l.out) == 0 {
+		return 0, l.err
+	}
+	n := copy(p, l.out)
+	l.out = l.out[n:]
+	return n, nil
 }

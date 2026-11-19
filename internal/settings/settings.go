@@ -36,10 +36,12 @@ const (
 	GroupAI         = "ai"
 	// GroupExpectations holds the expected-versus-actual rules (spec §12.4).
 	GroupExpectations = "expectations"
+	// GroupMCP holds the limits of the MCP server (spec §13.6).
+	GroupMCP = "mcp"
 )
 
 // Groups lists every group name.
-var Groups = []string{GroupAllocation, GroupPlanner, GroupTax, GroupTactical, GroupAI, GroupExpectations}
+var Groups = []string{GroupAllocation, GroupPlanner, GroupTax, GroupTactical, GroupAI, GroupExpectations, GroupMCP}
 
 func key(group string) string { return "params." + group }
 
@@ -133,6 +135,29 @@ type Expectations struct {
 	MissTolerance       Dec `json:"miss_tolerance" doc:"A reported figure within this fraction below the base scenario still counts as met"`
 	ConsecutiveQuarters int `json:"consecutive_quarters" doc:"Consecutive quarters below the base scenario that raise expected_vs_actual_miss"`
 }
+
+// MCP holds the MCP server limits.
+type MCP struct {
+	DailyNewSymbols int `json:"daily_new_symbols" doc:"Symbols not held by the app that the MCP tools may look up per day (America/Sao_Paulo)"`
+}
+
+// DefaultMCP returns the defaults: 30 new symbols a day.
+func DefaultMCP() MCP { return MCP{DailyNewSymbols: 30} }
+
+// Validate checks ranges.
+func (m MCP) Validate() error {
+	var c check
+	c.intAtLeast("daily_new_symbols", m.DailyNewSymbols, 0)
+	return c.err()
+}
+
+// MCP returns the stored MCP server limits over defaults.
+func (s *Service) MCP(ctx context.Context) (MCP, error) {
+	return load(ctx, s.q, GroupMCP, DefaultMCP())
+}
+
+// SetMCP validates and stores the MCP server limits.
+func (s *Service) SetMCP(ctx context.Context, v MCP) (MCP, error) { return set(ctx, s, GroupMCP, v) }
 
 // DefaultAllocation returns the spec defaults.
 func DefaultAllocation() Allocation {
@@ -522,6 +547,8 @@ type Overview struct {
 	AI         Group[AI]         `json:"ai"`
 	// Expectations are the expected-versus-actual rules.
 	Expectations Group[Expectations] `json:"expectations"`
+	// MCP holds the limits of the MCP server.
+	MCP Group[MCP] `json:"mcp"`
 }
 
 // All returns every group.
@@ -546,6 +573,10 @@ func (s *Service) All(ctx context.Context) (Overview, error) {
 	if out.Expectations.Values, err = s.Expectations(ctx); err != nil {
 		return out, err
 	}
+	if out.MCP.Values, err = s.MCP(ctx); err != nil {
+		return out, err
+	}
+	out.MCP.Defaults = DefaultMCP()
 	out.Expectations.Defaults = DefaultExpectations()
 	out.Allocation.Defaults, out.Planner.Defaults, out.Tax.Defaults = DefaultAllocation(), DefaultPlanner(), DefaultTax()
 	out.Tactical.Defaults, out.AI.Defaults = DefaultTactical(), DefaultAI()

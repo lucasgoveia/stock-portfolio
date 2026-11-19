@@ -141,6 +141,32 @@ func (s *Service) monthCosts(ctx context.Context) (decimal.Decimal, int, error) 
 	return sum, len(rows), nil
 }
 
+// ListMCPDrafts returns the MCP drafts awaiting review, newest first.
+func (s *Service) ListMCPDrafts(ctx context.Context) ([]Run, error) {
+	rows, err := s.q.ListMCPDraftRuns(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list mcp drafts: %w", err)
+	}
+	out := make([]Run, 0, len(rows))
+	for _, r := range rows {
+		run, err := s.convert(r)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, run)
+	}
+	return out, nil
+}
+
+// CountMCPDrafts is the number of MCP drafts awaiting review.
+func (s *Service) CountMCPDrafts(ctx context.Context) (int, error) {
+	n, err := s.q.CountMCPDraftRuns(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("count mcp drafts: %w", err)
+	}
+	return int(n), nil
+}
+
 // MonthSpend is the AI spend this month (America/Sao_Paulo), in USD.
 func (s *Service) MonthSpend(ctx context.Context) (decimal.Decimal, error) {
 	sum, _, err := s.monthCosts(ctx)
@@ -194,7 +220,7 @@ func (s *Service) convert(r db.AnalystRun) (Run, error) {
 		return Run{}, fmt.Errorf("analyst run %d: %w", r.ID, err)
 	}
 	run := Run{
-		ID: r.ID, AssetID: r.AssetID, Model: r.Model, Status: r.Status, InputTokens: r.InputTokens,
+		ID: r.ID, AssetID: r.AssetID, Model: r.Model, Source: r.Source, Status: r.Status, InputTokens: r.InputTokens,
 		OutputTokens: r.OutputTokens, CostUSD: cost, Error: r.Error, CreatedAt: r.CreatedAt,
 	}
 	_ = json.Unmarshal([]byte(r.Inputs), &run.Inputs)
@@ -206,7 +232,7 @@ func (s *Service) convert(r db.AnalystRun) (Run, error) {
 	}
 	if r.Status != StatusFailed {
 		var o Output
-		if json.Unmarshal([]byte(r.Output), &o) == nil && len(o.Scenarios.Base.RevenueGrowth) > 0 {
+		if json.Unmarshal([]byte(r.Output), &o) == nil && (o.hasScenarios() || o.hasRange() || o.Summary != "" || len(o.Catalysts) > 0) {
 			run.Output = &o
 		}
 	}
@@ -310,7 +336,7 @@ func (s *Service) Run(ctx context.Context, assetID int64) (Run, error) {
 	}
 	row, err := s.q.CreateAnalystRun(ctx, db.CreateAnalystRunParams{
 		AssetID: asset.ID, Model: ai.Model, Status: StatusDraft, Inputs: string(inJSON), Output: string(outJSON),
-		InputTokens: resp.InputTokens, OutputTokens: resp.OutputTokens, CostUsd: cost.String(), CreatedAt: s.ts(),
+		InputTokens: resp.InputTokens, OutputTokens: resp.OutputTokens, CostUsd: cost.String(), CreatedAt: s.ts(), Source: SourceAPI,
 	})
 	if err != nil {
 		return Run{}, fmt.Errorf("store analyst run: %w", err)
@@ -325,7 +351,7 @@ func (s *Service) fail(ctx context.Context, assetID int64, model string, in Inpu
 	if _, err := s.q.CreateAnalystRun(ctx, db.CreateAnalystRunParams{
 		AssetID: assetID, Model: model, Status: StatusFailed, Inputs: string(inJSON), Output: "{}",
 		InputTokens: resp.InputTokens, OutputTokens: resp.OutputTokens, CostUsd: cost.String(),
-		Error: cause.Error(), CreatedAt: s.ts(),
+		Error: cause.Error(), CreatedAt: s.ts(), Source: SourceAPI,
 	}); err != nil {
 		return Run{}, fmt.Errorf("store failed analyst run: %w (original: %v)", err, cause)
 	}

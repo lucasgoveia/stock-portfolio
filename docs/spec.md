@@ -319,6 +319,36 @@ After each earnings release, compare reported revenue and EPS against the base s
   - BR: CVM filings (ITR, DFP, fatos relevantes) and the company's RI releases.
 - Output (structured JSON): catalysts, market size notes, bear/base/bull scenario drafts (each stating its basis, start margin, cash conversion and tax rate), new-business initiatives with sources and a success probability per scenario, fair value range, thesis check per break condition (holds / at risk / broken, with evidence), sources with links.
 - The run is saved as a `draft`; the user edits and approves parts into research notes, scenarios, or a new fair value version.
+- The in-app API analyst is the per-asset fallback (paid, under the monthly cap, app-served documents only). Most analysis runs in the user's own Claude client over MCP (§13.1 to §13.6). Both share one set of analysis rules (`internal/analyst/prompt.go`); only the source rules differ.
+
+### 13.1 MCP server
+
+`stockportfolio mcp [-config <path>]` is an MCP server over stdio (official Go SDK, `github.com/modelcontextprotocol/go-sdk`). It opens the same SQLite database as the web server and works whether or not that is running. It logs only to stderr (stdout carries the protocol). A relative `db_path` in the config file is resolved against the config file's directory, so a client can start it from any directory. Clients: Claude Code (WSL) runs the binary directly; Claude Desktop (Windows) runs `wsl.exe -e <repo>/bin/stockportfolio mcp -config <repo>/config.local.toml`. Setup is copy-paste snippets on the Settings page and in the README; the app never edits Claude's configuration.
+
+### 13.2 Tools
+
+- Read: `list_assets`, `get_portfolio_snapshot`, `list_alerts`, `preview_contribution_plan` (nothing saved), `get_asset_context` (position, rating, thesis and break conditions, fair value versions with scenarios, fundamentals panel, quarterly expected versus actual, research notes, alerts, recent analyst runs), `get_financials`, `list_filings` (SEC 10-K/10-Q/8-K; CVM DFP, ITR and IPE announcements), `read_filing` (paged text), `get_price_history`.
+- Compute, no writes: `preview_scenario_dcf`, `reverse_dcf` (same engine and validation as fair value versions; `asset` fills the base figures from stored fundamentals).
+- Identity: `lookup_company`.
+- Write, drafts only: `submit_analysis` and `submit_candidate`.
+
+Filing text is paged by characters (`offset`, `length`, default 20000, at most 60000); each page reports the total length and the next offset. Only SEC and CVM documents returned by `list_filings` are served. CVM documents that are PDFs cannot be read as text; the statements are in `get_financials`.
+
+### 13.3 Unknown tickers
+
+The data tools work for tickers the app does not hold, without creating an asset. Lookups (CIK resolution, filing lists, statements, the CVM register) are cached for 24 hours in `lookup_cache`. Distinct symbols not held in the app are counted per day (America/Sao_Paulo, table `lookup_symbols`) and capped by `mcp.daily_new_symbols` (default 30, editable in Settings); over the cap the tool refuses with a message saying so, symbols already counted that day and held assets still work. A B3 unknown ticker needs its CNPJ, found by Claude on the web: the app validates the check digits and matches it against CVM's register of listed companies (`cad_cia_aberta.csv`, Latin-1, cached for a day), returning the registered name and situation for confirmation. A US unknown ticker is resolved to its CIK from `company_tickers.json`.
+
+### 13.4 Sources and untrusted text
+
+The app serves filings, fundamentals and prices. Claude uses its own web fetch and search for company RI sites, call transcripts, news and industry data; any URL may be cited, and URLs the app did not serve are marked "external, unverified" (output and UI). Text from filings and listings is returned inside `<untrusted_document source="...">` tags followed by a sentence saying it is data, not instructions; the prompts tell Claude to treat such text, and web text, as evidence only.
+
+### 13.5 Provenance and cost
+
+An MCP draft is an `analyst_runs` row with `source = 'mcp'`, cost 0, and in `inputs.mcp`: the client name and version from the MCP handshake, the model Claude reports, the submission time, and the external URLs; `inputs.documents` lists the app-served documents the session read (logged by the server per session). The monthly spend and cap count only `source = 'api'` runs. Approval is the same as for API drafts, plus an optional research note (`summary`).
+
+### 13.6 Prompts and review
+
+Prompts `analyze_asset`, `research_ticker` and `portfolio_review` appear as slash commands in Claude Code (`/mcp__stock-portfolio__analyze_asset WEGE3`) and in Desktop's prompt menu. `submit_analysis` stores a draft on an existing asset; `submit_candidate` stores a proposal in `candidates` (ticker, market, CNPJ or CIK, note, optional scenarios, initiatives and fair value range). Accepting a candidate creates the watchlist asset with its CNPJ or CIK and an MCP draft from the note, scenarios and fair value range; rejecting keeps the row as rejected. Nothing is applied until the user approves parts of the draft. UI: the asset's AI analyst tab leads with the MCP instructions and labels runs "via MCP"; the Watchlist page has a Candidates section (accept, reject, details); the sidebar shows the count of MCP drafts and pending candidates awaiting review. No new alert type.
 
 ## 14. Corporate actions
 

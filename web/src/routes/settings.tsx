@@ -1,13 +1,14 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute } from '@tanstack/react-router'
 
+import { CopyBlock } from '@/components/copy-block'
 import { PageHeader } from '@/components/page-header'
 import { ErrorBlock, LoadingBlock } from '@/components/query-state'
 import { SettingsSection, type FieldDef } from '@/components/settings-section'
 import { Badge } from '@/components/ui/badge'
 import { api, unwrap, type Schemas } from '@/lib/api'
 import { money } from '@/lib/format'
-import { ratingWeightsQuery, settingsQuery, settingsStatusQuery } from '@/lib/queries'
+import { mcpSetupQuery, ratingWeightsQuery, settingsQuery, settingsStatusQuery } from '@/lib/queries'
 
 export const Route = createFileRoute('/settings')({ component: Page })
 
@@ -101,6 +102,15 @@ const AI_FIELDS: FieldDef[] = [
   { key: 'monthly_cap_usd', label: 'Monthly cap', kind: 'decimal', unit: 'US$' },
 ]
 
+const MCP_FIELDS: FieldDef[] = [
+  {
+    key: 'daily_new_symbols',
+    label: 'New symbols per day',
+    kind: 'int',
+    hint: 'Tickers not held in the app that Claude may look up each day (America/Sao_Paulo). Over the limit the tools refuse with a clear message.',
+  },
+]
+
 type Values = Record<string, unknown>
 
 function Page() {
@@ -113,6 +123,7 @@ function Page() {
       <div className="space-y-6">
         <WeightsSection />
         <RuleSections />
+        <McpSection />
         <DataSources />
       </div>
     </>
@@ -153,7 +164,7 @@ function RuleSections() {
   if (all.isError) return <ErrorBlock error={all.error} />
   const d = all.data
   const refresh = () => qc.invalidateQueries({ queryKey: settingsQuery.queryKey })
-  const reset = (group: 'allocation' | 'planner' | 'tax' | 'tactical' | 'ai' | 'expectations') => async () => {
+  const reset = (group: 'allocation' | 'planner' | 'tax' | 'tactical' | 'ai' | 'expectations' | 'mcp') => async () => {
     await unwrap(api.POST('/api/settings/{group}/reset', { params: { path: { group } } }))
     await refresh()
   }
@@ -224,7 +235,61 @@ function RuleSections() {
         save={(body) => after(unwrap(api.PUT('/api/settings/ai', { body: body as unknown as Schemas['AI'] })))}
         reset={reset('ai')}
       />
+      <SettingsSection
+        title="MCP limits"
+        description="Limits for the MCP server that lets Claude read your data and submit drafts."
+        fields={MCP_FIELDS}
+        values={d.mcp.values as unknown as Values}
+        defaults={d.mcp.defaults as unknown as Values}
+        save={(body) => after(unwrap(api.PUT('/api/settings/mcp', { body: body as unknown as Schemas['MCP'] })))}
+        reset={reset('mcp')}
+      />
     </>
+  )
+}
+
+function McpSection() {
+  const setup = useQuery(mcpSetupQuery)
+  const exe = setup.data?.executable || '<repo>/bin/stockportfolio'
+  const config = setup.data?.config_path || '<repo>/config.local.toml'
+  const code = `claude mcp add stock-portfolio --scope user -- ${exe} mcp -config ${config}`
+  const desktop = JSON.stringify(
+    { mcpServers: { 'stock-portfolio': { command: 'wsl.exe', args: ['-e', exe, 'mcp', '-config', config] } } },
+    null,
+    2,
+  )
+  return (
+    <section className="bg-card min-w-0 overflow-hidden rounded-lg border p-4">
+      <h2 className="eyebrow">Claude over MCP</h2>
+      <p className="text-muted-foreground mt-1 mb-3 max-w-prose text-sm">
+        Run analyses in your own Claude (Claude Code or Claude Desktop) instead of paid API calls. The MCP server reads
+        this same database, works whether or not this web app is running, and only ever submits drafts for you to
+        review. This app never edits Claude&apos;s configuration: copy the snippets yourself.
+      </p>
+      {setup.data && !setup.data.executable && (
+        <p role="status" className="text-brass mb-3 text-sm">
+          This server is not running from a built binary, so the path below is a placeholder. Run <code>make build</code>{' '}
+          and replace <code>&lt;repo&gt;</code> with the repository&apos;s absolute path.
+        </p>
+      )}
+      <h3 className="mt-2 text-sm font-medium">Claude Code (WSL)</h3>
+      <p className="text-muted-foreground text-sm">
+        Run once in a terminal. <code>--scope user</code> makes it available in every directory; the config path makes the
+        database resolve wherever Claude starts it.
+      </p>
+      <CopyBlock text={code} label="Claude Code command" />
+      <h3 className="mt-4 text-sm font-medium">Claude Desktop (Windows)</h3>
+      <p className="text-muted-foreground text-sm">
+        Add this to <code>%APPDATA%\Claude\claude_desktop_config.json</code> (merge it into any existing{' '}
+        <code>mcpServers</code>), then restart Claude Desktop. It starts the Linux binary through WSL.
+      </p>
+      <CopyBlock text={desktop} label="Claude Desktop JSON" />
+      <p className="text-muted-foreground mt-4 max-w-prose text-sm">
+        Then use the prompts <code>analyze_asset</code>, <code>research_ticker</code> and <code>portfolio_review</code>
+        (Claude Code: type <code>/mcp__stock-portfolio__analyze_asset WEGE3</code>). Drafts appear on the asset&apos;s AI
+        analyst tab and new tickers under Candidates on the Watchlist page.
+      </p>
+    </section>
   )
 }
 

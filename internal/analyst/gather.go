@@ -71,6 +71,22 @@ func truncate(s string, n int) string {
 // gather collects everything the model is given. Missing pieces are skipped,
 // never fatal: a run with only the thesis is still useful.
 func (s *Service) gather(ctx context.Context, a db.Asset) (Inputs, error) {
+	in, err := s.baseInputs(ctx, a)
+	if err != nil {
+		return in, err
+	}
+	switch a.Market {
+	case assets.MarketUS:
+		s.gatherUS(ctx, a, &in)
+	default:
+		s.gatherBR(ctx, a, &in)
+	}
+	return in, nil
+}
+
+// baseInputs is the part of the inputs that needs no filings: the thesis, the
+// current fair value and the fundamentals status with the DCF base figures.
+func (s *Service) baseInputs(ctx context.Context, a db.Asset) (Inputs, error) {
 	in := Inputs{
 		Ticker: a.Ticker, Market: a.Market, Currency: a.Currency,
 		Documents: []Document{}, Skipped: []string{},
@@ -101,23 +117,27 @@ func (s *Service) gather(ctx context.Context, a db.Asset) (Inputs, error) {
 		return in, err
 	}
 	in.Fundamentals = panel.Status
-	m := panel.FundamentalMetrics
-	if panel.Status == fundamentals.StatusOK && m.Revenue != nil && m.Shares != nil && m.Revenue.IsPositive() && m.Shares.IsPositive() {
-		b := DCFBase{BaseRevenue: m.Revenue.Decimal, Shares: m.Shares.Decimal, NetDebt: decimal.Zero}
-		if m.NetDebt != nil {
-			b.NetDebt = m.NetDebt.Decimal
-		}
-		in.DCFBase = &b
-	}
+	in.DCFBase = dcfBase(panel)
 	in.fundamentalsJSON = fundamentalsSummary(panel)
-
-	switch a.Market {
-	case assets.MarketUS:
-		s.gatherUS(ctx, a, &in)
-	default:
-		s.gatherBR(ctx, a, &in)
-	}
 	return in, nil
+}
+
+// DCFBaseOf returns the base figures of a fundamentals panel (nil when the
+// fundamentals are not available).
+func DCFBaseOf(panel fundamentals.FundamentalsPanel) *DCFBase { return dcfBase(panel) }
+
+// dcfBase returns the base revenue, net debt and shares of a panel, or nil
+// when the fundamentals are not available.
+func dcfBase(panel fundamentals.FundamentalsPanel) *DCFBase {
+	m := panel.FundamentalMetrics
+	if panel.Status != fundamentals.StatusOK || m.Revenue == nil || m.Shares == nil || !m.Revenue.IsPositive() || !m.Shares.IsPositive() {
+		return nil
+	}
+	b := DCFBase{BaseRevenue: m.Revenue.Decimal, Shares: m.Shares.Decimal, NetDebt: decimal.Zero}
+	if m.NetDebt != nil {
+		b.NetDebt = m.NetDebt.Decimal
+	}
+	return &b
 }
 
 func fundamentalsSummary(p fundamentals.FundamentalsPanel) string {

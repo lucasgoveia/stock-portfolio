@@ -1,3 +1,4 @@
+import { useQuery } from '@tanstack/react-query'
 import { Link, useRouterState } from '@tanstack/react-router'
 import {
   Bell,
@@ -19,10 +20,12 @@ import {
   SidebarGroupContent,
   SidebarHeader,
   SidebarMenu,
+  SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
   useSidebar,
 } from '@/components/ui/sidebar'
+import { pendingReviewQuery } from '@/lib/queries'
 
 const items: { to: string; label: string; icon: LucideIcon }[] = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
@@ -39,6 +42,8 @@ const items: { to: string; label: string; icon: LucideIcon }[] = [
 export function AppSidebar() {
   const pathname = useRouterState({ select: (s) => s.location.pathname })
   const { setOpenMobile } = useSidebar()
+  const review = useQuery(pendingReviewQuery)
+  const pending = review.data?.total ?? 0
   return (
     <Sidebar>
       <SidebarHeader className="display px-4 py-3 text-lg font-semibold">Stock Portfolio</SidebarHeader>
@@ -57,6 +62,11 @@ export function AppSidebar() {
                       <Icon />
                       <span>{label}</span>
                     </SidebarMenuButton>
+                    {to === '/watchlist' && pending > 0 && (
+                      <SidebarMenuBadge aria-label={`${pending} drafts awaiting review`} title="MCP drafts and candidates awaiting review">
+                        {pending}
+                      </SidebarMenuBadge>
+                    )}
                   </SidebarMenuItem>
                 )
               })}

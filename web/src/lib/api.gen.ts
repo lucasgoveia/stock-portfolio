@@ -72,6 +72,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/analyst/mcp-drafts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** MCP analyst drafts awaiting review, newest first */
+        get: operations["listMCPDrafts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/analyst/runs/{id}": {
         parameters: {
             query?: never;
@@ -594,6 +611,74 @@ export interface paths {
         patch: operations["updateBreakCondition"];
         trace?: never;
     };
+    "/api/candidates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** New-ticker candidates proposed over MCP, pending first */
+        get: operations["listCandidates"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/candidates/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One candidate */
+        get: operations["getCandidate"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/candidates/{id}/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create the watchlist asset and an MCP analyst draft from the candidate's note, scenarios and fair value */
+        post: operations["acceptCandidate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/candidates/{id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reject a candidate (the row is kept) */
+        post: operations["rejectCandidate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/cash/instruments": {
         parameters: {
             query?: never;
@@ -954,6 +1039,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/mcp/setup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Absolute paths for the MCP setup snippets */
+        get: operations["getMCPSetup"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/notes/{id}": {
         parameters: {
             query?: never;
@@ -1092,6 +1194,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/review/pending": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Count of MCP drafts and candidates awaiting review */
+        get: operations["getPendingReview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/settings": {
         parameters: {
             query?: never;
@@ -1153,6 +1272,23 @@ export interface paths {
         get?: never;
         /** Replace the expectations settings */
         put: operations["setExpectationsSettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/mcp": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Replace the mcp settings */
+        put: operations["setMCPSettings"];
         post?: never;
         delete?: never;
         options?: never;
@@ -1505,6 +1641,8 @@ export interface components {
             /** Format: int64 */
             output_tokens: number;
             /** @enum {string} */
+            source: "api" | "mcp";
+            /** @enum {string} */
             status: "draft" | "approved" | "discarded" | "failed";
         };
         AnalystUsage: {
@@ -1540,6 +1678,7 @@ export interface components {
             note_ids: number[] | null;
             /** Format: int64 */
             range_fair_value_id?: number;
+            summary?: boolean;
             thesis_check: boolean;
         };
         ApproveInput: {
@@ -1551,6 +1690,8 @@ export interface components {
             market_size?: boolean;
             /** @description Create a scenario DCF fair value version */
             scenarios?: boolean;
+            /** @description Save the research note as a note */
+            summary?: boolean;
             /** @description Save the thesis check as a note */
             thesis_check?: boolean;
         };
@@ -1628,6 +1769,27 @@ export interface components {
             id: number;
             text: string;
             updated_at: string;
+        };
+        Candidate: {
+            /** Format: int64 */
+            asset_id?: number;
+            cik: string;
+            cnpj: string;
+            created_at: string;
+            decided_at?: string;
+            /** Format: int64 */
+            id: number;
+            /** @enum {string} */
+            market: "B3" | "US";
+            name: string;
+            note: string;
+            output: components["schemas"]["Output"];
+            provenance: components["schemas"]["Provenance"];
+            /** Format: int64 */
+            run_id?: number;
+            /** @enum {string} */
+            status: "pending" | "accepted" | "rejected";
+            ticker: string;
         };
         Catalyst: {
             detail: string;
@@ -1949,6 +2111,10 @@ export interface components {
             defaults: components["schemas"]["Expectations"];
             values: components["schemas"]["Expectations"];
         };
+        GroupMCP: {
+            defaults: components["schemas"]["MCP"];
+            values: components["schemas"]["MCP"];
+        };
         GroupPlanner: {
             defaults: components["schemas"]["Planner"];
             values: components["schemas"]["Planner"];
@@ -2026,6 +2192,7 @@ export interface components {
             /** @description Status of the fundamentals summary sent to the model */
             fundamentals: string;
             market: string;
+            mcp?: components["schemas"]["MCPProvenance"];
             skipped: string[] | null;
             thesis?: components["schemas"]["ThesisInput"];
             ticker: string;
@@ -2050,6 +2217,28 @@ export interface components {
             label: string;
             name: string;
             source: string;
+        };
+        MCP: {
+            /**
+             * Format: int64
+             * @description Symbols not held by the app that the MCP tools may look up per day (America/Sao_Paulo)
+             */
+            daily_new_symbols: number;
+        };
+        MCPProvenance: {
+            client: string;
+            external_urls: string[] | null;
+            model: string;
+            submitted_at: string;
+        };
+        MCPSetup: {
+            config_exists: boolean;
+            /** @description Absolute path of the config file */
+            config_path: string;
+            /** @description Absolute path of the SQLite database in use */
+            db_path: string;
+            /** @description Absolute path of the running binary; empty when it is a temporary go run build */
+            executable: string;
         };
         Movement: {
             amount: string;
@@ -2136,15 +2325,31 @@ export interface components {
             market_size_notes: string;
             scenarios: components["schemas"]["Scenarios"];
             sources: components["schemas"]["Source"][] | null;
+            summary?: string;
             thesis_check: components["schemas"]["ThesisCheck"][] | null;
         };
         Overview: {
             ai: components["schemas"]["GroupAI"];
             allocation: components["schemas"]["GroupAllocation"];
             expectations: components["schemas"]["GroupExpectations"];
+            mcp: components["schemas"]["GroupMCP"];
             planner: components["schemas"]["GroupPlanner"];
             tactical: components["schemas"]["GroupTactical"];
             tax: components["schemas"]["GroupTax"];
+        };
+        PendingReview: {
+            /**
+             * Format: int64
+             * @description Pending new-ticker candidates
+             */
+            candidates: number;
+            /**
+             * Format: int64
+             * @description MCP analyst drafts not yet approved or discarded
+             */
+            mcp_drafts: number;
+            /** Format: int64 */
+            total: number;
         };
         Planner: {
             /** @description Portfolio value (BRL) below which bootstrap mode applies */
@@ -2194,6 +2399,10 @@ export interface components {
             above_upper: boolean;
             below_floor: boolean;
             below_lower: boolean;
+        };
+        Provenance: {
+            documents: components["schemas"]["Document"][] | null;
+            mcp: components["schemas"]["MCPProvenance"];
         };
         QuarterComparison: {
             actual_eps?: string;
@@ -2475,6 +2684,7 @@ export interface components {
             until: string;
         };
         Source: {
+            external?: boolean;
             title: string;
             url: string;
         };
@@ -2885,6 +3095,35 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Alert"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listMCPDrafts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalystRun"][] | null;
                 };
             };
             /** @description Error */
@@ -4310,6 +4549,131 @@ export interface operations {
             };
         };
     };
+    listCandidates: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Candidate"][] | null;
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getCandidate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Resource id */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Candidate"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    acceptCandidate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Resource id */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Candidate"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    rejectCandidate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Resource id */
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Candidate"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     listInstruments: {
         parameters: {
             query?: never;
@@ -5080,6 +5444,35 @@ export interface operations {
             };
         };
     };
+    getMCPSetup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MCPSetup"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     getNote: {
         parameters: {
             query?: never;
@@ -5397,6 +5790,35 @@ export interface operations {
             };
         };
     };
+    getPendingReview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PendingReview"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     getSettings: {
         parameters: {
             query?: never;
@@ -5512,6 +5934,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Expectations"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    setMCPSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MCP"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MCP"];
                 };
             };
             /** @description Error */
@@ -5721,7 +6176,7 @@ export interface operations {
             header?: never;
             path: {
                 /** @description Settings group */
-                group: "allocation" | "planner" | "tax" | "tactical" | "ai" | "expectations";
+                group: "allocation" | "planner" | "tax" | "tactical" | "ai" | "expectations" | "mcp";
             };
             cookie?: never;
         };

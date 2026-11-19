@@ -9,6 +9,7 @@ import (
 	"github.com/shopspring/decimal"
 
 	"github.com/lucasgoveia/stock-portfolio/internal/engine"
+	"github.com/lucasgoveia/stock-portfolio/internal/fundamentals"
 	"github.com/lucasgoveia/stock-portfolio/internal/money"
 	"github.com/lucasgoveia/stock-portfolio/internal/research"
 	"github.com/lucasgoveia/stock-portfolio/internal/valuation"
@@ -72,7 +73,7 @@ func (s *Service) Approve(ctx context.Context, id int64, in ApproveInput) (Run, 
 		return Run{}, fmt.Errorf("%w: run has no output", ErrConflict)
 	}
 	o, ap := run.Output, run.Approvals
-	if len(in.Catalysts) == 0 && !in.MarketSize && !in.ThesisCheck && !in.Scenarios && !in.FairValueRange {
+	if len(in.Catalysts) == 0 && !in.MarketSize && !in.Summary && !in.ThesisCheck && !in.Scenarios && !in.FairValueRange {
 		return Run{}, validationf("select at least one part to approve")
 	}
 	idx := slices.Clone(in.Catalysts)
@@ -89,11 +90,17 @@ func (s *Service) Approve(ctx context.Context, id int64, in ApproveInput) (Run, 
 	if in.MarketSize && (ap.MarketSize || strings.TrimSpace(o.MarketSizeNotes) == "") {
 		return Run{}, fmt.Errorf("%w: market size notes are empty or already approved", ErrConflict)
 	}
+	if in.Summary && (ap.Summary || strings.TrimSpace(o.Summary) == "") {
+		return Run{}, fmt.Errorf("%w: the research note is empty or already approved", ErrConflict)
+	}
 	if in.ThesisCheck && (ap.ThesisCheck || len(o.ThesisCheck) == 0) {
 		return Run{}, fmt.Errorf("%w: the thesis check is empty or already approved", ErrConflict)
 	}
 	if in.Scenarios && ap.DCFFairValueID != nil {
 		return Run{}, fmt.Errorf("%w: scenarios were already approved", ErrConflict)
+	}
+	if in.FairValueRange && !o.hasRange() {
+		return Run{}, validationf("the run has no fair value range")
 	}
 	if in.FairValueRange && ap.RangeFairValue != nil {
 		return Run{}, fmt.Errorf("%w: the fair value range was already approved", ErrConflict)
@@ -102,10 +109,23 @@ func (s *Service) Approve(ctx context.Context, id int64, in ApproveInput) (Run, 
 	// Validate the fair value parts before writing anything.
 	var dcf *engine.DCFInput
 	if in.Scenarios {
-		if run.Inputs.DCFBase == nil {
-			return Run{}, validationf("the run has no base revenue and share count (fundamentals were not available), so its scenarios cannot become a DCF version")
+		if !o.hasScenarios() {
+			return Run{}, validationf("the run has no scenarios")
 		}
-		d := o.DCF(*run.Inputs.DCFBase)
+		base := run.Inputs.DCFBase
+		if base == nil {
+			// The draft was made before the fundamentals existed (a new candidate):
+			// use the stored ones now.
+			if a, err := s.d.Assets.Get(ctx, run.AssetID); err == nil {
+				if panel, err := s.d.Fundamentals.Get(ctx, a.ID, fundamentals.Params{}); err == nil {
+					base = dcfBase(panel)
+				}
+			}
+		}
+		if base == nil {
+			return Run{}, validationf("the run has no base revenue and share count (fundamentals were not available), so its scenarios cannot become a DCF version; refresh the asset's fundamentals and try again")
+		}
+		d := o.DCF(*base)
 		if _, err := valuation.Preview(d); err != nil {
 			return Run{}, err
 		}
@@ -113,6 +133,13 @@ func (s *Service) Approve(ctx context.Context, id int64, in ApproveInput) (Run, 
 	}
 	srcs := sourceURLs(o)
 	note := fmt.Sprintf("AI analyst run #%d (%s)", run.ID, run.Model)
+	if run.Source == SourceMCP {
+		client := ""
+		if run.Inputs.MCP != nil && run.Inputs.MCP.Client != "" {
+			client = " via " + run.Inputs.MCP.Client
+		}
+		note = fmt.Sprintf("MCP analyst draft #%d (%s%s)", run.ID, run.Model, client)
+	}
 	if dcf != nil {
 		fv, err := s.d.Valuation.Create(ctx, run.AssetID, valuation.CreateInput{
 			Method: valuation.MethodScenarioDCF, DCF: dcf, Sources: srcs, Note: note,
@@ -158,6 +185,12 @@ func (s *Service) Approve(ctx context.Context, id int64, in ApproveInput) (Run, 
 			return Run{}, err
 		}
 		ap.MarketSize = true
+	}
+	if in.Summary {
+		if err := addNote(strings.TrimSpace(o.Summary), srcs); err != nil {
+			return Run{}, err
+		}
+		ap.Summary = true
 	}
 	if in.ThesisCheck {
 		if err := addNote(thesisCheckText(o.ThesisCheck), srcs); err != nil {

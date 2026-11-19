@@ -53,6 +53,10 @@ func initiativeSchema() map[string]any {
 	}, "name", "rationale", "sources", "start_year", "revenue_year5", "margin", "success_probability")
 }
 
+// OutputSchema is the JSON schema of an analysis. The in-app analyst forces the
+// model's answer into it and the MCP submit tools take the same shape.
+func OutputSchema() map[string]any { return outputSchema() }
+
 // outputSchema is the JSON schema the model's answer must follow.
 func outputSchema() map[string]any {
 	return obj(map[string]any{
@@ -107,7 +111,24 @@ func parseOutput(text string, allowed map[string]bool) (Output, int, error) {
 	return out, dropped, nil
 }
 
-func (o *Output) validate() error {
+// validate checks a full answer: scenarios, range and thesis check are required.
+func (o *Output) validate() error { return o.check(true) }
+
+// Validate checks an answer submitted over MCP. With partial, scenarios and the
+// fair value range may be left out (a candidate may carry only a note or only
+// a fair value); whatever is given is validated like a full answer.
+func (o *Output) Validate(partial bool) error { return o.check(!partial) }
+
+func (o *Output) hasScenarios() bool {
+	return len(o.Scenarios.Bear.RevenueGrowth)+len(o.Scenarios.Base.RevenueGrowth)+len(o.Scenarios.Bull.RevenueGrowth) > 0
+}
+
+func (o *Output) hasRange() bool {
+	r := o.FairValueRange
+	return !r.Low.IsZero() || !r.High.IsZero() || r.Currency != ""
+}
+
+func (o *Output) check(full bool) error {
 	if len(o.Catalysts) > maxCatalysts {
 		o.Catalysts = o.Catalysts[:maxCatalysts]
 	}
@@ -121,31 +142,37 @@ func (o *Output) validate() error {
 			}
 		}
 	}
-	dcf := engine.DCFInput{BaseRevenue: decimal.NewFromInt(1), Shares: decimal.NewFromInt(1)}
-	for _, p := range []struct {
-		name string
-		s    ScenarioDraft
-	}{{engine.ScenarioBear, o.Scenarios.Bear}, {engine.ScenarioBase, o.Scenarios.Base}, {engine.ScenarioBull, o.Scenarios.Bull}} {
-		if len(p.s.RevenueGrowth) != engine.DCFYears {
-			return invalidf("%s needs %d yearly revenue growth rates, got %d", p.name, engine.DCFYears, len(p.s.RevenueGrowth))
+	if full || o.hasScenarios() {
+		dcf := engine.DCFInput{BaseRevenue: decimal.NewFromInt(1), Shares: decimal.NewFromInt(1)}
+		for _, p := range []struct {
+			name string
+			s    ScenarioDraft
+		}{{engine.ScenarioBear, o.Scenarios.Bear}, {engine.ScenarioBase, o.Scenarios.Base}, {engine.ScenarioBull, o.Scenarios.Bull}} {
+			if len(p.s.RevenueGrowth) != engine.DCFYears {
+				return invalidf("%s needs %d yearly revenue growth rates, got %d", p.name, engine.DCFYears, len(p.s.RevenueGrowth))
+			}
+			dcf.Scenarios = append(dcf.Scenarios, p.s.toEngine(p.name))
 		}
-		dcf.Scenarios = append(dcf.Scenarios, p.s.toEngine(p.name))
-	}
-	dcf.Initiatives = o.Initiatives
-	if err := dcf.Validate(); err != nil {
-		return invalidf("%v", err)
-	}
-	for i, sc := range dcf.Scenarios {
-		if sc.Basis == "" {
-			return invalidf("%s must state its basis (ebit_ev or net_pe)", dcf.Scenarios[i].Name)
+		dcf.Initiatives = o.Initiatives
+		if err := dcf.Validate(); err != nil {
+			return invalidf("%v", err)
 		}
+		for i, sc := range dcf.Scenarios {
+			if sc.Basis == "" {
+				return invalidf("%s must state its basis (ebit_ev or net_pe)", dcf.Scenarios[i].Name)
+			}
+		}
+	} else if len(o.Initiatives) > 0 {
+		return invalidf("initiatives need scenarios (they are valued with them)")
 	}
-	r := o.FairValueRange
-	if !r.Low.IsPositive() || r.High.LessThan(r.Low) {
-		return invalidf("fair value range must have 0 < low <= high (got %s to %s)", r.Low, r.High)
-	}
-	if r.Currency != "BRL" && r.Currency != "USD" {
-		return invalidf("fair value range currency must be BRL or USD")
+	if full || o.hasRange() {
+		r := o.FairValueRange
+		if !r.Low.IsPositive() || r.High.LessThan(r.Low) {
+			return invalidf("fair value range must have 0 < low <= high (got %s to %s)", r.Low, r.High)
+		}
+		if r.Currency != "BRL" && r.Currency != "USD" {
+			return invalidf("fair value range currency must be BRL or USD")
+		}
 	}
 	for i, t := range o.ThesisCheck {
 		switch t.Status {
@@ -162,6 +189,9 @@ func (o *Output) validate() error {
 	}
 	if o.ThesisCheck == nil {
 		o.ThesisCheck = []ThesisCheck{}
+	}
+	if o.Sources == nil {
+		o.Sources = []Source{}
 	}
 	return nil
 }

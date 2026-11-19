@@ -73,3 +73,24 @@ export const analystUsageQuery = queryOptions({
   queryKey: ['analyst', 'usage'] as const,
   queryFn: () => unwrap(api.GET('/api/analyst/usage')),
 })
+
+export const pendingReviewQuery = queryOptions({
+  queryKey: ['review', 'pending'] as const,
+  queryFn: () => unwrap(api.GET('/api/review/pending')),
+  refetchInterval: 30_000,
+})
+
+export const candidatesQuery = queryOptions({
+  queryKey: ['review', 'candidates'] as const,
+  queryFn: () => unwrap(api.GET('/api/candidates')),
+})
+
+export const mcpDraftsQuery = queryOptions({
+  queryKey: ['review', 'mcp-drafts'] as const,
+  queryFn: () => unwrap(api.GET('/api/analyst/mcp-drafts')),
+})
+
+export const mcpSetupQuery = queryOptions({
+  queryKey: ['mcp', 'setup'] as const,
+  queryFn: () => unwrap(api.GET('/api/mcp/setup')),
+})

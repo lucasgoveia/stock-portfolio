@@ -9,10 +9,21 @@ import (
 	"context"
 )
 
+const countMCPDraftRuns = `-- name: CountMCPDraftRuns :one
+SELECT COUNT(*) FROM analyst_runs WHERE source = 'mcp' AND status = 'draft'
+`
+
+func (q *Queries) CountMCPDraftRuns(ctx context.Context) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countMCPDraftRuns)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createAnalystRun = `-- name: CreateAnalystRun :one
-INSERT INTO analyst_runs (asset_id, model, status, inputs, output, input_tokens, output_tokens, cost_usd, error, created_at)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-RETURNING id, asset_id, model, status, inputs, output, input_tokens, output_tokens, cost_usd, approvals, error, created_at
+INSERT INTO analyst_runs (asset_id, model, status, inputs, output, input_tokens, output_tokens, cost_usd, error, created_at, source)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+RETURNING id, asset_id, model, status, inputs, output, input_tokens, output_tokens, cost_usd, approvals, error, created_at, source
 `
 
 type CreateAnalystRunParams struct {
@@ -26,6 +37,7 @@ type CreateAnalystRunParams struct {
 	CostUsd      string
 	Error        string
 	CreatedAt    string
+	Source       string
 }
 
 func (q *Queries) CreateAnalystRun(ctx context.Context, arg CreateAnalystRunParams) (AnalystRun, error) {
@@ -40,6 +52,7 @@ func (q *Queries) CreateAnalystRun(ctx context.Context, arg CreateAnalystRunPara
 		arg.CostUsd,
 		arg.Error,
 		arg.CreatedAt,
+		arg.Source,
 	)
 	var i AnalystRun
 	err := row.Scan(
@@ -55,12 +68,13 @@ func (q *Queries) CreateAnalystRun(ctx context.Context, arg CreateAnalystRunPara
 		&i.Approvals,
 		&i.Error,
 		&i.CreatedAt,
+		&i.Source,
 	)
 	return i, err
 }
 
 const getAnalystRun = `-- name: GetAnalystRun :one
-SELECT id, asset_id, model, status, inputs, output, input_tokens, output_tokens, cost_usd, approvals, error, created_at FROM analyst_runs WHERE id = ?
+SELECT id, asset_id, model, status, inputs, output, input_tokens, output_tokens, cost_usd, approvals, error, created_at, source FROM analyst_runs WHERE id = ?
 `
 
 func (q *Queries) GetAnalystRun(ctx context.Context, id int64) (AnalystRun, error) {
@@ -79,12 +93,13 @@ func (q *Queries) GetAnalystRun(ctx context.Context, id int64) (AnalystRun, erro
 		&i.Approvals,
 		&i.Error,
 		&i.CreatedAt,
+		&i.Source,
 	)
 	return i, err
 }
 
 const listAnalystCostsBetween = `-- name: ListAnalystCostsBetween :many
-SELECT cost_usd FROM analyst_runs WHERE created_at >= ? AND created_at < ?
+SELECT cost_usd FROM analyst_runs WHERE created_at >= ? AND created_at < ? AND source = 'api'
 `
 
 type ListAnalystCostsBetweenParams struct {
@@ -92,6 +107,7 @@ type ListAnalystCostsBetweenParams struct {
 	CreatedAt_2 string
 }
 
+// Only runs paid through the API count toward the monthly cap; MCP drafts cost 0.
 func (q *Queries) ListAnalystCostsBetween(ctx context.Context, arg ListAnalystCostsBetweenParams) ([]string, error) {
 	rows, err := q.db.QueryContext(ctx, listAnalystCostsBetween, arg.CreatedAt, arg.CreatedAt_2)
 	if err != nil {
@@ -116,7 +132,7 @@ func (q *Queries) ListAnalystCostsBetween(ctx context.Context, arg ListAnalystCo
 }
 
 const listAnalystRunsByAsset = `-- name: ListAnalystRunsByAsset :many
-SELECT id, asset_id, model, status, inputs, output, input_tokens, output_tokens, cost_usd, approvals, error, created_at FROM analyst_runs WHERE asset_id = ? ORDER BY id DESC
+SELECT id, asset_id, model, status, inputs, output, input_tokens, output_tokens, cost_usd, approvals, error, created_at, source FROM analyst_runs WHERE asset_id = ? ORDER BY id DESC
 `
 
 func (q *Queries) ListAnalystRunsByAsset(ctx context.Context, assetID int64) ([]AnalystRun, error) {
@@ -141,6 +157,48 @@ func (q *Queries) ListAnalystRunsByAsset(ctx context.Context, assetID int64) ([]
 			&i.Approvals,
 			&i.Error,
 			&i.CreatedAt,
+			&i.Source,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMCPDraftRuns = `-- name: ListMCPDraftRuns :many
+SELECT id, asset_id, model, status, inputs, output, input_tokens, output_tokens, cost_usd, approvals, error, created_at, source FROM analyst_runs WHERE source = 'mcp' AND status = 'draft' ORDER BY id DESC
+`
+
+func (q *Queries) ListMCPDraftRuns(ctx context.Context) ([]AnalystRun, error) {
+	rows, err := q.db.QueryContext(ctx, listMCPDraftRuns)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AnalystRun
+	for rows.Next() {
+		var i AnalystRun
+		if err := rows.Scan(
+			&i.ID,
+			&i.AssetID,
+			&i.Model,
+			&i.Status,
+			&i.Inputs,
+			&i.Output,
+			&i.InputTokens,
+			&i.OutputTokens,
+			&i.CostUsd,
+			&i.Approvals,
+			&i.Error,
+			&i.CreatedAt,
+			&i.Source,
 		); err != nil {
 			return nil, err
 		}
@@ -156,7 +214,7 @@ func (q *Queries) ListAnalystRunsByAsset(ctx context.Context, assetID int64) ([]
 }
 
 const updateAnalystRunStatus = `-- name: UpdateAnalystRunStatus :one
-UPDATE analyst_runs SET status = ?, approvals = ? WHERE id = ? RETURNING id, asset_id, model, status, inputs, output, input_tokens, output_tokens, cost_usd, approvals, error, created_at
+UPDATE analyst_runs SET status = ?, approvals = ? WHERE id = ? RETURNING id, asset_id, model, status, inputs, output, input_tokens, output_tokens, cost_usd, approvals, error, created_at, source
 `
 
 type UpdateAnalystRunStatusParams struct {
@@ -181,6 +239,7 @@ func (q *Queries) UpdateAnalystRunStatus(ctx context.Context, arg UpdateAnalystR
 		&i.Approvals,
 		&i.Error,
 		&i.CreatedAt,
+		&i.Source,
 	)
 	return i, err
 }

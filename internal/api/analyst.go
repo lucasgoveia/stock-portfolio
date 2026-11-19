@@ -39,6 +39,10 @@ func WithAnalyst(svc *analyst.Service) Option {
 			func(ctx context.Context, in *IDPath) (*Body[analyst.Run], error) {
 				return ok(svc.Discard(ctx, in.ID))
 			})
+		huma.Register(s.api, op(http.MethodGet, "/api/analyst/mcp-drafts", "listMCPDrafts", "MCP analyst drafts awaiting review, newest first", tag),
+			func(ctx context.Context, _ *struct{}) (*Body[[]analyst.Run], error) {
+				return ok(svc.ListMCPDrafts(ctx))
+			})
 		huma.Register(s.api, op(http.MethodGet, "/api/analyst/usage", "getAnalystUsage", "Month-to-date AI spend, the cap and whether a run may start", tag),
 			func(ctx context.Context, _ *struct{}) (*Body[analyst.Usage], error) {
 				return ok(svc.Usage(ctx))

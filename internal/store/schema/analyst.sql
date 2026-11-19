@@ -17,7 +17,11 @@ CREATE TABLE analyst_runs (
     -- JSON: what was approved so far (note ids, fair value ids).
     approvals     TEXT    NOT NULL DEFAULT '{}',
     error         TEXT    NOT NULL DEFAULT '',
-    created_at    TEXT    NOT NULL
+    created_at    TEXT    NOT NULL,
+    -- Where the run came from: the in-app API analyst (paid, counts toward the
+    -- monthly cap) or a draft submitted by the user's Claude client over MCP
+    -- (cost 0, never counted). For mcp runs the provenance is in inputs.
+    source        TEXT    NOT NULL DEFAULT 'api' CHECK (source IN ('api', 'mcp'))
 );
 CREATE INDEX analyst_runs_asset ON analyst_runs (asset_id, id);
 CREATE INDEX analyst_runs_created ON analyst_runs (created_at);
