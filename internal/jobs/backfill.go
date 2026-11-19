@@ -47,7 +47,7 @@ func Backfill(ctx context.Context, d Deps, from time.Time) ([]StepResult, error)
 		case errors.Is(err, ErrSkipped):
 			r.Status = StepSkipped
 		default:
-			r.Status, r.Error = StepFailed, err.Error()
+			r.Status, r.Error = StepFailed, summarize(err)
 		}
 		out = append(out, r)
 		if ctx.Err() != nil {

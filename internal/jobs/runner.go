@@ -119,12 +119,12 @@ func (r *Runner) Run(ctx context.Context) (RunResult, error) {
 		case errors.Is(err, ErrSkipped):
 			sr.Status = StepSkipped
 		case err != nil:
-			sr.Status, sr.Error = StepFailed, err.Error()
+			sr.Status, sr.Error = StepFailed, summarize(err)
 			failed++
 			slog.Warn("daily job step failed", "step", st.Name, "err", err)
 			if r.alerts != nil {
 				if _, aerr := r.alerts.Upsert(ctx, AlertFetchFailed, nil, st.Name, map[string]any{
-					"step": st.Name, "error": err.Error(), "run_id": row.ID, "run_date": row.RunDate,
+					"step": st.Name, "error": summarize(err), "run_id": row.ID, "run_date": row.RunDate,
 				}); aerr != nil {
 					return res, aerr
 				}
@@ -219,4 +219,15 @@ func NextRun(now time.Time, hh, mm int) time.Time {
 		next = next.AddDate(0, 0, 1)
 	}
 	return next
+}
+
+// maxStepError caps a stored step error: a readable summary, never a body.
+const maxStepError = 300
+
+func summarize(err error) string {
+	s := strings.Join(strings.Fields(err.Error()), " ")
+	if r := []rune(s); len(r) > maxStepError {
+		return string(r[:maxStepError-1]) + "…"
+	}
+	return s
 }

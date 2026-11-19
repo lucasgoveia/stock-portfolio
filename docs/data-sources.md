@@ -6,7 +6,7 @@ Legend: **VERIFIED** = observed in a live call today. **DOCS** = taken from the 
 
 ## 0. Headline findings
 
-1. **brapi.dev needs a token for everything except four sandbox tickers** (PETR4, VALE3, ITUB4, MGLU3). Any other ticker, and every index (`^BVSP`), returns 401 `MISSING_TOKEN`. The sandbox is rate limited (20 req/min, concurrency 1). A free token (R$ 0) exists but is capped at 1 asset per request, 15,000 req/month, 3 months of history and 30-minute data freshness. Dividends are "Limited" on Free (not quantified in the docs).
+1. **brapi.dev needs a token for everything except four sandbox tickers** (PETR4, VALE3, ITUB4, MGLU3). Any other ticker, and every index (`^BVSP`), returns 401 `MISSING_TOKEN`. The sandbox is rate limited (20 req/min, concurrency 1). A free token (R$ 0) exists but is capped at 1 asset per request, 15,000 req/month, 3 months of history and 30-minute data freshness. Dividends are NOT available on Free (VERIFIED 2026-11-19: 403 `FEATURE_NOT_AVAILABLE`; the docs' "Limited" meant none).
 2. **Corporate actions in brapi come from the dividends endpoint**, not a separate `stockDividends` endpoint: `GET /api/v2/stocks/dividends` returns `cashDividends`, `stockDividends` (desdobramento/grupamento/bonificação) and `subscriptions`. The legacy `GET /api/quote/{t}?dividends=true` returns the same under `dividendsData`. Spec §14 wording ("brapi `stockDividends`") is correct but should name the endpoint.
 3. **Yahoo Finance returned HTTP 429 for every request from this machine** (chart, quote, with and without cookie, any User-Agent, both query1 and query2 hosts). It could not be verified live. Treat it as unreliable and plan for a fallback from day one (see 2).
 4. **Tesouro Selic price lags one business day.** The Tesouro Transparente CSV is refreshed each morning (~07:20 BRT) with the previous business day's base date. At the 19:00 job the latest PU is from D-1. Spec §16.1 step 1 must tolerate "latest available date".
@@ -35,7 +35,7 @@ Legend: **VERIFIED** = observed in a live call today. **DOCS** = taken from the 
 What each plan includes (DOCS, pricing.md feature table plus per-endpoint OpenAPI text from https://brapi.dev/openapi.json):
 - Quotes (B3 stocks, BDRs, ETFs, FIIs): all plans, with a token (sandbox tickers without).
 - History: range/interval and window size limited by plan (Free 3 mo, Startup 1 yr, Pro 10+ yr). Over the limit returns 400. `includeRaw=true` (unadjusted OHLC) is Pro only.
-- Dividends (`/api/v2/stocks/dividends`): Free "Limited" (undefined), Startup up to 1 year, Pro 10+ years. `includeRaw=true` is Pro only.
+- Dividends (`/api/v2/stocks/dividends`): **Free: none, VERIFIED 2026-11-19** (HTTP 403 `FEATURE_NOT_AVAILABLE`, "Dividendos e JCP requer o plano Startup", for every non-sandbox ticker; fixture `internal/marketdata/testdata/brapi/dividends_free_plan_403.json`; the app treats it as "skipped, enter manually"). Startup up to 1 year, Pro 10+ years. `includeRaw=true` is Pro only.
 - Fundamentals: Free none; Startup annual statements, recent years; Pro quarterly and annual since 2009.
 - Macro (`/api/v2/macro`, includes Selic and CDI daily): Startup and Pro. Currency (`/api/v2/currency`, PTAX based): Startup and Pro. Currency history: Pro.
 - Tesouro Direto (`/api/v2/treasury/*`): Pro. Without token only three bonds are open (not identified in the docs fetched).
@@ -164,10 +164,10 @@ Spec impact: §17 and §11 should record JCP at 17.5% and dividend withholding 1
 |---|---|---|---|---|
 | B3 quotes | brapi `/api/v2/stocks/quote` (token) | Yahoo `.SA`, manual | Free token OK (15k req/month, 1 asset/req) | High |
 | B3 daily history (unadjusted) | **B3 COTAHIST** yearly/daily zips (section 11) | brapi (3 months, adjusted) | Free | High (VERIFIED; daily file ~21:00 BRT; one UTF-8 record) |
-| B3 dividends/JCP | brapi `/api/v2/stocks/dividends` | CVM IPE (manual), manual entry | Free "limited" (undefined); Startup 1 yr; Pro 10+ yr | Medium |
+| B3 dividends/JCP | brapi `/api/v2/stocks/dividends` | CVM IPE (manual), manual entry | Free: none (VERIFIED 403, 2026-11-19); Startup 1 yr; Pro 10+ yr | Medium |
 | B3 splits/bonificações | same endpoint (`stockDividends`) | Manual entry via confirmation queue | same | Medium (BONIFICACAO label unverified) |
 | B3 fundamentals | brapi `/api/v2/stocks/*` statements, or CVM ITR/DFP | CVM Dados Abertos | Startup annual; Pro quarterly; CVM free | High for CVM, medium for brapi |
-| US prices/splits/dividends | **Tiingo** free key (section 12) | Yahoo chart API, Polygon | Free (50/h, 1000/day, 500 symbols/mo, personal use) | Medium (DOCS only, no key) |
+| US prices/splits/dividends | **Tiingo** free key (section 12) | Yahoo chart API, Polygon | Free (50/h, 1000/day, 500 symbols/mo, personal use) | High for daily prices (VERIFIED live 2026-11-19: backfill 1,002 bars for AAPL+MSFT); splits/dividends fields DOCS only |
 | USDBRL | BCB Olinda PTAX | SGS series 1 | Free | High |
 | CDI | BCB SGS 12 (daily %, string) | brapi macro (Startup+) | Free | High |
 | Tesouro Selic price | Tesouro Transparente CSV | brapi treasury (Pro), Selic accrual estimate | Free | High (1-day lag) |
@@ -242,7 +242,9 @@ Weekly (Friday close, or last trading day of the week) returns of the ticker fro
 
 ## 12. Tiingo (US EOD, splits, dividends) (issue #37)
 
-**No API key was created**, so nothing below was called with a token. `https://api.tiingo.com/tiingo/daily/aapl/prices` answered HTTP 403 `{"detail":"Please supply a token"}` (VERIFIED, confirms key auth). Everything else is from Tiingo's own pages fetched today (pricing page and https://www.tiingo.com/documentation/end-of-day), marked DOCS. No Tiingo fixture could be saved.
+**Update 2026-11-19: daily prices VERIFIED live with a key (backfill returned 1,002 bars for AAPL+MSFT).** The text below dates from issue #37, when no key existed; items not re-checked remain DOCS.
+
+**No API key was created at the time**, so nothing below was called with a token then. `https://api.tiingo.com/tiingo/daily/aapl/prices` answered HTTP 403 `{"detail":"Please supply a token"}` (VERIFIED, confirms key auth). Everything else is from Tiingo's own pages fetched today (pricing page and https://www.tiingo.com/documentation/end-of-day), marked DOCS. No Tiingo fixture could be saved.
 
 - Free plan "Starter" (individual, $0), DOCS: **50 requests/hour, 1,000 requests/day, 500 unique symbols/month, 1 GB bandwidth/month**; price history listed as 30+ years; license "personal use only, may not display or share data with another organization" (pricing page). Search summaries agree on the limits and note that fundamentals and News are not included. Paid: Power $30/month (UNVERIFIED, search results only).
 - Endpoints (DOCS): `GET https://api.tiingo.com/tiingo/daily/<ticker>/prices` (latest EOD), same with `?startDate=YYYY-M-D&endDate=...&resampleFreq=daily|weekly|monthly&format=json|csv` for history; meta `GET /tiingo/daily/<ticker>` returns `ticker,name,exchangeCode,description,startDate,endDate`.
@@ -264,10 +266,10 @@ Already described in section 6 (IPE CSV, `Categoria`: Fato Relevante, Comunicado
 ## 15. Not verified
 
 - Yahoo Finance live behaviour (429 from this IP); cookie/crumb flow; exact rate limits.
-- brapi plan gating on a real token (sandbox ignores it); what Free "Limited" dividends means; whether `^BVSP` works on Free; which three Tesouro bonds are open without token.
+- brapi plan gating beyond dividends (dividends on Free: VERIFIED 403, 2026-11-19; the sandbox ignores gating); whether `^BVSP` works on Free; which three Tesouro bonds are open without token.
 - brapi BONIFICACAO label and shape; `exDate` for stock events (null for all observed).
 - CDI availability on the same day by 19:00 BRT; PTAX timing relative to the job (should be fine).
-- Polygon free-tier limits. Tiingo: all of section 12 is DOCS only (no key created, no JSON captured, no fixture); `Authorization: Token` header format, date format, ToS beyond personal use.
+- Polygon free-tier limits. Tiingo: daily prices with a key are VERIFIED live (2026-11-19, 1,002 bars for AAPL+MSFT); still DOCS only: `divCash`/`splitFactor` behaviour, quota-exceeded response shape, ToS beyond personal use.
 - COTAHIST: redistribution terms; Latin-1 encoding of older years; behaviour on holidays/half days; whether the UTF-8 record is a one-off; BDI list for BDRs/ETFs beyond observed codes (layout PDF dates from 2020); how the 2025 yearly file looks after the final trading day.
 - DIRR3/GFSA3/ENJU3/MGLU3 jumps were not matched to official corporate-action notices.
 - DARF 6047 vs 6015 for day trade; Cosit SC 130/2026 text; JCP 20% from 2028; FX convention for foreign cost basis; US withholding creditability; whether Receita's own pages (gov.br) state the R$ 20k rule (URL returned 404 when fetched).

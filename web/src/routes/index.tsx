@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute, Link } from '@tanstack/react-router'
 import { Bell, Play } from 'lucide-react'
+import { useState } from 'react'
 import { toast } from 'sonner'
 
 import { BandGauge, type GaugeState } from '@/components/band-gauge'
@@ -165,7 +166,7 @@ function StatusPanel() {
           <span className="text-muted-foreground text-sm group-hover:underline">Open inbox</span>
         </div>
       </Link>
-      <div>
+      <div className="min-w-0">
         <h2 className="eyebrow">Last daily job</h2>
         {job.isPending ? (
           <p className="mt-1 text-sm">…</p>
@@ -188,10 +189,7 @@ function StatusPanel() {
                 {job.data.steps
                   .filter((s) => s.status !== 'ok')
                   .map((s) => (
-                    <li key={s.name}>
-                      {s.name}: {s.status}
-                      {s.error ? ` (${s.error})` : ''}
-                    </li>
+                    <StepIssue key={s.name} name={s.name} status={s.status} text={s.error || s.note || ''} />
                   ))}
               </ul>
             )}
@@ -199,6 +197,25 @@ function StatusPanel() {
         )}
       </div>
     </section>
+  )
+}
+
+/** A non-ok step: long text wraps anywhere, clamps to two lines, expands on demand. */
+function StepIssue({ name, status, text }: { name: string; status: string; text: string }) {
+  const [open, setOpen] = useState(false)
+  const long = text.length > 90
+  return (
+    <li className="min-w-0 [overflow-wrap:anywhere] break-words">
+      <span className="font-medium">
+        {name}: {status}
+      </span>
+      {text && <span className={open ? '' : 'line-clamp-2'}>{text}</span>}
+      {long && (
+        <button type="button" className="text-foreground underline" onClick={() => setOpen(!open)}>
+          {open ? 'Show less' : 'Show more'}
+        </button>
+      )}
+    </li>
   )
 }
 

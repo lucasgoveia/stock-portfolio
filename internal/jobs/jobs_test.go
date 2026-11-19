@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -456,4 +458,77 @@ func runWith(t *testing.T, e *env, f FundamentalsRefresher) RunResult {
 		t.Fatal(err)
 	}
 	return res
+}
+
+// brapiGated serves the free-plan 403 for WEGE3 (and every ticker when
+// allGated) and an empty dividends list for the rest.
+func brapiGated(t *testing.T, allGated bool) *marketdata.Brapi {
+	t.Helper()
+	body, err := os.ReadFile(filepath.Join("..", "marketdata", "testdata", "brapi", "dividends_free_plan_403.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		sym := r.URL.Query().Get("symbols")
+		if allGated || sym == "WEGE3" {
+			w.WriteHeader(http.StatusForbidden)
+			_, _ = w.Write(body)
+			return
+		}
+		_, _ = fmt.Fprintf(w, `{"results":[{"requestedSymbol":%q,"symbol":%q,"data":{"cashDividends":[],"stockDividends":[],"subscriptions":[]}}]}`, sym, sym)
+	}))
+	t.Cleanup(srv.Close)
+	return marketdata.NewBrapi(srv.Client(), srv.URL, "t")
+}
+
+func TestPlanGatedDividendsAreSkippedNotFailed(t *testing.T) {
+	ctx := context.Background()
+	e := setup(t)
+	if _, err := e.conn.Exec(`UPDATE assets SET status = 'holding' WHERE market = 'B3'`); err != nil {
+		t.Fatal(err)
+	}
+	feed := brapiGated(t, true)
+	e.deps.DividendFeed, e.deps.Dividends, e.deps.Actions = feed, &fakeSink{}, &fakeActions{}
+	runner := NewRunner(e.conn, e.alerts, DailySteps(e.deps), func() time.Time { return now })
+	res, err := runner.Run(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	st := stepStatus(res)
+	if res.Status != RunOK || st["dividends"] != StepSkipped || st["corporate_actions"] != StepSkipped {
+		t.Fatalf("run = %+v", res)
+	}
+	for _, s := range res.Steps {
+		if s.Name == "dividends" && (s.Error != "" || !strings.Contains(s.Note, "brapi plan lacks dividends for 2 tickers; enter dividends and corporate actions manually")) {
+			t.Fatalf("dividends step = %+v", s)
+		}
+	}
+	if open, _ := e.alerts.List(ctx, alerts.Filter{Type: AlertFetchFailed}); len(open) != 0 {
+		t.Fatalf("no data_fetch_failed expected: %+v", open)
+	}
+}
+
+func TestPartiallyGatedStepStillProcessesOtherTickers(t *testing.T) {
+	e := setup(t)
+	if _, err := e.conn.Exec(`UPDATE assets SET status = 'holding' WHERE market = 'B3'`); err != nil {
+		t.Fatal(err)
+	}
+	d := e.deps
+	d.DividendFeed, d.Dividends = brapiGated(t, false), &fakeSink{}
+	p := &pipeline{d: d, q: db.New(d.Conn)}
+	note, err := p.dividends(context.Background(), date(2026, 11, 18))
+	if err != nil || !strings.Contains(note, "0 new payments to confirm; brapi plan lacks dividends for 1 tickers") {
+		t.Fatalf("note %q err %v", note, err)
+	}
+}
+
+func TestStepErrorsAreSummarized(t *testing.T) {
+	long := errors.New(strings.Repeat("x", 5000))
+	if got := summarize(long); len([]rune(got)) != maxStepError {
+		t.Fatalf("len = %d", len([]rune(got)))
+	}
+	if got := summarize(errors.New("a\n  b")); got != "a b" {
+		t.Fatalf("got %q", got)
+	}
 }

@@ -268,10 +268,14 @@ func (p *pipeline) dividends(ctx context.Context, day time.Time) (string, error)
 	if len(held) == 0 {
 		return "no B3 holdings", ErrSkipped
 	}
-	found := 0
+	found, gated := 0, 0
 	var failed []string
 	for _, a := range held {
 		ca, err := p.d.DividendFeed.CorporateActions(ctx, a.Ticker, day.Add(-dividendLookback), time.Time{})
+		if errors.Is(err, marketdata.ErrPlanNotAvailable) {
+			gated++
+			continue
+		}
 		if err != nil {
 			failed = append(failed, fmt.Sprintf("%s: %v", a.Ticker, err))
 			continue
@@ -296,10 +300,7 @@ func (p *pipeline) dividends(ctx context.Context, day time.Time) (string, error)
 		}
 	}
 	note := fmt.Sprintf("%d new payments to confirm", found)
-	if len(failed) > 0 {
-		return note, errors.New(strings.Join(failed, "; "))
-	}
-	return note, nil
+	return gatedResult(note, "dividends", gated, len(held), failed)
 }
 
 func (p *pipeline) fundamentals(ctx context.Context, _ time.Time) (string, error) {
@@ -329,10 +330,14 @@ func (p *pipeline) corporateActions(ctx context.Context, day time.Time) (string,
 	if len(held) == 0 {
 		return "no B3 holdings", ErrSkipped
 	}
-	found := 0
+	found, gated := 0, 0
 	var failed []string
 	for _, a := range held {
 		ca, err := p.d.DividendFeed.CorporateActions(ctx, a.Ticker, day.Add(-dividendLookback), time.Time{})
+		if errors.Is(err, marketdata.ErrPlanNotAvailable) {
+			gated++
+			continue
+		}
 		if err != nil {
 			failed = append(failed, fmt.Sprintf("%s: %v", a.Ticker, err))
 			continue
@@ -358,10 +363,7 @@ func (p *pipeline) corporateActions(ctx context.Context, day time.Time) (string,
 		}
 	}
 	note := fmt.Sprintf("%d new events to confirm", found)
-	if len(failed) > 0 {
-		return note, errors.New(strings.Join(failed, "; "))
-	}
-	return note, nil
+	return gatedResult(note, "corporate actions", gated, len(held), failed)
 }
 
 // cotahist stores raw closes from the latest published daily file.
@@ -576,4 +578,24 @@ func point(date, v string) (engine.PricePoint, bool) {
 		return engine.PricePoint{}, false
 	}
 	return engine.PricePoint{Date: t, Close: d}, true
+}
+
+// gatedResult turns per-ticker plan gating into a note, not a failure: when
+// every ticker was gated the step is skipped; real failures still fail it.
+func gatedResult(note, what string, gated, total int, failed []string) (string, error) {
+	if gated > 0 {
+		gnote := fmt.Sprintf("brapi plan lacks %s for %d tickers; enter dividends and corporate actions manually", what, gated)
+		if gated == total {
+			note = gnote
+		} else {
+			note += "; " + gnote
+		}
+	}
+	if len(failed) > 0 {
+		return note, errors.New(strings.Join(failed, "; "))
+	}
+	if gated > 0 && gated == total {
+		return note, ErrSkipped
+	}
+	return note, nil
 }

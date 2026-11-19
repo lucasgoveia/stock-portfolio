@@ -40,15 +40,46 @@ func truncateDate(t time.Time) time.Time {
 
 // HTTPError is returned for non-2xx responses.
 type HTTPError struct {
-	Source string
-	URL    string
-	Status int
-	Body   string // truncated response body
+	Source  string
+	URL     string
+	Status  int
+	Body    string // truncated response body
+	Code    string // provider error code parsed from a JSON body, if any
+	Message string // provider message parsed from a JSON body, if any
 }
 
+// maxErrorLen caps the text of an error summary.
+const maxErrorLen = 300
+
+// Error is a short summary (status, code, message): never the whole body,
+// never the URL (it may carry credentials).
 func (e *HTTPError) Error() string {
-	return fmt.Sprintf("marketdata: %s: HTTP %d from %s: %s", e.Source, e.Status, e.URL, e.Body)
+	detail := e.Message
+	if detail == "" {
+		detail = strings.Join(strings.Fields(e.Body), " ")
+	}
+	head := fmt.Sprintf("marketdata: %s: HTTP %d", e.Source, e.Status)
+	if e.Code != "" {
+		head += " " + e.Code
+	}
+	if detail != "" {
+		head += ": " + detail
+	}
+	return truncateRunes(head, maxErrorLen)
 }
+
+func truncateRunes(s string, n int) string {
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	return string(r[:n-1]) + "…"
+}
+
+// ErrPlanNotAvailable marks a feature the provider's plan does not include
+// (brapi 403 FEATURE_NOT_AVAILABLE). It is a configuration fact, not an
+// outage: callers skip instead of failing.
+var ErrPlanNotAvailable = errors.New("plan does not include this feature")
 
 // IsNotFound reports whether err is an HTTP 404 (for example a COTAHIST daily
 // file that has not been published yet).
@@ -79,9 +110,17 @@ func get(ctx context.Context, c *http.Client, source, url string, hdr map[string
 		return nil, fmt.Errorf("marketdata: %s: %w", source, err)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
 		_ = resp.Body.Close()
-		return nil, &HTTPError{Source: source, URL: url, Status: resp.StatusCode, Body: strings.TrimSpace(string(body))}
+		he := &HTTPError{Source: source, URL: url, Status: resp.StatusCode, Body: truncateRunes(strings.TrimSpace(string(body)), 512)}
+		var parsed struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		}
+		if json.Unmarshal(body, &parsed) == nil {
+			he.Code, he.Message = parsed.Code, parsed.Message
+		}
+		return nil, he
 	}
 	return resp, nil
 }

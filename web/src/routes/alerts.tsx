@@ -333,7 +333,7 @@ function AlertRow({ alert: a, ticker }: { alert: Alert; ticker?: string }) {
             {a.snoozed_until && a.state === 'snoozed' ? ` · snoozed until ${dateTime(a.snoozed_until)}` : ''}
           </span>
         </div>
-        <p className="text-sm">{describe(a)}</p>
+        <p className="text-sm break-words [overflow-wrap:anywhere]">{describe(a)}</p>
         <RaiseCashTrims alert={a} />
         <AlertAction alert={a} />
       </div>

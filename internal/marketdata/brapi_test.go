@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 func brapiServer(t *testing.T, routes map[string][]byte, status map[string]int) (*httptest.Server, *[]*http.Request) {
@@ -154,5 +155,25 @@ func TestBrapiContextCancelled(t *testing.T) {
 	cancel()
 	if _, err := NewBrapi(srv.Client(), srv.URL, "").LatestQuote(ctx, "PETR4"); err == nil {
 		t.Fatal("expected error")
+	}
+}
+
+func TestBrapiPlanGatedDividends(t *testing.T) {
+	srv, _ := brapiServer(t, map[string][]byte{"/api/v2/stocks/dividends": fixture(t, "brapi", "dividends_free_plan_403.json")},
+		map[string]int{"/api/v2/stocks/dividends": 403})
+	_, err := NewBrapi(srv.Client(), srv.URL, "t").CorporateActions(context.Background(), "WEGE3", Date(2026, 1, 1), time.Time{})
+	if !errors.Is(err, ErrPlanNotAvailable) {
+		t.Fatalf("want ErrPlanNotAvailable, got %v", err)
+	}
+	if len(err.Error()) > 300 || strings.Contains(err.Error(), "{") {
+		t.Fatalf("error is not a short summary: %q", err)
+	}
+	// Other HTTP errors are short summaries: status, code, message.
+	srv2, _ := brapiServer(t, map[string][]byte{"/api/v2/stocks/quote": fixture(t, "brapi", "quote_nonsandbox_401.json")},
+		map[string]int{"/api/v2/stocks/quote": 401})
+	_, err = NewBrapi(srv2.Client(), srv2.URL, "t").LatestQuote(context.Background(), "WEGE3")
+	var he *HTTPError
+	if !errors.As(err, &he) || he.Code != "MISSING_TOKEN" || !strings.HasPrefix(err.Error(), "marketdata: brapi: HTTP 401 MISSING_TOKEN: ") || len([]rune(err.Error())) > 300 {
+		t.Fatalf("got %v", err)
 	}
 }

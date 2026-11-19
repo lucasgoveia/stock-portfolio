@@ -3,6 +3,7 @@ package marketdata
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -123,6 +124,10 @@ type brapiEnvelope struct {
 func (b *Brapi) fetch(ctx context.Context, path string, q url.Values) (*brapiEnvelope, error) {
 	var env brapiEnvelope
 	if err := getJSON(ctx, b.HTTP, "brapi", b.BaseURL+path+"?"+q.Encode(), b.headers(), &env); err != nil {
+		var he *HTTPError
+		if errors.As(err, &he) && he.Status == http.StatusForbidden && he.Code == "FEATURE_NOT_AVAILABLE" {
+			return nil, fmt.Errorf("marketdata: brapi: %w (%s)", ErrPlanNotAvailable, truncateRunes(he.Message, 200))
+		}
 		return nil, err
 	}
 	if env.Error {
