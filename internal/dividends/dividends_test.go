@@ -230,3 +230,51 @@ func TestDetectHeldWhilePendingEvent(t *testing.T) {
 		t.Fatalf("queue = %+v", q)
 	}
 }
+
+func TestDetectResizesDetectedNotConfirmed(t *testing.T) {
+	e := setup(t)
+	ctx := context.Background()
+	rate := decimal.RequireFromString("0.25")
+	for _, rec := range []string{"2026-08-20", "2026-08-25"} {
+		if ok, err := e.svc.Detect(ctx, e.b3, "dividend", rec, "2026-09-15", rate, "brapi"); err != nil || !ok {
+			t.Fatalf("detect %s: %v %v", rec, ok, err)
+		}
+	}
+	q, _ := e.svc.List(ctx, Filter{Status: StatusDetected}) // newest first: 08-25, 08-20
+	if !q[0].Gross.Equal(decimal.RequireFromString("250")) {
+		t.Fatalf("old scale = %+v", q[0])
+	}
+	// Confirm the 08-25 payment at the old scale.
+	if _, err := e.svc.Confirm(ctx, q[0].ID, ConfirmInput{InstrumentID: e.cdi}); err != nil {
+		t.Fatal(err)
+	}
+	// A split after both record dates is detected, then confirmed.
+	if _, err := e.actions.Detect(ctx, e.b3, corpactions.KindSplit, "2026-09-01", decimal.RequireFromString("2"), "brapi", "x"); err != nil {
+		t.Fatal(err)
+	}
+	acts, _ := e.actions.List(ctx, corpactions.StatusDetected, e.b3)
+	if _, err := e.actions.Confirm(ctx, acts[0].ID, nil); err != nil {
+		t.Fatal(err)
+	}
+	for _, rec := range []string{"2026-08-20", "2026-08-25"} {
+		if ok, err := e.svc.Detect(ctx, e.b3, "dividend", rec, "2026-09-15", rate, "brapi"); err != nil || ok {
+			t.Fatalf("redetect %s: %v %v", rec, ok, err)
+		}
+	}
+	all, _ := e.svc.List(ctx, Filter{})
+	if len(all) != 2 {
+		t.Fatalf("rows = %+v", all)
+	}
+	for _, d := range all {
+		switch d.RecordDate {
+		case "2026-08-20": // still detected: re-sized, same row
+			if d.Status != StatusDetected || !d.Gross.Equal(decimal.RequireFromString("500")) || !d.Quantity.Equal(decimal.RequireFromString("2000")) {
+				t.Fatalf("detected not re-sized: %+v", d)
+			}
+		case "2026-08-25": // confirmed: untouched
+			if d.Status != StatusConfirmed || !d.Gross.Equal(decimal.RequireFromString("250")) {
+				t.Fatalf("confirmed changed: %+v", d)
+			}
+		}
+	}
+}

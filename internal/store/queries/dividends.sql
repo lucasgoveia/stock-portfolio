@@ -8,7 +8,11 @@ RETURNING *;
 INSERT INTO dividends (asset_id, kind, record_date, pay_date, quantity, per_share, gross, withholding, net,
                        currency, fx_rate, status, source)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'detected', ?)
-ON CONFLICT (asset_id, kind, record_date, source) WHERE source <> 'manual' DO NOTHING;
+ON CONFLICT (asset_id, kind, record_date, source) WHERE source <> 'manual' DO UPDATE SET
+  pay_date = excluded.pay_date, quantity = excluded.quantity, per_share = excluded.per_share,
+  gross = excluded.gross, withholding = excluded.withholding, net = excluded.net,
+  currency = excluded.currency, fx_rate = excluded.fx_rate
+WHERE dividends.status = 'detected';
 
 -- name: GetDividend :one
 SELECT * FROM dividends WHERE id = ?;

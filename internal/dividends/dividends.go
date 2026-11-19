@@ -287,8 +287,8 @@ func (s *Service) credit(ctx context.Context, a db.Asset, instrumentID int64, da
 }
 
 // Detect proposes a payment announced by a data source, sized by the shares
-// held at the record date. It returns false when nothing was held, the source
-// already proposed it, or the proposal is held back.
+// held at the record date. It returns true only for a new proposal; false when nothing was held, the
+// source already proposed it (a detected one is re-sized in place), or the proposal is held back.
 //
 // The source rate is gross per share on today's split-adjusted scale, while
 // the holding at the record date is on the scale of that day. Confirmed share
@@ -331,12 +331,24 @@ func (s *Service) Detect(ctx context.Context, assetID int64, kind, recordDate, p
 		return false, err
 	}
 	wh := wp.Withholding(kind, a.Currency, gross, decimal.Zero)
-	n, err := s.q.InsertDetectedDividend(ctx, db.InsertDetectedDividendParams{
+	existing, err := s.q.ListDividends(ctx, db.ListDividendsParams{AssetID: assetID})
+	if err != nil {
+		return false, err
+	}
+	isNew := true
+	for _, r := range existing {
+		if r.Kind == kind && r.RecordDate == recordDate && r.Source == source {
+			isNew = false
+		}
+	}
+	// A still-detected proposal is re-sized (a split may have been confirmed
+	// since); confirmed and rejected rows are left untouched.
+	_, err = s.q.InsertDetectedDividend(ctx, db.InsertDetectedDividendParams{
 		AssetID: assetID, Kind: kind, RecordDate: recordDate, PayDate: nullStr(payDate), Quantity: qty.String(),
 		PerShare: perShare.String(), Gross: gross.String(), Withholding: wh.String(), Net: gross.Sub(wh).String(),
 		Currency: a.Currency, FxRate: "1", Source: source,
 	})
-	return n > 0, err
+	return isNew && err == nil, err
 }
 
 // ConfirmInput confirms a detected payment.
