@@ -59,18 +59,18 @@ func TestLatin1ReaderSmallReads(t *testing.T) {
 	}
 }
 
-func TestCVMDocumentRejectsPDFServedAsText(t *testing.T) {
+func TestCVMDocumentRejectsArchiveServedAsText(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
 		if r.URL.Path == "/pdf" {
-			_, _ = w.Write([]byte("%PDF-1.7\n1 0 obj"))
+			_, _ = w.Write([]byte("PK\x03\x04zipdata"))
 			return
 		}
 		_, _ = w.Write([]byte("<html><body><p>Fato relevante</p></body></html>"))
 	}))
 	defer srv.Close()
 	c := NewCVM(srv.Client(), srv.URL)
-	if _, err := c.Document(context.Background(), srv.URL+"/pdf"); err == nil || !strings.Contains(err.Error(), "PDF") {
+	if _, err := c.Document(context.Background(), srv.URL+"/pdf"); err == nil || !strings.Contains(err.Error(), "archive") {
 		t.Errorf("pdf error = %v", err)
 	}
 	got, err := c.Document(context.Background(), srv.URL+"/html")

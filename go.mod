@@ -7,6 +7,7 @@ require (
 	github.com/anthropics/anthropic-sdk-go/v2 v2.11.0
 	github.com/danielgtaylor/huma/v2 v2.40.0
 	github.com/go-chi/chi/v5 v5.5.0
+	github.com/ledongthuc/pdf v0.0.0-20261020125853-5e46805f718e
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/pelletier/go-toml/v2 v2.4.3
 	github.com/shopspring/decimal v1.6.0

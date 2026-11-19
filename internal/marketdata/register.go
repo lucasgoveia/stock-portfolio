@@ -161,26 +161,43 @@ func parsePeriodicIndex(zr *zip.Reader, cnpj, kind, name string) ([]PeriodicFili
 	}
 }
 
-// Document fetches a CVM document and returns its text. Only HTML and plain
-// text are readable; PDFs and archives are reported as unsupported.
+// maxPDFBytes bounds how much of a PDF is read (PDFs are larger than their text).
+const maxPDFBytes = 32 << 20
+
+// Document fetches a CVM document and returns its text. HTML, plain text and
+// PDFs (text extracted in pure Go) are readable; archives are reported as
+// unsupported.
 func (c *CVM) Document(ctx context.Context, url string) (string, error) {
-	resp, err := get(ctx, c.HTTP, "cvm", url, map[string]string{"Accept": "text/html,text/plain"})
+	resp, err := get(ctx, c.HTTP, "cvm", url, map[string]string{
+		"Accept":     "text/html,text/plain,application/pdf",
+		"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+	})
 	if err != nil {
 		return "", err
 	}
 	defer func() { _ = resp.Body.Close() }()
 	ct := strings.ToLower(resp.Header.Get("Content-Type"))
 	isHTML := strings.Contains(ct, "text/html") || strings.Contains(ct, "application/xhtml")
-	if !isHTML && !strings.Contains(ct, "text/plain") {
+	isPDF := strings.Contains(ct, "application/pdf")
+	if !isHTML && !isPDF && !strings.Contains(ct, "text/plain") && !strings.Contains(ct, "octet-stream") {
 		return "", fmt.Errorf("marketdata: cvm: the document is not readable text (content type %q); open the link in a browser", ct)
 	}
-	b, err := io.ReadAll(io.LimitReader(resp.Body, maxFilingBytes))
+	b, err := io.ReadAll(io.LimitReader(resp.Body, maxPDFBytes))
 	if err != nil {
 		return "", fmt.Errorf("marketdata: cvm: reading %s: %w", url, err)
 	}
 	// CVM serves PDFs and zips under a text content type: go by the bytes.
-	if bytes.HasPrefix(b, []byte("%PDF-")) || bytes.HasPrefix(b, []byte("PK\x03\x04")) {
-		return "", fmt.Errorf("marketdata: cvm: the document is a PDF or archive, not readable text; open the link in a browser")
+	if bytes.HasPrefix(b, []byte("%PDF-")) {
+		return PDFToText(b)
+	}
+	if bytes.HasPrefix(b, []byte("PK\x03\x04")) {
+		return "", fmt.Errorf("marketdata: cvm: the document is an archive, not readable text; open the link in a browser")
+	}
+	if isPDF || strings.Contains(ct, "octet-stream") {
+		return "", fmt.Errorf("marketdata: cvm: the document is not readable text (content type %q); open the link in a browser", ct)
+	}
+	if len(b) > maxFilingBytes {
+		b = b[:maxFilingBytes]
 	}
 	if isHTML {
 		return HTMLToText(bytes.NewBufferString(decodeText(b)).Bytes()), nil
