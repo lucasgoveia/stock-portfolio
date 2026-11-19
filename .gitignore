@@ -7,3 +7,4 @@
 config.local.toml
 .env
 .playwright-mcp/
+.claude/worktrees/
