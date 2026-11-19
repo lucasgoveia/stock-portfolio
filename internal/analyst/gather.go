@@ -158,7 +158,7 @@ func (s *Service) gatherUS(ctx context.Context, a db.Asset, in *Inputs) {
 		in.Skipped = append(in.Skipped, "SEC filings: no CIK on the asset (refresh its fundamentals first)")
 		return
 	}
-	list, err := s.d.US.RecentFilings(ctx, a.Cik, []string{"10-K", "10-Q", "8-K"}, filings8K)
+	list, err := s.d.US.RecentFilings(ctx, a.Cik, []string{"10-K", "10-Q", "8-K", "20-F", "40-F", "6-K"}, filings8K)
 	if err != nil {
 		in.Skipped = append(in.Skipped, "SEC filings list: "+err.Error())
 		return
@@ -166,21 +166,22 @@ func (s *Service) gatherUS(ctx context.Context, a db.Asset, in *Inputs) {
 	seen := map[string]int{}
 	for _, f := range list {
 		seen[f.Form]++
-		if f.Form != "8-K" && seen[f.Form] > 1 {
+		if f.Form != "8-K" && f.Form != "6-K" && seen[f.Form] > 1 {
 			continue
 		}
 		url, kind, budget := f.URL, f.Form, budgetCover
 		switch f.Form {
-		case "10-K", "10-Q":
+		case "10-K", "10-Q", "20-F", "40-F":
 			budget = 0
-		case "8-K":
-			// Earnings releases are the 99.1 exhibit of an 8-K (item 2.02).
-			if strings.Contains(f.Items, "2.02") {
+		case "8-K", "6-K":
+			// Earnings releases are the 99.1 exhibit of an 8-K (item 2.02). A
+			// foreign private issuer's 6-K has no items, so any 6-K is tried.
+			if f.Form == "6-K" || strings.Contains(f.Items, "2.02") {
 				ex, err := s.d.US.Exhibit99(ctx, f)
 				if err != nil {
 					in.Skipped = append(in.Skipped, f.Title+" exhibit: "+err.Error())
 				} else if ex != "" {
-					url, kind, budget = ex, "8-K exhibit 99.1", budgetExhibit
+					url, kind, budget = ex, f.Form+" exhibit 99.1", budgetExhibit
 				}
 			}
 		}
