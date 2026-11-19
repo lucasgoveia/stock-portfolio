@@ -372,7 +372,7 @@ func (s *Server) listFilings(ctx context.Context, t target, kind string) ([]fili
 			return nil, fmt.Errorf("%s has no CIK: refresh its fundamentals in the app or pass cik", t.Ticker)
 		}
 		return maybeCached(ctx, s, t, "filings:US:"+t.CIK, func() ([]filingItem, error) {
-			list, err := s.d.US.RecentFilings(ctx, t.CIK, []string{"10-K", "10-Q", "8-K"}, 5)
+			list, err := s.d.US.RecentFilings(ctx, t.CIK, []string{"10-K", "10-Q", "8-K", "20-F", "40-F", "6-K"}, 5)
 			if err != nil {
 				return nil, err
 			}

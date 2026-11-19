@@ -114,16 +114,23 @@ type edgarPoint struct {
 	Annual bool // from a 10-K (instants only)
 }
 
+// isAnnualForm reports whether form is an annual report: 10-K for domestic
+// filers, 20-F or 40-F for foreign private issuers (amendments such as 10-K/A
+// match by prefix).
+func isAnnualForm(form string) bool {
+	return strings.HasPrefix(form, "10-K") || strings.HasPrefix(form, "20-F") || strings.HasPrefix(form, "40-F")
+}
+
 // series returns the facts of one concept keyed by period end. Flow concepts
-// keep only full-year durations from 10-K filings; instant concepts keep 10-K
-// and 10-Q values. The latest filing wins per end date (restatements).
+// keep only full-year durations from annual filings; instant concepts keep
+// annual and 10-Q values. The latest filing wins per end date (restatements).
 func (d *edgarDoc) series(ns, name, unit string, flow bool) map[string]edgarPoint {
 	out := map[string]edgarPoint{}
 	for _, f := range d.Facts[ns][name].Units[unit] {
 		if f.End == "" {
 			continue
 		}
-		annualForm := strings.HasPrefix(f.Form, "10-K")
+		annualForm := isAnnualForm(f.Form)
 		if flow {
 			if f.Start == "" || !annualForm {
 				continue
@@ -151,17 +158,146 @@ func (d *edgarDoc) series(ns, name, unit string, flow bool) map[string]edgarPoin
 	return out
 }
 
-// firstOf merges several concepts into one series; earlier names win per end.
-func (d *edgarDoc) firstOf(unit string, flow bool, names ...string) map[string]edgarPoint {
+// firstOf merges several concepts of one namespace into one series; earlier
+// names win per end.
+func (d *edgarDoc) firstOf(ns, unit string, flow bool, names ...string) map[string]edgarPoint {
 	out := map[string]edgarPoint{}
 	for _, n := range names {
-		for end, p := range d.series("us-gaap", n, unit, flow) {
+		for end, p := range d.series(ns, n, unit, flow) {
 			if _, ok := out[end]; !ok {
 				out[end] = p
 			}
 		}
 	}
 	return out
+}
+
+const (
+	nsUSGAAP = "us-gaap"
+	nsIFRS   = "ifrs-full"
+)
+
+// annualFactCount counts the annual-form facts of a namespace.
+func (d *edgarDoc) annualFactCount(ns string) int {
+	n := 0
+	for _, c := range d.Facts[ns] {
+		for _, fs := range c.Units {
+			for _, f := range fs {
+				if isAnnualForm(f.Form) {
+					n++
+				}
+			}
+		}
+	}
+	return n
+}
+
+// foreignFiler reports whether ns has facts from a 20-F or 40-F filing.
+func (d *edgarDoc) foreignFiler(ns string) bool {
+	for _, c := range d.Facts[ns] {
+		for _, fs := range c.Units {
+			for _, f := range fs {
+				if strings.HasPrefix(f.Form, "20-F") || strings.HasPrefix(f.Form, "40-F") {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+// pickNamespace chooses the taxonomy with more annual facts; us-gaap wins
+// ties and is the default. Foreign private issuers mostly use ifrs-full, a
+// 40-F filer may use either.
+func (d *edgarDoc) pickNamespace() string {
+	if d.annualFactCount(nsIFRS) > d.annualFactCount(nsUSGAAP) {
+		return nsIFRS
+	}
+	return nsUSGAAP
+}
+
+// pickCurrency returns the monetary unit (three upper-case letters) with the
+// most annual-form facts in ns, or "USD" when there is none. Ties go to USD,
+// then alphabetical order.
+func (d *edgarDoc) pickCurrency(ns string) string {
+	count := map[string]int{}
+	for _, c := range d.Facts[ns] {
+		for unit, fs := range c.Units {
+			if len(unit) != 3 || strings.ToUpper(unit) != unit {
+				continue
+			}
+			for _, f := range fs {
+				if isAnnualForm(f.Form) {
+					count[unit]++
+				}
+			}
+		}
+	}
+	units := make([]string, 0, len(count))
+	for u := range count {
+		units = append(units, u)
+	}
+	sort.Strings(units)
+	best := "USD"
+	for _, u := range units {
+		if count[u] > count[best] {
+			best = u
+		}
+	}
+	return best
+}
+
+// edgarConcepts lists the ordered concept fallbacks of one taxonomy.
+type edgarConcepts struct {
+	revenue, ebit, netIncome, eps, sharesDil, ocf, capex, da, dps []string
+	equity, shares, cash, invest                                  []string
+	noncurrentDebt, totalDebt, currentDebt, shortDebt             []string
+	// debtFallback is used for period ends without any debt concept above
+	// (IFRS: Borrowings, else the sum of the short-term and other borrowings).
+	debtSum []string
+}
+
+var usGAAPConcepts = edgarConcepts{
+	revenue: []string{"RevenueFromContractWithCustomerExcludingAssessedTax", "Revenues", "SalesRevenueNet",
+		"RevenueFromContractWithCustomerIncludingAssessedTax", "SalesRevenueGoodsNet"},
+	ebit:      []string{"OperatingIncomeLoss"},
+	netIncome: []string{"NetIncomeLoss", "ProfitLoss"},
+	eps:       []string{"EarningsPerShareDiluted"},
+	sharesDil: []string{"WeightedAverageNumberOfDilutedSharesOutstanding"},
+	ocf:       []string{"NetCashProvidedByUsedInOperatingActivities", "NetCashProvidedByUsedInOperatingActivitiesContinuingOperations"},
+	capex:     []string{"PaymentsToAcquirePropertyPlantAndEquipment", "PaymentsToAcquireProductiveAssets", "PaymentsForCapitalImprovements"},
+	da: []string{"DepreciationDepletionAndAmortization", "DepreciationAndAmortization", "DepreciationAmortizationAndAccretionNet",
+		"Depreciation"},
+	dps:            []string{"CommonStockDividendsPerShareDeclared", "CommonStockDividendsPerShareCashPaid"},
+	equity:         []string{"StockholdersEquity", "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest"},
+	shares:         []string{"CommonStockSharesOutstanding"},
+	cash:           []string{"CashAndCashEquivalentsAtCarryingValue"},
+	invest:         []string{"MarketableSecuritiesCurrent", "ShortTermInvestments", "AvailableForSaleSecuritiesDebtSecuritiesCurrent"},
+	noncurrentDebt: []string{"LongTermDebtNoncurrent"},
+	totalDebt:      []string{"LongTermDebt"},
+	currentDebt:    []string{"LongTermDebtCurrent"},
+	shortDebt:      []string{"CommercialPaper", "ShortTermBorrowings"},
+}
+
+var ifrsConcepts = edgarConcepts{
+	revenue:   []string{"Revenue", "RevenueFromContractsWithCustomers"},
+	ebit:      []string{"ProfitLossFromOperatingActivities"},
+	netIncome: []string{"ProfitLossAttributableToOwnersOfParent", "ProfitLoss"},
+	eps:       []string{"DilutedEarningsLossPerShare"},
+	sharesDil: []string{"AdjustedWeightedAverageShares", "WeightedAverageShares"},
+	ocf:       []string{"CashFlowsFromUsedInOperatingActivities"},
+	capex: []string{"PurchaseOfPropertyPlantAndEquipmentClassifiedAsInvestingActivities",
+		"PurchaseOfPropertyPlantAndEquipment"},
+	da: []string{"AdjustmentsForDepreciationAndAmortisationExpense", "DepreciationAndAmortisationExpense", "DepreciationExpense"},
+	dps: []string{"DividendsPaidOrdinarySharesPerShare", "DividendsRecognisedAsDistributionsToOwnersPerShare",
+		"DividendsProposedOrDeclaredBeforeFinancialStatementsAuthorisedForIssueButNotRecognisedAsDistributionToOwnersPerShare"},
+	equity:  []string{"EquityAttributableToOwnersOfParent", "Equity"},
+	shares:  []string{"NumberOfSharesOutstanding"},
+	cash:    []string{"CashAndCashEquivalents"},
+	debtSum: []string{"ShorttermBorrowings", "OtherBorrowings"},
+	// Borrowings is the total, so it is tried first and the parts are only
+	// added when it is missing for that period end.
+	totalDebt: []string{"Borrowings"},
 }
 
 // Financials builds annual (and latest quarterly balance sheet) facts from
@@ -185,7 +321,17 @@ type periodKey struct {
 }
 
 func (d *edgarDoc) financials() FinancialFacts {
-	out := FinancialFacts{Source: "sec", Entity: d.EntityName, Currency: "USD"}
+	ns := d.pickNamespace()
+	cur := d.pickCurrency(ns)
+	cc := usGAAPConcepts
+	if ns == nsIFRS {
+		cc = ifrsConcepts
+	}
+	perShare := cur + "/shares"
+	out := FinancialFacts{Source: "sec", Entity: d.EntityName, Currency: cur}
+	if cur != "USD" {
+		out.Notes = append(out.Notes, "figures are in "+cur+", the filer's reporting currency, not USD; convert before comparing with prices quoted in USD")
+	}
 	periods := map[periodKey]*FinancialPeriod{}
 	add := func(k periodKey, filed, concept string, v money.Decimal) {
 		p, ok := periods[k]
@@ -206,33 +352,32 @@ func (d *edgarDoc) financials() FinancialFacts {
 		}
 		p.Values[concept] = v
 	}
-	flow := func(concept, unit string, names ...string) {
-		for end, p := range d.firstOf(unit, true, names...) {
+	flow := func(concept, unit string, names []string) {
+		for end, p := range d.firstOf(ns, unit, true, names...) {
 			add(periodKey{end, true}, p.Filed, concept, p.Val)
 		}
 	}
-	instant := func(concept, unit string, names ...string) {
-		for end, p := range d.firstOf(unit, false, names...) {
+	instant := func(concept, unit string, names []string) {
+		for end, p := range d.firstOf(ns, unit, false, names...) {
 			add(periodKey{end, p.Annual}, p.Filed, concept, p.Val)
 		}
 	}
 
-	flow(ConceptRevenue, "USD", "RevenueFromContractWithCustomerExcludingAssessedTax", "Revenues", "SalesRevenueNet",
-		"RevenueFromContractWithCustomerIncludingAssessedTax", "SalesRevenueGoodsNet")
-	flow(ConceptEBIT, "USD", "OperatingIncomeLoss")
-	flow(ConceptNetIncome, "USD", "NetIncomeLoss", "ProfitLoss")
-	flow(ConceptEPSDiluted, "USD/shares", "EarningsPerShareDiluted")
-	flow(ConceptSharesDilAvg, "shares", "WeightedAverageNumberOfDilutedSharesOutstanding")
-	flow(ConceptOCF, "USD", "NetCashProvidedByUsedInOperatingActivities", "NetCashProvidedByUsedInOperatingActivitiesContinuingOperations")
-	flow(ConceptCapex, "USD", "PaymentsToAcquirePropertyPlantAndEquipment", "PaymentsToAcquireProductiveAssets", "PaymentsForCapitalImprovements")
-	flow(ConceptDA, "USD", "DepreciationDepletionAndAmortization", "DepreciationAndAmortization", "DepreciationAmortizationAndAccretionNet", "Depreciation")
-	flow(ConceptDPS, "USD/shares", "CommonStockDividendsPerShareDeclared", "CommonStockDividendsPerShareCashPaid")
-	instant(ConceptEquity, "USD", "StockholdersEquity", "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest")
-	instant(ConceptShares, "shares", "CommonStockSharesOutstanding")
+	flow(ConceptRevenue, cur, cc.revenue)
+	flow(ConceptEBIT, cur, cc.ebit)
+	flow(ConceptNetIncome, cur, cc.netIncome)
+	flow(ConceptEPSDiluted, perShare, cc.eps)
+	flow(ConceptSharesDilAvg, "shares", cc.sharesDil)
+	flow(ConceptOCF, cur, cc.ocf)
+	flow(ConceptCapex, cur, cc.capex)
+	flow(ConceptDA, cur, cc.da)
+	flow(ConceptDPS, perShare, cc.dps)
+	instant(ConceptEquity, cur, cc.equity)
+	instant(ConceptShares, "shares", cc.shares)
 
 	// Cash plus short-term investments, per period end.
-	cash := d.firstOf("USD", false, "CashAndCashEquivalentsAtCarryingValue")
-	invest := d.firstOf("USD", false, "MarketableSecuritiesCurrent", "ShortTermInvestments", "AvailableForSaleSecuritiesDebtSecuritiesCurrent")
+	cash := d.firstOf(ns, cur, false, cc.cash...)
+	invest := d.firstOf(ns, cur, false, cc.invest...)
 	for end, p := range cash {
 		v := p.Val
 		if inv, ok := invest[end]; ok {
@@ -243,10 +388,10 @@ func (d *edgarDoc) financials() FinancialFacts {
 
 	// Financial debt: long-term (non-current plus current) and short-term
 	// borrowings. Operating and finance leases are not included.
-	noncurrent := d.firstOf("USD", false, "LongTermDebtNoncurrent")
-	total := d.firstOf("USD", false, "LongTermDebt")
-	current := d.firstOf("USD", false, "LongTermDebtCurrent")
-	short := d.firstOf("USD", false, "CommercialPaper", "ShortTermBorrowings")
+	noncurrent := d.firstOf(ns, cur, false, cc.noncurrentDebt...)
+	total := d.firstOf(ns, cur, false, cc.totalDebt...)
+	current := d.firstOf(ns, cur, false, cc.currentDebt...)
+	short := d.firstOf(ns, cur, false, cc.shortDebt...)
 	ends := map[string]edgarPoint{}
 	for end, p := range noncurrent {
 		ends[end] = p
@@ -267,6 +412,24 @@ func (d *edgarDoc) financials() FinancialFacts {
 			sum = sum.Add(s.Val.Decimal)
 		}
 		add(periodKey{end, base.Annual}, base.Filed, ConceptDebt, money.New(sum))
+	}
+	// Period ends with no total: add the parts (they are disjoint line items).
+	parts := map[string]edgarPoint{}
+	for _, n := range cc.debtSum {
+		for end, p := range d.series(ns, n, cur, false) {
+			if _, ok := ends[end]; ok {
+				continue
+			}
+			if acc, ok := parts[end]; ok {
+				acc.Val = money.New(acc.Val.Add(p.Val.Decimal))
+				parts[end] = acc
+			} else {
+				parts[end] = p
+			}
+		}
+	}
+	for end, p := range parts {
+		add(periodKey{end, p.Annual}, p.Filed, ConceptDebt, p.Val)
 	}
 
 	// Latest shares outstanding on a filing cover (dei).
@@ -315,9 +478,13 @@ func (d *edgarDoc) financials() FinancialFacts {
 	}
 	out.Periods = append(annual, out.Periods...)
 	sortPeriods(out.Periods)
-	out.Quarters = d.quarters()
+	if ns == nsUSGAAP { // 10-Q facts; foreign filers have none
+		out.Quarters = d.quarters()
+	}
 	if len(annual) == 0 {
-		out.Notes = append(out.Notes, "no annual (10-K) USD figures found; foreign private issuers (20-F/40-F) are not supported")
+		out.Notes = append(out.Notes, "no annual (10-K, 20-F or 40-F) figures found in the us-gaap or ifrs-full taxonomy")
+	} else if len(out.Quarters) == 0 && d.foreignFiler(ns) {
+		out.Notes = append(out.Notes, "quarterly figures unavailable: foreign private issuer (6-K interim reports are not XBRL-tagged)")
 	}
 	return out
 }
