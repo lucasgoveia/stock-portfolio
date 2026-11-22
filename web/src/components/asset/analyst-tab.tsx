@@ -322,6 +322,9 @@ function RunView({ run, asset }: { run: Run; asset: Asset }) {
   const hasRange = Number(o.fair_value_range?.high ?? 0) > 0
   const cur = o.fair_value_range?.currency ?? asset.currency
   const mid = (Number(o.fair_value_range?.low ?? 0) + Number(o.fair_value_range?.high ?? 0)) / 2
+  const base = o.dcf_base ?? run.inputs.dcf_base
+  const ownBase = o.dcf_base != null
+  const rangeWithDcf = hasScenarios && (dcf || ap.dcf_fair_value_id != null)
   const external = prov?.external_urls ?? []
   const docs = run.inputs.documents ?? []
   const checks = o.thesis_check ?? []
@@ -500,6 +503,17 @@ function RunView({ run, asset }: { run: Run; asset: Asset }) {
             </tbody>
           </table>
         </div>
+        {o.dcf_base && (
+          <p className="num mt-3 text-sm">
+            <span className="eyebrow">DCF base used</span>{' '}
+            base revenue / net income {money(o.dcf_base.base_revenue, cur)} · net debt {money(o.dcf_base.net_debt, cur)} ·{' '}
+            {Number(o.dcf_base.shares).toLocaleString('pt-BR')} shares
+            <span className="text-muted-foreground block text-xs">
+              Supplied by the analyst (earnings modeled directly when the margin is 1); used on approval instead of the stored
+              fundamentals.
+            </span>
+          </p>
+        )}
         <dl className="mt-3 space-y-2 text-sm">
           {(['bear', 'base', 'bull'] as const).map((k) => (
             <div key={k}>
@@ -528,16 +542,18 @@ function RunView({ run, asset }: { run: Run; asset: Asset }) {
         <div className="mt-3 border-t pt-3">
           <Check
             checked={dcf || ap.dcf_fair_value_id != null}
-            disabled={!open || ap.dcf_fair_value_id != null || (!run.inputs.dcf_base && !mcp)}
+            disabled={!open || ap.dcf_fair_value_id != null || (!base && !mcp)}
             onChange={setDcf}
           >
             Create a scenario DCF fair value version{ap.dcf_fair_value_id != null && ' (saved)'}
             <span className="text-muted-foreground block text-xs">
-              {run.inputs.dcf_base
-                ? 'Computed on the latest annual revenue, net debt and share count from fundamentals.'
-                : mcp
-                  ? 'Uses the latest annual revenue, net debt and share count from fundamentals when you approve: fetch them on the Fundamentals tab first.'
-                  : 'Needs fundamentals (revenue and share count); fetch them on the Fundamentals tab and run again.'}
+              {ownBase
+                ? 'Computed on the base the analyst modeled on (shown above), not on the stored fundamentals.'
+                : run.inputs.dcf_base
+                  ? 'Computed on the latest annual revenue, net debt and share count from fundamentals.'
+                  : mcp
+                    ? 'Uses the latest annual revenue, net debt and share count from fundamentals when you approve: fetch them on the Fundamentals tab first.'
+                    : 'Needs fundamentals (revenue and share count); fetch them on the Fundamentals tab and run again.'}
             </span>
           </Check>
         </div>
@@ -557,7 +573,16 @@ function RunView({ run, asset }: { run: Run; asset: Asset }) {
             disabled={!open || ap.range_fair_value_id != null}
             onChange={setRange}
           >
-            Save the midpoint as a manual fair value version{ap.range_fair_value_id != null && ' (saved)'}
+            {rangeWithDcf
+              ? 'Keep the range with the scenario DCF version'
+              : 'Save the midpoint as a manual fair value version'}
+            {ap.range_fair_value_id != null && ' (saved)'}
+            {hasScenarios && (
+              <span className="text-muted-foreground block text-xs">
+                With scenarios, the range is stored inside the scenario DCF version (no second version). Ticked without the
+                scenarios, it saves the midpoint as a manual version.
+              </span>
+            )}
           </Check>
         </div>
       </Panel>

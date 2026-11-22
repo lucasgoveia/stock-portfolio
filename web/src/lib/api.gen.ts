@@ -1703,7 +1703,7 @@ export interface components {
         ApproveInput: {
             /** @description Indexes of catalysts to save as notes */
             catalysts?: number[] | null;
-            /** @description Create a manual fair value version at the range midpoint */
+            /** @description Keep the fair value range: stored with the scenario DCF version when the run has scenarios, otherwise a manual version at the midpoint */
             fair_value_range?: boolean;
             /** @description Save the market size notes as a note */
             market_size?: boolean;
@@ -1903,6 +1903,7 @@ export interface components {
             risk_free_date: string;
         };
         DCFBase: {
+            /** @description Year-0 base the margins apply to; the net income when earnings are modeled directly (margin 1) */
             base_revenue: string;
             net_debt: string;
             shares: string;
@@ -2376,6 +2377,7 @@ export interface components {
         };
         Output: {
             catalysts: components["schemas"]["Catalyst"][] | null;
+            dcf_base?: components["schemas"]["DCFBase"];
             fair_value_range: components["schemas"]["FairValueRange"];
             initiatives?: components["schemas"]["Initiative"][] | null;
             market_size_notes: string;

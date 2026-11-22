@@ -216,6 +216,7 @@ func (s *Server) registerSubmit() {
 		"scenarios":         outProps()["scenarios"],
 		"initiatives":       outProps()["initiatives"],
 		"fair_value_range":  outProps()["fair_value_range"],
+		"dcf_base":          outProps()["dcf_base"],
 		"catalysts":         outProps()["catalysts"],
 		"market_size_notes": outProps()["market_size_notes"],
 		"sources":           outProps()["sources"],

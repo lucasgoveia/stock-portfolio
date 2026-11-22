@@ -110,6 +110,7 @@ function VersionRow({
     onError: (e) => toast.error(errorMessage(e)),
   })
   const up = current ? upside(fv.value_per_share, price) : null
+  const range = (fv.inputs as { fair_value_range?: { low: string; high: string; currency: string } } | null)?.fair_value_range
   return (
     <li className={cn('flex flex-wrap items-center justify-between gap-2 py-2.5', !current && 'text-muted-foreground')}>
       <div>
@@ -124,6 +125,11 @@ function VersionRow({
           {METHOD[fv.method] ?? humanize(fv.method)} · {fv.as_of}
           {fv.note ? ` · ${fv.note}` : ''}
         </div>
+        {range && fv.method === 'scenario_dcf' && (
+          <div className="num text-xs">
+            Analyst range {money(range.low, range.currency)} – {money(range.high, range.currency)}
+          </div>
+        )}
       </div>
       <div className="flex gap-1">
         {fv.method === 'scenario_dcf' && (

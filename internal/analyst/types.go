@@ -77,7 +77,7 @@ type FairValueInput struct {
 
 // DCFBase is the base figures a scenario DCF needs besides the scenarios.
 type DCFBase struct {
-	BaseRevenue decimal.Decimal `json:"base_revenue"`
+	BaseRevenue decimal.Decimal `json:"base_revenue" doc:"Year-0 base the margins apply to; the net income when earnings are modeled directly (margin 1)"`
 	NetDebt     decimal.Decimal `json:"net_debt"`
 	Shares      decimal.Decimal `json:"shares"`
 }
@@ -174,8 +174,13 @@ type Output struct {
 	// three scenarios (each has a success probability per scenario).
 	Initiatives    []engine.Initiative `json:"initiatives,omitempty"`
 	FairValueRange FairValueRange      `json:"fair_value_range"`
-	ThesisCheck    []ThesisCheck       `json:"thesis_check"`
-	Sources        []Source            `json:"sources"`
+	// DCFBase, when set, is the base the scenarios were modeled on (the same
+	// figures passed to preview_scenario_dcf). Approval uses it instead of the
+	// stored fundamentals; required when a margin is 0.95 or more (earnings
+	// modeled directly, base_revenue = net income).
+	DCFBase     *DCFBase      `json:"dcf_base,omitempty"`
+	ThesisCheck []ThesisCheck `json:"thesis_check"`
+	Sources     []Source      `json:"sources"`
 }
 
 // Approvals records what has been applied from a run.
@@ -228,5 +233,5 @@ type ApproveInput struct {
 	Summary        bool  `json:"summary,omitempty" doc:"Save the research note as a note"`
 	ThesisCheck    bool  `json:"thesis_check,omitempty" doc:"Save the thesis check as a note"`
 	Scenarios      bool  `json:"scenarios,omitempty" doc:"Create a scenario DCF fair value version"`
-	FairValueRange bool  `json:"fair_value_range,omitempty" doc:"Create a manual fair value version at the range midpoint"`
+	FairValueRange bool  `json:"fair_value_range,omitempty" doc:"Keep the fair value range: stored with the scenario DCF version when the run has scenarios, otherwise a manual version at the midpoint"`
 }

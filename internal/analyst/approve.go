@@ -56,8 +56,9 @@ func thesisCheckText(checks []ThesisCheck) string {
 // Approve applies the selected parts of a draft: catalysts, market size and
 // the thesis check become research notes (author ai_approved, with sources),
 // the scenarios become a scenario DCF version (through the valuation service,
-// so its validation applies) and the range becomes a manual version at its
-// midpoint. Parts already approved are refused. Anything approved makes the
+// so its validation applies, on the run's dcf_base when it has one) with the
+// range stored in its inputs; only a run without scenarios turns its range into
+// a manual version at its midpoint. Parts already approved are refused. Anything approved makes the
 // run approved.
 func (s *Service) Approve(ctx context.Context, id int64, in ApproveInput) (Run, error) {
 	s.mu.Lock()
@@ -105,6 +106,11 @@ func (s *Service) Approve(ctx context.Context, id int64, in ApproveInput) (Run, 
 	if in.FairValueRange && ap.RangeFairValue != nil {
 		return Run{}, fmt.Errorf("%w: the fair value range was already approved", ErrConflict)
 	}
+	// With scenarios the range is stored inside the scenario DCF version (made
+	// now or by an earlier approval), so no second version competes with it. The
+	// range alone, with the scenarios left unapproved, still makes the manual
+	// midpoint version: the user asked for exactly that.
+	rangeInDCF := in.FairValueRange && o.hasScenarios() && (in.Scenarios || ap.DCFFairValueID != nil)
 
 	// Validate the fair value parts before writing anything.
 	var dcf *engine.DCFInput
@@ -112,7 +118,10 @@ func (s *Service) Approve(ctx context.Context, id int64, in ApproveInput) (Run, 
 		if !o.hasScenarios() {
 			return Run{}, validationf("the run has no scenarios")
 		}
-		base := run.Inputs.DCFBase
+		base := o.DCFBase
+		if base == nil {
+			base = run.Inputs.DCFBase
+		}
 		if base == nil {
 			// The draft was made before the fundamentals existed (a new candidate):
 			// use the stored ones now.
@@ -141,16 +150,25 @@ func (s *Service) Approve(ctx context.Context, id int64, in ApproveInput) (Run, 
 		note = fmt.Sprintf("MCP analyst draft #%d (%s%s)", run.ID, run.Model, client)
 	}
 	if dcf != nil {
+		inputs := map[string]any{"analyst_run_id": run.ID}
+		dcfNote := note
+		if o.hasRange() {
+			r := o.FairValueRange
+			inputs["fair_value_range"] = map[string]any{"low": r.Low.String(), "high": r.High.String(), "currency": r.Currency}
+			dcfNote += fmt.Sprintf(": proposed range %s to %s %s", r.Low, r.High, r.Currency)
+		}
 		fv, err := s.d.Valuation.Create(ctx, run.AssetID, valuation.CreateInput{
-			Method: valuation.MethodScenarioDCF, DCF: dcf, Sources: srcs, Note: note,
-			Inputs: map[string]any{"analyst_run_id": run.ID},
+			Method: valuation.MethodScenarioDCF, DCF: dcf, Sources: srcs, Note: dcfNote, Inputs: inputs,
 		})
 		if err != nil {
 			return Run{}, err
 		}
 		ap.DCFFairValueID = &fv.ID
 	}
-	if in.FairValueRange {
+	if rangeInDCF {
+		id := *ap.DCFFairValueID
+		ap.RangeFairValue = &id
+	} else if in.FairValueRange {
 		r := o.FairValueRange
 		mid := r.Low.Add(r.High).Div(decimal.NewFromInt(2)).Round(4)
 		v := money.New(mid)
