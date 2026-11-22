@@ -4,6 +4,7 @@ import { RefreshCw } from 'lucide-react'
 import { useDeferredValue, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
+import { capmHint } from '@/components/asset/dcf-draft'
 import { ExpectedVsActual } from '@/components/asset/expected-vs-actual'
 import { Panel } from '@/components/asset/panel'
 import { Field, FormError } from '@/components/form'
@@ -618,6 +619,9 @@ function ReverseDCFBox({ panel: p, inputs, setInputs }: { panel: PanelData; inpu
         </Field>
       </div>
       <p className="text-muted-foreground text-xs">{r.note}</p>
+      {r.discount_source === 'capm' && p.capm && (
+        <p className="text-muted-foreground text-xs">Default discount rate. {capmHint(p.capm)}.</p>
+      )}
     </div>
   )
 }

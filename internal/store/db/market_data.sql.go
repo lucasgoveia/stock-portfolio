@@ -235,6 +235,17 @@ func (q *Queries) LatestIndexDate(ctx context.Context, indexCode string) (string
 	return column_1, err
 }
 
+const latestRiskFreeRate = `-- name: LatestRiskFreeRate :one
+SELECT code, ref_date, rate FROM risk_free_rates WHERE code = ? ORDER BY ref_date DESC LIMIT 1
+`
+
+func (q *Queries) LatestRiskFreeRate(ctx context.Context, code string) (RiskFreeRate, error) {
+	row := q.db.QueryRowContext(ctx, latestRiskFreeRate, code)
+	var i RiskFreeRate
+	err := row.Scan(&i.Code, &i.RefDate, &i.Rate)
+	return i, err
+}
+
 const listHistoryBackfills = `-- name: ListHistoryBackfills :many
 SELECT subject FROM history_backfills WHERE source = ?
 `
@@ -325,5 +336,21 @@ type UpsertIndexPointParams struct {
 
 func (q *Queries) UpsertIndexPoint(ctx context.Context, arg UpsertIndexPointParams) error {
 	_, err := q.db.ExecContext(ctx, upsertIndexPoint, arg.IndexCode, arg.RefDate, arg.Close)
+	return err
+}
+
+const upsertRiskFreeRate = `-- name: UpsertRiskFreeRate :exec
+INSERT INTO risk_free_rates (code, ref_date, rate) VALUES (?, ?, ?)
+ON CONFLICT (code, ref_date) DO UPDATE SET rate = excluded.rate
+`
+
+type UpsertRiskFreeRateParams struct {
+	Code    string
+	RefDate string
+	Rate    string
+}
+
+func (q *Queries) UpsertRiskFreeRate(ctx context.Context, arg UpsertRiskFreeRateParams) error {
+	_, err := q.db.ExecContext(ctx, upsertRiskFreeRate, arg.Code, arg.RefDate, arg.Rate)
 	return err
 }

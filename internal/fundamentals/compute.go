@@ -73,6 +73,9 @@ type computeInput struct {
 	// used when no feed value is stored.
 	LocalTTM decimal.Decimal
 	Params   Params
+	// CAPMRate is the asset's CAPM cost of equity, the default discount rate;
+	// nil falls back to DefaultDiscountRate.
+	CAPMRate *decimal.Decimal
 }
 
 // computed is the pure output.
@@ -459,7 +462,10 @@ func (in computeInput) helpers(c *computed, havePrice bool, price decimal.Decima
 	case haveRev && revenue.IsPositive() && haveNI && ni.IsPositive():
 		margin, basis = ni.Div(revenue).Round(ratioPlaces), engine.BasisNetPE
 	}
-	exit, disc := DefaultExitMultiple, DefaultDiscountRate(in.Market)
+	exit, disc, discSrc := DefaultExitMultiple, DefaultDiscountRate(in.Market), "default"
+	if in.CAPMRate != nil {
+		disc, discSrc = *in.CAPMRate, "capm"
+	}
 	if in.Params.TerminalMargin != nil {
 		margin = *in.Params.TerminalMargin
 	}
@@ -467,11 +473,11 @@ func (in computeInput) helpers(c *computed, havePrice bool, price decimal.Decima
 		exit = *in.Params.ExitMultiple
 	}
 	if in.Params.DiscountRate != nil {
-		disc = *in.Params.DiscountRate
+		disc, discSrc = *in.Params.DiscountRate, "custom"
 	}
 	rd := &ReverseDCF{
 		Basis: basis, TerminalMargin: *dp(margin, ratioPlaces), ExitMultiple: *dp(exit, multiplePlaces), DiscountRate: *dp(disc, ratioPlaces),
-		Status: "unavailable",
+		DiscountSource: discSrc, Status: "unavailable",
 	}
 	h.ReverseDCF = rd
 	switch {

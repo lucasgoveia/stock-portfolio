@@ -1382,6 +1382,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/settings/valuation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Replace the valuation settings */
+        put: operations["setValuationSettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/settings/{group}/reset": {
         parameters: {
             query?: never;
@@ -1770,6 +1787,14 @@ export interface components {
             text: string;
             updated_at: string;
         };
+        CAPMInputs: {
+            /** @description Equity risk premium for B3 stocks (fraction) */
+            erp_b3: string;
+            /** @description Equity risk premium for US stocks (fraction) */
+            erp_us: string;
+            /** @description Lowest premium of the cost of equity over the risk-free rate (fraction) */
+            min_equity_premium: string;
+        };
         Candidate: {
             /** Format: int64 */
             asset_id?: number;
@@ -1854,6 +1879,26 @@ export interface components {
                 [key: string]: string;
             };
             unallocated: string;
+        };
+        CostOfEquity: {
+            /** @description 0.67 x raw beta + 0.33 */
+            adj_beta: string;
+            /** @description Day the beta was computed */
+            beta_date: string;
+            /** @description Benchmark the beta was computed against */
+            beta_index: string;
+            /** @description Equity risk premium */
+            erp: string;
+            /** @description True when the floor rf + min premium set the rate */
+            floored: boolean;
+            /** @description Floor of the premium over the risk-free rate */
+            min_premium: string;
+            /** @description Cost of equity, annual fraction */
+            rate: string;
+            raw_beta: string;
+            risk_free: string;
+            /** @description Date of the risk-free observation */
+            risk_free_date: string;
         };
         DCFBase: {
             base_revenue: string;
@@ -2061,6 +2106,7 @@ export interface components {
             as_of: string;
             /** Format: int64 */
             asset_id: number;
+            capm?: components["schemas"]["CostOfEquity"];
             /** @enum {string} */
             currency: "BRL" | "USD";
             entity?: string;
@@ -2106,6 +2152,10 @@ export interface components {
         GroupAllocation: {
             defaults: components["schemas"]["Allocation"];
             values: components["schemas"]["Allocation"];
+        };
+        GroupCAPMInputs: {
+            defaults: components["schemas"]["CAPMInputs"];
+            values: components["schemas"]["CAPMInputs"];
         };
         GroupExpectations: {
             defaults: components["schemas"]["Expectations"];
@@ -2182,6 +2232,8 @@ export interface components {
             bull: string;
         };
         Inputs: {
+            /** @description CAPM cost of equity with its breakdown, the starting point for discount_rate */
+            cost_of_equity?: components["schemas"]["CostOfEquity"];
             currency: string;
             /** @description Base revenue, net debt and shares used when scenarios are approved into a DCF version */
             dcf_base?: components["schemas"]["DCFBase"];
@@ -2336,6 +2388,7 @@ export interface components {
             planner: components["schemas"]["GroupPlanner"];
             tactical: components["schemas"]["GroupTactical"];
             tax: components["schemas"]["GroupTax"];
+            valuation: components["schemas"]["GroupCAPMInputs"];
         };
         PendingReview: {
             /**
@@ -2523,6 +2576,11 @@ export interface components {
              */
             basis: "ebit_ev" | "net_pe";
             discount_rate: string;
+            /**
+             * @description custom when passed in the request, capm when derived from the asset's beta, default when no beta or risk-free rate is stored
+             * @enum {string}
+             */
+            discount_source: "custom" | "capm" | "default";
             exit_multiple: string;
             /** @description Constant yearly revenue growth over 5 years, as a fraction */
             implied_growth?: string;
@@ -6170,13 +6228,46 @@ export interface operations {
             };
         };
     };
+    setValuationSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CAPMInputs"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CAPMInputs"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     resetSettings: {
         parameters: {
             query?: never;
             header?: never;
             path: {
                 /** @description Settings group */
-                group: "allocation" | "planner" | "tax" | "tactical" | "ai" | "expectations" | "mcp";
+                group: "allocation" | "planner" | "tax" | "tactical" | "ai" | "expectations" | "mcp" | "valuation";
             };
             cookie?: never;
         };

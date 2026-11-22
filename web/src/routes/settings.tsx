@@ -111,6 +111,27 @@ const MCP_FIELDS: FieldDef[] = [
   },
 ]
 
+const VALUATION_FIELDS: FieldDef[] = [
+  {
+    key: 'erp_us',
+    label: 'Equity risk premium, US',
+    kind: 'percent',
+    hint: 'Expected stock market return over the effective federal funds rate.',
+  },
+  {
+    key: 'erp_b3',
+    label: 'Equity risk premium, B3',
+    kind: 'percent',
+    hint: 'Expected B3 return over the Selic target rate.',
+  },
+  {
+    key: 'min_equity_premium',
+    label: 'Minimum premium over risk-free',
+    kind: 'percent',
+    hint: 'Floor of the cost of equity: risk-free rate + this. Defensive stocks with a low beta land here.',
+  },
+]
+
 type Values = Record<string, unknown>
 
 function Page() {
@@ -164,7 +185,7 @@ function RuleSections() {
   if (all.isError) return <ErrorBlock error={all.error} />
   const d = all.data
   const refresh = () => qc.invalidateQueries({ queryKey: settingsQuery.queryKey })
-  const reset = (group: 'allocation' | 'planner' | 'tax' | 'tactical' | 'ai' | 'expectations' | 'mcp') => async () => {
+  const reset = (group: 'allocation' | 'planner' | 'tax' | 'tactical' | 'ai' | 'expectations' | 'mcp' | 'valuation') => async () => {
     await unwrap(api.POST('/api/settings/{group}/reset', { params: { path: { group } } }))
     await refresh()
   }
@@ -220,6 +241,15 @@ function RuleSections() {
           after(unwrap(api.PUT('/api/settings/expectations', { body: body as unknown as Schemas['Expectations'] })))
         }
         reset={reset('expectations')}
+      />
+      <SettingsSection
+        title="Discount rate (CAPM)"
+        description="Default discount rate of each asset: risk-free rate + adjusted beta × equity risk premium, where adjusted beta = 0.67 × beta + 0.33. Risk-free rates are fetched daily (effective federal funds rate from FRED for US, Selic target from the BCB for B3)."
+        fields={VALUATION_FIELDS}
+        values={d.valuation.values as unknown as Values}
+        defaults={d.valuation.defaults as unknown as Values}
+        save={(body) => after(unwrap(api.PUT('/api/settings/valuation', { body: body as unknown as Schemas['CAPMInputs'] })))}
+        reset={reset('valuation')}
       />
       <SettingsSection
         title="AI analyst"

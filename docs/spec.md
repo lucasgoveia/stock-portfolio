@@ -289,6 +289,8 @@ Monthly tax page (sales, exempt/not, gains, losses carried, DARF value) and annu
 
   *Initiatives (new business).* Each has a name, rationale, sources, `start_year` in 1..5, `revenue_year5` (> 0), a constant `margin` in [0, 1] on the scenario's basis (negative margins are not modelled: a loss-making ramp would need a year-by-year margin path) and a success probability in [0, 1] for each of bear, base and bull; at most 10. Its revenue if it succeeds ramps linearly: `I_t = 0` for `t < start_year`, else `revenue_year5 x (t - start_year + 1) / (6 - start_year)`, so it earns `revenue_year5 / (6 - start_year)` in its first year and `revenue_year5` in year 5. With `w` the success probability of the scenario, it adds `w x I_t x margin x cc x a` to `C_t` (discounted like the core) and `w x revenue_year5 x margin x multiple` to `TV`. Net debt belongs to the core. The result reports, per scenario and probability-weighted, the core value per share (net debt included) and the initiatives' value per share, which sum to the value per share, and the year-5 core revenue.
 
+  *Default discount rate (CAPM cost of equity).* The editor, the reverse DCF and the AI analyst start from a per-asset rate, `r = rf + beta_adj x ERP`, never below `rf + min_premium`, rounded to 4 places (`internal/engine/capm.go`, decimal math). `beta_adj = 0.67 x raw beta + 0.33` (Blume) with the asset's stored beta (§5.2, `asset_betas`). `rf` is the latest stored risk-free rate of the market (table `risk_free_rates`, fractions): both markets use the policy rate: US = effective federal funds rate (FRED `DFF`), B3 = Selic target (BCB SGS 432, "Meta Selic"). Settings group `valuation`: `erp_us` 5%, `erp_b3` 2.5%, `min_equity_premium` 3%. Example: rf 4%, raw beta 0.10 gives 0.04 + 0.397 x 0.05 = 5.99%, below the 7% floor, so 7%; beta 2.18 gives 12.95%. Without a stored beta or risk-free rate the old fixed defaults apply (10% US, 14% B3 in the reverse DCF and the editor); a rate typed by the user always wins. The fundamentals panel exposes the rate and its breakdown (`capm`, with source dates), `get_asset_context` returns it as `cost_of_equity`, and the analyst is told to start `discount_rate` from it and justify deviations.
+
   *Compatibility.* With no `basis`, `start_margin`, `cash_conversion` (0), `tax_rate` or initiatives the formula reduces to `(TV / (1+r)^5 - net debt) / shares`, the original; a table test pins stored versions of that shape to their old values.
 - **Helpers:** reverse DCF (the constant 5-year growth at which the same scenario formula, with a given basis, margin path, cash conversion, tax and optional fixed initiatives, equals the current price; the fundamentals panel uses `ebit_ev` when its default margin is the EBIT margin and `net_pe` when it falls back to the net margin), Bazin (dividend / 6%), Graham (√(22.5 × EPS × BVPS)).
 - **Tactical:** target price.
@@ -373,7 +375,7 @@ Prompts `analyze_asset`, `research_ticker` and `portfolio_review` appear as slas
 
 ### 16.1 Pipeline (19:00 BRT)
 
-1. Fetch prices (B3, US), FX, CDI rate, Tesouro Selic price, index levels. CDI and Tesouro Selic are published D-1: always take the latest available point and record its reference date.
+1. Fetch prices (B3, US), FX, CDI rate, Tesouro Selic price, index levels, risk-free rates (US effective federal funds rate from FRED `DFF`; B3 Selic target from BCB SGS 432, both in the `risk_free` step, where one market failing does not drop the other). CDI and Tesouro Selic are published D-1: always take the latest available point and record its reference date. A failed risk-free fetch keeps the last stored rate.
 2. Detect dividends and corporate actions.
 3. Recompute beta, weights, cash target, targets, bands.
 4. Evaluate all triggers; upsert alerts (dedupe by type + asset); resolve alerts whose condition cleared.
@@ -400,6 +402,8 @@ Details, endpoints and fixtures: `docs/data-sources.md`.
 | USDBRL | BCB PTAX (Olinda API) | Verified. |
 | CDI | BCB SGS series 12 | Verified; D-1; requires `dataInicial`, max 10-year window. |
 | Tesouro Selic price | Tesouro Transparente CSV | Verified; D-1; 14MB file, refreshed ~07:23 BRT. |
+| Selic target (B3 risk-free) | BCB SGS series 432 | `/ultimos/N`; percent per year (15.00 = 15%); stored as a fraction. |
+| Effective federal funds rate (US risk-free) | FRED CSV (DFF) | No key; percent; "." marks days without data and is skipped. |
 | IBOV history | B3 index matrix endpoint (undocumented) | Tested 2024–2026, close only. COTAHIST has no indices; fallback BOVA11 proxy or manual CSV. |
 | S&P 500 history | FRED CSV (SP500) | No key; price index only. |
 | BR filings | CVM Dados Abertos (DFP, ITR, IPE) | Latin-1, `VERSAO` for restatements. RAD is UI only. |

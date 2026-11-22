@@ -3,6 +3,7 @@ package analyst
 import (
 	"github.com/shopspring/decimal"
 
+	"github.com/lucasgoveia/stock-portfolio/internal/capm"
 	"github.com/lucasgoveia/stock-portfolio/internal/engine"
 	"github.com/lucasgoveia/stock-portfolio/internal/money"
 )
@@ -83,14 +84,15 @@ type DCFBase struct {
 
 // Inputs records what a run was given.
 type Inputs struct {
-	Ticker       string          `json:"ticker"`
-	Market       string          `json:"market"`
-	Currency     string          `json:"currency"`
-	Thesis       *ThesisInput    `json:"thesis,omitempty"`
-	FairValue    *FairValueInput `json:"fair_value,omitempty"`
-	Fundamentals string          `json:"fundamentals" doc:"Status of the fundamentals summary sent to the model"`
-	DCFBase      *DCFBase        `json:"dcf_base,omitempty" doc:"Base revenue, net debt and shares used when scenarios are approved into a DCF version"`
-	Documents    []Document      `json:"documents"`
+	Ticker       string             `json:"ticker"`
+	Market       string             `json:"market"`
+	Currency     string             `json:"currency"`
+	Thesis       *ThesisInput       `json:"thesis,omitempty"`
+	FairValue    *FairValueInput    `json:"fair_value,omitempty"`
+	Fundamentals string             `json:"fundamentals" doc:"Status of the fundamentals summary sent to the model"`
+	CAPM         *capm.CostOfEquity `json:"cost_of_equity,omitempty" doc:"CAPM cost of equity with its breakdown, the starting point for discount_rate"`
+	DCFBase      *DCFBase           `json:"dcf_base,omitempty" doc:"Base revenue, net debt and shares used when scenarios are approved into a DCF version"`
+	Documents    []Document         `json:"documents"`
 	// Skipped lists documents that could not be fetched, with the reason.
 	Skipped []string `json:"skipped"`
 	// DroppedSources counts sources in the output that were not among the

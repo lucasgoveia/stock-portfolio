@@ -21,6 +21,8 @@ const (
 const (
 	SGSSeriesUSDSell = 1  // USD sell, equals PTAX sell
 	SGSSeriesCDI     = 12 // CDI daily rate, percent per business day
+	// SGSSeriesSelicTarget is the Selic target (Meta Selic), percent per year.
+	SGSSeriesSelicTarget = 432
 )
 
 // sgsYears is the longest window SGS accepts for daily series; wider
@@ -50,6 +52,12 @@ type RatePoint struct {
 // (0.050788 means 0.050788 %).
 type CDISource interface {
 	CDI(ctx context.Context, from, to time.Time) ([]RatePoint, error)
+}
+
+// SelicTargetSource returns Selic target points between from and to, percent
+// per year (15.00 means 15 %).
+type SelicTargetSource interface {
+	SelicTarget(ctx context.Context, from, to time.Time) ([]RatePoint, error)
 }
 
 // PTAX is a client for the BCB Olinda PTAX service.
@@ -113,7 +121,10 @@ type SGS struct {
 	BaseURL string
 }
 
-var _ CDISource = (*SGS)(nil)
+var (
+	_ CDISource         = (*SGS)(nil)
+	_ SelicTargetSource = (*SGS)(nil)
+)
 
 // NewSGS builds a client.
 func NewSGS(c *http.Client, baseURL string) *SGS {
@@ -180,6 +191,13 @@ func (s *SGS) Latest(ctx context.Context, code, n int) ([]RatePoint, error) {
 // CDI returns the daily CDI series (SGS 12), percent per business day.
 func (s *SGS) CDI(ctx context.Context, from, to time.Time) ([]RatePoint, error) {
 	return s.Series(ctx, SGSSeriesCDI, from, to)
+}
+
+// SelicTarget returns the Selic target (SGS 432), percent per year, between
+// from and to. The series is daily and runs ahead to the next Copom meeting,
+// so a /ultimos read returns future dates; callers pass to = today.
+func (s *SGS) SelicTarget(ctx context.Context, from, to time.Time) ([]RatePoint, error) {
+	return s.Series(ctx, SGSSeriesSelicTarget, from, to)
 }
 
 // USDBRL returns the SGS series 1 (USD sell), the documented fallback to PTAX.

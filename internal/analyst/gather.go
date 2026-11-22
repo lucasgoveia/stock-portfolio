@@ -118,6 +118,7 @@ func (s *Service) baseInputs(ctx context.Context, a db.Asset) (Inputs, error) {
 	}
 	in.Fundamentals = panel.Status
 	in.DCFBase = dcfBase(panel)
+	in.CAPM = panel.CAPM
 	in.fundamentalsJSON = fundamentalsSummary(panel)
 	return in, nil
 }

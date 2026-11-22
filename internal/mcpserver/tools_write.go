@@ -77,7 +77,7 @@ func (s *Server) registerCompute() {
 		"shares":          numProp("Shares outstanding"),
 		"terminal_margin": numProp("Margin on year-5 revenue, fraction in (0, 1]"),
 		"exit_multiple":   numProp("Multiple applied to year-5 earnings on the basis"),
-		"discount_rate":   numProp("Annual discount rate as a fraction"),
+		"discount_rate":   numProp("Annual discount rate as a fraction; start from cost_of_equity in get_asset_context (CAPM)"),
 		"basis":           map[string]any{"type": "string", "enum": []string{engine.BasisEBITEV, engine.BasisNetPE}, "description": "ebit_ev (default) or net_pe"},
 		"start_margin":    numProp("Margin today on the same basis"),
 		"tax_rate":        numProp("Tax rate fraction for ebit_ev"),

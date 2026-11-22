@@ -7,8 +7,11 @@ import { BreakdownTable, InitiativesEditor, BasisTable, type MarginHints } from 
 import {
   SCENARIOS,
   blankDraft,
+  capmDiscount,
+  capmHint,
   defaultTax,
   draftFrom,
+  fallbackDiscount,
   toInput,
   type DCFDraft,
   type DCFInput,
@@ -40,12 +43,14 @@ export function ValuationTab({ assetId, currency, price }: { assetId: number; cu
     queryKey: [...qk.asset(assetId), 'fair-values'],
     queryFn: () => unwrap(api.GET('/api/assets/{id}/fair-values', { params: { path: { id: assetId } } })),
   })
-  const [draft, setDraft] = useState<DCFDraft>(() => blankDraft(defaultTax(currency)))
+  const [draft, setDraft] = useState<DCFDraft>(() => blankDraft(defaultTax(currency), fallbackDiscount(currency)))
+  const [loaded, setLoaded] = useState(false)
   const [editorKey, setEditorKey] = useState(0)
   const loadIntoEditor = (fv: FairValue) => {
     const dcf = (fv.inputs as { dcf?: DCFInput } | null)?.dcf
     if (!dcf) return
-    setDraft(draftFrom(dcf, defaultTax(currency)))
+    setDraft(draftFrom(dcf, defaultTax(currency), fallbackDiscount(currency)))
+    setLoaded(true)
     setEditorKey((k) => k + 1)
     toast.info(`Loaded the ${fv.as_of} model into the editor`)
   }
@@ -76,7 +81,7 @@ export function ValuationTab({ assetId, currency, price }: { assetId: number; cu
         </Panel>
         <ManualFairValue assetId={assetId} currency={currency} />
       </div>
-      <DCFEditor key={editorKey} assetId={assetId} currency={currency} price={price} initial={draft} />
+      <DCFEditor key={editorKey} assetId={assetId} currency={currency} price={price} initial={draft} fresh={!loaded} />
     </div>
   )
 }
@@ -202,11 +207,14 @@ function DCFEditor({
   currency,
   price,
   initial,
+  fresh,
 }: {
   assetId: number
   currency: string
   price?: string | null
   initial: DCFDraft
+  /** True for a blank model: its discount rates follow the asset's CAPM rate until edited. */
+  fresh: boolean
 }) {
   const qc = useQueryClient()
   const [d, setD] = useState<DCFDraft>(initial)
@@ -220,6 +228,21 @@ function DCFEditor({
     staleTime: 5 * 60_000,
   })
   const hints = marginHints(fundamentals.data?.history)
+  // A blank model starts at the asset's CAPM cost of equity. When it arrives, move
+  // every discount still at the previous default; rates the user typed stay.
+  const capm = fundamentals.data?.capm
+  const capmPct = capm ? capmDiscount(capm) : null
+  const [defaultPct, setDefaultPct] = useState(fallbackDiscount(currency))
+  if (fresh && capmPct && capmPct !== defaultPct) {
+    setDefaultPct(capmPct)
+    setD((prev) => {
+      const scenarios = { ...prev.scenarios }
+      for (const n of SCENARIOS) {
+        if (scenarios[n].discount === defaultPct) scenarios[n] = { ...scenarios[n], discount: capmPct }
+      }
+      return { ...prev, scenarios }
+    })
+  }
   const deferred = useDeferredValue(input)
   const preview = useQuery({
     queryKey: ['dcf-preview', deferred],
@@ -352,6 +375,12 @@ function DCFEditor({
           </tfoot>
         </table>
       </div>
+
+      <p className="text-muted-foreground mt-2 text-xs">
+        {capm
+          ? `Discount rate default. ${capmHint(capm)} (risk-free as of ${capm.risk_free_date}, beta of ${Number(capm.raw_beta).toFixed(2)} vs ${capm.beta_index}). Type any rate you prefer.`
+          : `Discount rate defaults to ${fallbackDiscount(currency)}%: no beta or risk-free rate is stored for this asset yet.`}
+      </p>
 
       <BasisTable scenarios={d.scenarios} hints={hints} onChange={setScenario} />
       <InitiativesEditor initiatives={d.initiatives} currency={currency} onChange={(initiatives) => setD((prev) => ({ ...prev, initiatives }))} />

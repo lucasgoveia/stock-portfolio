@@ -38,10 +38,12 @@ const (
 	GroupExpectations = "expectations"
 	// GroupMCP holds the limits of the MCP server (spec §13.6).
 	GroupMCP = "mcp"
+	// GroupValuation holds the CAPM inputs of the default discount rate.
+	GroupValuation = "valuation"
 )
 
 // Groups lists every group name.
-var Groups = []string{GroupAllocation, GroupPlanner, GroupTax, GroupTactical, GroupAI, GroupExpectations, GroupMCP}
+var Groups = []string{GroupAllocation, GroupPlanner, GroupTax, GroupTactical, GroupAI, GroupExpectations, GroupMCP, GroupValuation}
 
 func key(group string) string { return "params." + group }
 
@@ -139,6 +141,38 @@ type Expectations struct {
 // MCP holds the MCP server limits.
 type MCP struct {
 	DailyNewSymbols int `json:"daily_new_symbols" doc:"Symbols not held by the app that the MCP tools may look up per day (America/Sao_Paulo)"`
+}
+
+// CAPMInputs holds the CAPM inputs of the default discount rate (spec §5):
+// cost of equity = rf + adjusted beta x ERP, never below rf + MinEquityPremium.
+type CAPMInputs struct {
+	ERPUS            Dec `json:"erp_us" doc:"Equity risk premium for US stocks (fraction)"`
+	ERPB3            Dec `json:"erp_b3" doc:"Equity risk premium for B3 stocks (fraction)"`
+	MinEquityPremium Dec `json:"min_equity_premium" doc:"Lowest premium of the cost of equity over the risk-free rate (fraction)"`
+}
+
+// DefaultValuation returns the defaults: 5% ERP in both markets, 3% floor.
+func DefaultValuation() CAPMInputs {
+	return CAPMInputs{ERPUS: d("0.05"), ERPB3: d("0.025"), MinEquityPremium: d("0.03")}
+}
+
+// Validate checks ranges.
+func (v CAPMInputs) Validate() error {
+	var c check
+	c.frac("erp_us", v.ERPUS, false)
+	c.frac("erp_b3", v.ERPB3, false)
+	c.frac("min_equity_premium", v.MinEquityPremium, false)
+	return c.err()
+}
+
+// Valuation returns the stored valuation inputs over defaults.
+func (s *Service) Valuation(ctx context.Context) (CAPMInputs, error) {
+	return load(ctx, s.q, GroupValuation, DefaultValuation())
+}
+
+// SetValuation validates and stores the valuation inputs.
+func (s *Service) SetValuation(ctx context.Context, v CAPMInputs) (CAPMInputs, error) {
+	return set(ctx, s, GroupValuation, v)
 }
 
 // DefaultMCP returns the defaults: 30 new symbols a day.
@@ -549,6 +583,8 @@ type Overview struct {
 	Expectations Group[Expectations] `json:"expectations"`
 	// MCP holds the limits of the MCP server.
 	MCP Group[MCP] `json:"mcp"`
+	// CAPMInputs holds the CAPM inputs of the default discount rate.
+	Valuation Group[CAPMInputs] `json:"valuation"`
 }
 
 // All returns every group.
@@ -576,6 +612,10 @@ func (s *Service) All(ctx context.Context) (Overview, error) {
 	if out.MCP.Values, err = s.MCP(ctx); err != nil {
 		return out, err
 	}
+	if out.Valuation.Values, err = s.Valuation(ctx); err != nil {
+		return out, err
+	}
+	out.Valuation.Defaults = DefaultValuation()
 	out.MCP.Defaults = DefaultMCP()
 	out.Expectations.Defaults = DefaultExpectations()
 	out.Allocation.Defaults, out.Planner.Defaults, out.Tax.Defaults = DefaultAllocation(), DefaultPlanner(), DefaultTax()

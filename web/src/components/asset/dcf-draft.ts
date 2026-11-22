@@ -15,6 +15,23 @@ export const BASIS_LABEL: Record<Basis, string> = {
 /** Default tax rate in percent: 34% in Brazil (BRL), 21% in the US (USD). */
 export const defaultTax = (currency: string): string => (currency === 'USD' ? '21' : '34')
 
+/** Discount rate in percent when the asset has no CAPM rate (no beta or risk-free rate stored yet). */
+export const fallbackDiscount = (currency: string): string => (currency === 'USD' ? '10' : '14')
+
+export type CostOfEquity = Schemas['CostOfEquity']
+
+/** The CAPM rate as the percent string the editor shows, e.g. "7.7". */
+export const capmDiscount = (c: CostOfEquity): string => fractionToPercent(c.rate)
+
+const pct1 = (fraction: string): string => `${(Number(fraction) * 100).toFixed(1)}%`
+
+/** One line that explains where a CAPM discount rate comes from. */
+export function capmHint(c: CostOfEquity): string {
+  const rate = pct1(c.rate)
+  if (c.floored) return `CAPM floor: risk-free ${pct1(c.risk_free)} + ${pct1(c.min_premium)} = ${rate}`
+  return `CAPM: ${pct1(c.risk_free)} + ${Number(c.adj_beta).toFixed(2)} × ${pct1(c.erp)} = ${rate}`
+}
+
 /** Editor state: every rate as a percent string, as typed. */
 export interface ScenarioDraft {
   growth: string[]
@@ -65,11 +82,11 @@ export const blankInitiative = (): InitiativeDraft => ({
   bull: '60',
 })
 
-const blankScenario = (probability: string, growth: string, tax: string): ScenarioDraft => ({
+const blankScenario = (probability: string, growth: string, tax: string, discount: string): ScenarioDraft => ({
   growth: Array(5).fill(growth),
   margin: '',
   multiple: '',
-  discount: '12',
+  discount,
   probability,
   basis: 'ebit_ev',
   startMargin: '',
@@ -77,17 +94,21 @@ const blankScenario = (probability: string, growth: string, tax: string): Scenar
   tax,
 })
 
-export const blankDraft = (tax: string): DCFDraft => ({
+export const blankDraft = (tax: string, discount: string): DCFDraft => ({
   baseRevenue: '',
   netDebt: '0',
   shares: '',
-  scenarios: { bear: blankScenario('25', '0', tax), base: blankScenario('50', '5', tax), bull: blankScenario('25', '10', tax) },
+  scenarios: {
+    bear: blankScenario('25', '0', tax, discount),
+    base: blankScenario('50', '5', tax, discount),
+    bull: blankScenario('25', '10', tax, discount),
+  },
   initiatives: [],
 })
 
 /** Stored versions without the new fields read as ebit_ev, no interim cash, no initiatives. */
-export function draftFrom(dcf: DCFInput, tax: string): DCFDraft {
-  const d = blankDraft(tax)
+export function draftFrom(dcf: DCFInput, tax: string, discount: string): DCFDraft {
+  const d = blankDraft(tax, discount)
   d.baseRevenue = dcf.base_revenue
   d.netDebt = dcf.net_debt ?? '0'
   d.shares = dcf.shares

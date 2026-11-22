@@ -1,6 +1,7 @@
 package fundamentals
 
 import (
+	"github.com/lucasgoveia/stock-portfolio/internal/capm"
 	"github.com/lucasgoveia/stock-portfolio/internal/money"
 )
 
@@ -88,6 +89,7 @@ type ReverseDCF struct {
 	TerminalMargin money.Decimal  `json:"terminal_margin"`
 	ExitMultiple   money.Decimal  `json:"exit_multiple"`
 	DiscountRate   money.Decimal  `json:"discount_rate"`
+	DiscountSource string         `json:"discount_source" enum:"custom,capm,default" doc:"custom when passed in the request, capm when derived from the asset's beta, default when no beta or risk-free rate is stored"`
 	Note           string         `json:"note"`
 }
 
@@ -119,7 +121,10 @@ type FundamentalsPanel struct {
 	History            []HistoryPoint     `json:"history"`
 	Ranges             Ranges             `json:"ranges"`
 	Helpers            Helpers            `json:"helpers"`
-	Notes              []string           `json:"notes"`
+	// CAPM is the asset's cost of equity, the default discount rate; omitted
+	// when it has no beta or its market no stored risk-free rate.
+	CAPM  *capm.CostOfEquity `json:"capm,omitempty"`
+	Notes []string           `json:"notes"`
 }
 
 // FairValueDraft is a fair value version proposed from a helper; the client creates it

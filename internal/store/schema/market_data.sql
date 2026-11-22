@@ -41,3 +41,12 @@ CREATE TABLE history_backfills (
     done_at   TEXT NOT NULL,
     PRIMARY KEY (subject, source)
 );
+
+-- Risk-free rates for the CAPM cost of equity, as fractions: 'US' is the
+-- effective federal funds rate (FRED DFF), 'B3' the Selic target (BCB SGS 432).
+CREATE TABLE risk_free_rates (
+    code     TEXT NOT NULL,
+    ref_date TEXT NOT NULL,
+    rate     TEXT NOT NULL,
+    PRIMARY KEY (code, ref_date)
+);

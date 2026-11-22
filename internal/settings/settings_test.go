@@ -142,3 +142,37 @@ func TestStatusHasNoValues(t *testing.T) {
 		t.Fatalf("status = %+v, %v", st, err)
 	}
 }
+
+func TestValuationDefaultsAndValidation(t *testing.T) {
+	ctx := context.Background()
+	s := newSvc(t)
+	v, err := s.Valuation(ctx)
+	if err != nil || v.ERPUS.String() != "0.05" || v.ERPB3.String() != "0.025" || v.MinEquityPremium.String() != "0.03" {
+		t.Fatalf("defaults = %+v, %v", v, err)
+	}
+	v.ERPB3, v.MinEquityPremium = d("0.065"), d("0.025")
+	if _, err := s.SetValuation(ctx, v); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := s.Valuation(ctx)
+	if got.ERPB3.String() != "0.065" || got.ERPUS.String() != "0.05" || got.MinEquityPremium.String() != "0.025" {
+		t.Fatalf("stored = %+v", got)
+	}
+	all, err := s.All(ctx)
+	if err != nil || all.Valuation.Values.ERPB3.String() != "0.065" || all.Valuation.Defaults.ERPB3.String() != "0.025" {
+		t.Fatalf("overview = %+v, %v", all.Valuation, err)
+	}
+	bad := DefaultValuation()
+	bad.ERPUS = d("-0.01")
+	bad.MinEquityPremium = d("1.5")
+	_, err = s.SetValuation(ctx, bad)
+	if !errors.Is(err, ErrValidation) || !strings.Contains(err.Error(), "erp_us:") || !strings.Contains(err.Error(), "min_equity_premium:") {
+		t.Fatalf("validation: %v", err)
+	}
+	if err := s.Reset(ctx, GroupValuation); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := s.Valuation(ctx); got.ERPB3.String() != "0.025" {
+		t.Fatalf("after reset = %+v", got)
+	}
+}
