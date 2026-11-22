@@ -53,9 +53,6 @@ func TestPutGetAndConditions(t *testing.T) {
 	if _, err := e.svc.Get(ctx, e.a1); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("no thesis: %v", err)
 	}
-	if ok, _ := e.svc.HasBreakCondition(ctx, e.a1); ok {
-		t.Fatal("no thesis, no condition")
-	}
 	th, created, err := e.svc.Put(ctx, e.a1, PutInput{Text: " Electrification winner ", NextReviewOn: ptr("2025-06-01")})
 	if err != nil || !created || th.Status != StatusActive || th.Text != "Electrification winner" || *th.NextReviewOn != "2025-06-01" {
 		t.Fatalf("put: %+v %v %v", th, created, err)
@@ -65,9 +62,6 @@ func TestPutGetAndConditions(t *testing.T) {
 		t.Fatal(err)
 	}
 	c2, _ := e.svc.AddCondition(ctx, e.a1, "CEO leaves")
-	if ok, _ := e.svc.HasBreakCondition(ctx, e.a1); !ok {
-		t.Fatal("expected break condition")
-	}
 	// Edit and delete conditions individually.
 	up, err := e.svc.UpdateCondition(ctx, c1.ID, "Margin below 12% for 2 quarters")
 	if err != nil || up.Text != "Margin below 12% for 2 quarters" {

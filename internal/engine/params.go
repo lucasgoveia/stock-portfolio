@@ -31,6 +31,7 @@ type Params struct {
 	MinScore           decimal.Decimal // 2.5
 	FairValueMaxMonths int             // 12
 	OpportunityMult    decimal.Decimal // 0.8
+	FairValueTolerance decimal.Decimal // 5%: core buys pass while price <= fair value x (1 + tolerance)
 
 	// Planner (§8.3, §8.4).
 	MinOrderB3 decimal.Decimal // R$300
@@ -74,6 +75,7 @@ func DefaultParams() Params {
 		MinScore:           mustDec("2.5"),
 		FairValueMaxMonths: 12,
 		OpportunityMult:    mustDec("0.8"),
+		FairValueTolerance: mustDec("0.05"),
 
 		MinOrderB3: mustDec("300"),
 		USBatchMin: mustDec("2000"),

@@ -127,7 +127,6 @@ type Position struct {
 	LastSell  *string               `json:"last_sell,omitempty"`
 	Tactical  *TacticalView         `json:"tactical,omitempty"`
 	factors   *engine.Factors       // latest rating
-	breaks    int                   // break conditions
 	fvDate    time.Time             // fair value date
 }
 
@@ -328,7 +327,7 @@ func (s *Service) Snapshot(ctx context.Context) (Snapshot, error) {
 			snap.Unrated = append(snap.Unrated, a.Ticker)
 		}
 		if th, err := s.d.Thesis.Get(ctx, a.ID); err == nil {
-			x.ThesisStatus, x.breaks = th.Status, len(th.BreakConditions)
+			x.ThesisStatus = th.Status
 		} else if !errors.Is(err, thesis.ErrNotFound) {
 			return snap, err
 		}
@@ -359,7 +358,7 @@ func (s *Service) Snapshot(ctx context.Context) (Snapshot, error) {
 			continue
 		}
 		in := engine.GateInput{
-			Ratings: *x.factors, Tactical: x.Sleeve == assets.SleeveTactical, BreakConditions: x.breaks,
+			Ratings: *x.factors, Tactical: x.Sleeve == assets.SleeveTactical, ThesisBroken: x.ThesisStatus == thesis.StatusBroken,
 			FairValue: x.FairValue, FairValueDate: x.fvDate, Price: *x.Price, ActiveCatalyst: x.Catalyst, Now: now,
 		}
 		if in.Tactical {

@@ -162,9 +162,9 @@ Crossing the threshold switches to full rules automatically (alert notifies the 
 A stock may receive a buy suggestion only if:
 
 - Weighted score ≥ 2.5.
-- Thesis written with at least one break condition.
+- Thesis not broken: passes when there is no thesis or its status is `active` or `under_review`; fails only when the status is `broken`. A thesis and break conditions are optional.
 - Fair value set (not older than 12 months).
-- Price ≤ fair value.
+- Price ≤ fair value × (1 + tolerance). The fair value tolerance is a single setting, default 5%: a price up to 5% above fair value still passes. The gate reports `buy_up_to`, the highest price that passes. Company-specific risk belongs in the fair value itself, not in the tolerance.
 
 Tactical entries have their own gate (§10.1).
 
@@ -233,7 +233,7 @@ Short-horizon (months) research-driven bets, kept in the same portfolio, tagged 
 ### 10.1 Entry
 
 - Requires: catalyst research note, target price, stop price, expiry date.
-- Buy gate as §8.1, but the horizon factor is excluded from the score; fair value = target price.
+- Buy gate as §8.1, but the horizon factor is excluded from the score; fair value = target price, and the tolerance does not apply (price ≤ target price). The thesis rule is the same (optional, fails only when broken).
 - Size: `size = clamp(1% / stop_distance, 1%, 2%)` of portfolio, where `stop_distance = (entry − stop) / entry`. Loss at stop ≤ 1% of portfolio.
 - Count: 2–3 open tactical positions; the system warns before a 4th.
 

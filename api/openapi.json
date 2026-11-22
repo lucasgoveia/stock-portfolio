@@ -273,6 +273,10 @@
             "format": "int64",
             "type": "integer"
           },
+          "fair_value_tolerance": {
+            "description": "Buy gate: core price may be up to this far above fair value (fraction, 0 to 50%)",
+            "type": "string"
+          },
           "hard_cap": {
             "description": "Weight above which a position is flagged (fraction)",
             "type": "string"
@@ -328,6 +332,7 @@
           "cash_band_max",
           "min_score",
           "fair_value_max_months",
+          "fair_value_tolerance",
           "opportunity_mult",
           "ramp_stages",
           "trim_fraction",
@@ -2042,6 +2047,9 @@
       "GateResult": {
         "additionalProperties": false,
         "properties": {
+          "buy_up_to": {
+            "type": "string"
+          },
           "catalyst_only": {
             "type": "boolean"
           },
@@ -2075,6 +2083,9 @@
           "thesis_ok": {
             "type": "boolean"
           },
+          "tolerance": {
+            "type": "string"
+          },
           "upside": {
             "type": "string"
           }
@@ -2091,7 +2102,9 @@
           "deep_discount",
           "catalyst_only",
           "discount",
-          "upside"
+          "upside",
+          "tolerance",
+          "buy_up_to"
         ],
         "type": "object"
       },

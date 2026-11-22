@@ -100,7 +100,7 @@ function SetupSummary({ asset, view }: { asset: Schemas['Asset']; view?: Schemas
           Promote to core
         </Button>
         <span className="text-muted-foreground text-xs">
-          Needs the full core rating, a fresh fair value above the price and a break condition.
+          Needs the full core rating, a fresh fair value above the price and a thesis that is not broken.
         </span>
       </div>
     </div>

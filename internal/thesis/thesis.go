@@ -157,20 +157,6 @@ func (s *Service) Get(ctx context.Context, assetID int64) (Thesis, error) {
 	return s.load(ctx, t)
 }
 
-// HasBreakCondition reports whether the asset has a thesis with at least one
-// break condition (part of the buy gate, spec 8.1).
-func (s *Service) HasBreakCondition(ctx context.Context, assetID int64) (bool, error) {
-	t, err := s.q.GetThesisByAsset(ctx, assetID)
-	if errors.Is(err, sql.ErrNoRows) {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	cs, err := s.q.ListBreakConditions(ctx, t.ID)
-	return len(cs) > 0, err
-}
-
 // PutInput creates or replaces the thesis text and next review date.
 type PutInput struct {
 	Text         string
