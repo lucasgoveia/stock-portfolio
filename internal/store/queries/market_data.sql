@@ -55,3 +55,10 @@ SELECT subject FROM history_backfills WHERE source = ?;
 -- name: UpsertHistoryBackfill :exec
 INSERT INTO history_backfills (subject, source, from_date, done_at) VALUES (?, ?, ?, ?)
 ON CONFLICT (subject, source) DO UPDATE SET from_date = excluded.from_date, done_at = excluded.done_at;
+
+-- name: UpsertRiskFreeRate :exec
+INSERT INTO risk_free_rates (code, ref_date, rate) VALUES (?, ?, ?)
+ON CONFLICT (code, ref_date) DO UPDATE SET rate = excluded.rate;
+
+-- name: LatestRiskFreeRate :one
+SELECT * FROM risk_free_rates WHERE code = ? ORDER BY ref_date DESC LIMIT 1;

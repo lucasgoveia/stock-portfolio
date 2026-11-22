@@ -46,6 +46,12 @@ type RateWriter interface {
 	UpsertUSDBRL(ctx context.Context, refDate string, rate decimal.Decimal) error
 }
 
+// Risk-free rate codes stored in risk_free_rates.
+const (
+	RiskFreeUS = "US"
+	RiskFreeB3 = "B3"
+)
+
 // Deps are the daily pipeline's collaborators. A nil source skips its step.
 type Deps struct {
 	Conn     db.DBTX
@@ -59,7 +65,11 @@ type Deps struct {
 	US       marketdata.USPriceSource
 	IBOV     marketdata.IndexSource
 	SP500    marketdata.IndexSource
-	Betas    BetaWriter
+	// PolicyUS is the US effective federal funds rate in percent (FRED DFF).
+	PolicyUS marketdata.IndexSource
+	// SelicTarget is the BCB Selic target (SGS 432), percent per year.
+	SelicTarget marketdata.SelicTargetSource
+	Betas       BetaWriter
 	// DividendFeed announces B3 dividends and JCP; Dividends queues them for
 	// confirmation (spec §8.5). Either nil skips the step.
 	DividendFeed marketdata.DividendSource
@@ -124,6 +134,7 @@ func DailySteps(d Deps) []Step {
 		{"cotahist", p.cotahist},
 		{"us_prices", p.usPrices},
 		{"indices", p.indices},
+		{"risk_free", p.riskFree},
 		{"dividends", p.dividends},
 		{"corporate_actions", p.corporateActions},
 		{"fundamentals", p.fundamentals},
@@ -215,6 +226,115 @@ func (p *pipeline) tesouro(ctx context.Context, day time.Time) (string, error) {
 		return "", errors.New("no Tesouro Selic rows in the last 10 days")
 	}
 	return fmt.Sprintf("%d dates, reference %s", len(best), res.Reference.Format(dateLayout)), nil
+}
+
+var hundred = decimal.NewFromInt(100)
+
+// riskFreeLookback is how far back the US policy rate is read.
+const riskFreeLookback = 14 * 24 * time.Hour
+
+// riskFree stores the policy rates used as CAPM risk-free rates, as fractions:
+// US from the effective federal funds rate (FRED DFF), B3 from the Selic
+// target (SGS 432). One market failing does not drop the other; the error
+// lists only the failures.
+func (p *pipeline) riskFree(ctx context.Context, day time.Time) (string, error) {
+	return p.riskFreeMarkets(ctx, day, true, true)
+}
+
+// riskFreeMarkets fetches the wanted markets; a market without a source is
+// left out, and with nothing left to do the step is skipped.
+func (p *pipeline) riskFreeMarkets(ctx context.Context, day time.Time, us, b3 bool) (string, error) {
+	us = us && p.d.PolicyUS != nil
+	b3 = b3 && p.d.SelicTarget != nil
+	if !us && !b3 {
+		return "", ErrSkipped
+	}
+	var notes, fails []string
+	if us {
+		if n, err := p.riskFreeUS(ctx, day); err != nil {
+			fails = append(fails, "US: "+err.Error())
+		} else {
+			notes = append(notes, "US "+n)
+		}
+	}
+	if b3 {
+		if n, err := p.riskFreeB3(ctx, day); err != nil {
+			fails = append(fails, "B3: "+err.Error())
+		} else {
+			notes = append(notes, "B3 "+n)
+		}
+	}
+	if len(fails) > 0 {
+		return strings.Join(notes, "; "), errors.New(strings.Join(fails, "; "))
+	}
+	return strings.Join(notes, "; "), nil
+}
+
+// FillMissingRiskFree fetches the risk-free rate of every market that has no
+// stored row yet, through the same code as the daily risk_free step. It is
+// meant for startup (for example after the table was emptied by a migration);
+// markets that already have a rate are not touched. It returns ErrSkipped when
+// nothing is missing.
+func FillMissingRiskFree(ctx context.Context, d Deps) (string, error) {
+	if d.Now == nil {
+		d.Now = time.Now
+	}
+	p := &pipeline{d: d, q: db.New(d.Conn)}
+	missing := func(code string) (bool, error) {
+		_, err := p.q.LatestRiskFreeRate(ctx, code)
+		if errors.Is(err, sql.ErrNoRows) {
+			return true, nil
+		}
+		return false, err
+	}
+	us, err := missing(RiskFreeUS)
+	if err != nil {
+		return "", err
+	}
+	b3, err := missing(RiskFreeB3)
+	if err != nil {
+		return "", err
+	}
+	return p.riskFreeMarkets(ctx, d.Now().In(SaoPaulo()), us, b3)
+}
+
+func (p *pipeline) riskFreeUS(ctx context.Context, day time.Time) (string, error) {
+	pts, err := p.d.PolicyUS.Closes(ctx, day.Add(-riskFreeLookback))
+	if err != nil {
+		return "", err
+	}
+	if len(pts) == 0 {
+		return "", errors.New("no DFF observations in the last 14 days")
+	}
+	for _, pt := range pts {
+		if err := p.q.UpsertRiskFreeRate(ctx, db.UpsertRiskFreeRateParams{
+			Code: RiskFreeUS, RefDate: pt.Date.Format(dateLayout), Rate: pt.Close.Decimal.Div(hundred).String(),
+		}); err != nil {
+			return "", err
+		}
+	}
+	return latestNote(len(pts), func(i int) time.Time { return pts[i].Date }), nil
+}
+
+func (p *pipeline) riskFreeB3(ctx context.Context, day time.Time) (string, error) {
+	// SGS 432 runs ahead to the next Copom meeting: cap the range at the run
+	// day so no future-dated row becomes the "latest" rate.
+	pts, err := p.d.SelicTarget.SelicTarget(ctx, day.Add(-riskFreeLookback), day)
+	if err != nil {
+		return "", err
+	}
+	if len(pts) == 0 {
+		return "", errors.New("no Selic target observations")
+	}
+	for _, pt := range pts {
+		// SGS 432 is percent per year (15.00 = 15%).
+		if err := p.q.UpsertRiskFreeRate(ctx, db.UpsertRiskFreeRateParams{
+			Code: RiskFreeB3, RefDate: pt.Date.Format(dateLayout), Rate: pt.Value.Decimal.Div(hundred).String(),
+		}); err != nil {
+			return "", err
+		}
+	}
+	return latestNote(len(pts), func(i int) time.Time { return pts[i].Date }), nil
 }
 
 func (p *pipeline) upsertPrice(ctx context.Context, assetID int64, date time.Time, source string, close, adj string) error {

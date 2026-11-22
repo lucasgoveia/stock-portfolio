@@ -15,6 +15,7 @@ import (
 	"github.com/lucasgoveia/stock-portfolio/internal/alerts"
 	"github.com/lucasgoveia/stock-portfolio/internal/analyst"
 	"github.com/lucasgoveia/stock-portfolio/internal/assets"
+	"github.com/lucasgoveia/stock-portfolio/internal/capm"
 	"github.com/lucasgoveia/stock-portfolio/internal/fundamentals"
 	"github.com/lucasgoveia/stock-portfolio/internal/marketdata"
 	"github.com/lucasgoveia/stock-portfolio/internal/portfolio"
@@ -146,7 +147,7 @@ func (s *Server) registerTools() {
 			res, err := jsonResult(plan)
 			return res, nil, err
 		})
-	mcp.AddTool(srv, &mcp.Tool{Name: "get_asset_context", Description: "Everything the app knows about an asset it holds: position, latest rating, thesis and break conditions, fair value versions with scenarios, fundamentals panel, quarterly expected versus actual, research notes, open alerts and recent analyst drafts.", Annotations: readOnly("Asset context")},
+	mcp.AddTool(srv, &mcp.Tool{Name: "get_asset_context", Description: "Everything the app knows about an asset it holds: position, latest rating, thesis and break conditions, fair value versions with scenarios, fundamentals panel, CAPM cost of equity (the default discount rate, with its breakdown), quarterly expected versus actual, research notes, open alerts and recent analyst drafts.", Annotations: readOnly("Asset context")},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in tickerIn) (*mcp.CallToolResult, any, error) {
 			a, err := s.requireAsset(ctx, in.Ticker, in.Market)
 			if err != nil {
@@ -267,6 +268,7 @@ type assetContext struct {
 	Thesis           *thesis.Thesis                  `json:"thesis,omitempty"`
 	FairValues       []valuation.FairValue           `json:"fair_values"`
 	Fundamentals     *fundamentals.FundamentalsPanel `json:"fundamentals,omitempty"`
+	CostOfEquity     *capm.CostOfEquity              `json:"cost_of_equity,omitempty"`
 	ExpectedVsActual *tracking.Comparison            `json:"expected_vs_actual,omitempty"`
 	Notes            []research.Note                 `json:"research_notes"`
 	Alerts           []alerts.Alert                  `json:"open_alerts"`
@@ -311,6 +313,7 @@ func (s *Server) assetContext(ctx context.Context, a db.Asset) assetContext {
 	}
 	if p, err := s.d.Fundamentals.Get(ctx, a.ID, fundamentals.Params{}); err == nil {
 		out.Fundamentals = &p
+		out.CostOfEquity = p.CAPM
 	} else {
 		skip("fundamentals", err)
 	}

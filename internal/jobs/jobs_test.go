@@ -51,6 +51,38 @@ func (fakeTesouro) Prices(context.Context, marketdata.TesouroFilter) (marketdata
 	}}, nil
 }
 
+// fakeSelic returns the Selic target in percent per year. Like SGS 432 it
+// carries a point past the run day (the series runs ahead to the next Copom
+// meeting); the range filter must drop it.
+type fakeSelic struct{ fail bool }
+
+func (f fakeSelic) SelicTarget(_ context.Context, from, to time.Time) ([]marketdata.RatePoint, error) {
+	if f.fail {
+		return nil, errors.New("sgs down")
+	}
+	all := []marketdata.RatePoint{
+		{Date: date(2026, 11, 16), Value: m("14.75")}, {Date: date(2026, 11, 17), Value: m("15.00")},
+		{Date: date(2027, 6, 30), Value: m("99.00")},
+	}
+	var out []marketdata.RatePoint
+	for _, pt := range all {
+		if !pt.Date.Before(from) && !pt.Date.After(to) {
+			out = append(out, pt)
+		}
+	}
+	return out, nil
+}
+
+// fakePolicy returns DFF in percent; FRED's "." days never reach the step.
+type fakePolicy struct{ fail bool }
+
+func (f fakePolicy) Closes(context.Context, time.Time) ([]marketdata.IndexPoint, error) {
+	if f.fail {
+		return nil, errors.New("fred down")
+	}
+	return []marketdata.IndexPoint{{Date: date(2026, 11, 16), Close: m("4.10")}, {Date: date(2026, 11, 17), Close: m("4.12")}}, nil
+}
+
 type fakeQuotes struct{ fail map[string]bool }
 
 func (f *fakeQuotes) LatestQuote(_ context.Context, t string) (marketdata.Quote, error) {
@@ -132,7 +164,7 @@ func setup(t *testing.T) *env {
 		cot: &fakeCotahist{published: map[string]bool{"2026-11-17": true}}}
 	e.deps = Deps{
 		Conn: conn, Assets: as, Rates: cash.NewRateStore(conn), FX: fakeFX{}, CDI: fakeCDI{}, Tesouro: fakeTesouro{},
-		Quotes: e.quotes, Cotahist: e.cot, IBOV: fakeIndex{}, SP500: fakeIndex{}, Now: clock,
+		Quotes: e.quotes, Cotahist: e.cot, IBOV: fakeIndex{}, SP500: fakeIndex{}, PolicyUS: fakePolicy{}, SelicTarget: fakeSelic{}, Now: clock,
 		Evaluators: []Evaluator{{Name: "count", Run: func(context.Context) error { evals++; return nil }}},
 	}
 	e.runner = NewRunner(conn, al, DailySteps(e.deps), clock)
@@ -164,7 +196,7 @@ func TestDailyRunPersistsAndIsIdempotent(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := map[string]string{"fx": "ok", "cdi": "ok", "tesouro_selic": "ok", "b3_quotes": "ok", "cotahist": "ok",
-		"us_prices": "skipped", "indices": "ok", "beta": "skipped", "evaluate": "ok"}
+		"us_prices": "skipped", "indices": "ok", "risk_free": "ok", "beta": "skipped", "evaluate": "ok"}
 	got := stepStatus(res)
 	for k, v := range want {
 		if got[k] != v {
@@ -204,8 +236,89 @@ func TestDailyRunPersistsAndIsIdempotent(t *testing.T) {
 		t.Fatalf("evaluators ran %d times", *e.evals)
 	}
 	last, err := e.runner.Last(ctx)
-	if err != nil || last.Status != RunOK || len(last.Steps) != 13 || last.FinishedAt == "" {
+	if err != nil || last.Status != RunOK || len(last.Steps) != 14 || last.FinishedAt == "" {
 		t.Fatalf("last = %+v, %v", last, err)
+	}
+}
+
+func TestRiskFreeRatesStored(t *testing.T) {
+	ctx := context.Background()
+	e := setup(t)
+	if _, err := e.runner.Run(ctx); err != nil {
+		t.Fatal(err)
+	}
+	q := db.New(e.conn)
+	us, err := q.LatestRiskFreeRate(ctx, RiskFreeUS)
+	if err != nil || us.RefDate != "2026-11-17" || us.Rate != "0.0412" {
+		t.Fatalf("US = %+v, %v", us, err)
+	}
+	b3, err := q.LatestRiskFreeRate(ctx, RiskFreeB3)
+	if err != nil || b3.RefDate != "2026-11-17" || b3.Rate != "0.15" {
+		t.Fatalf("B3 = %+v, %v (want Selic target)", b3, err)
+	}
+	// A failing FRED must not fail other steps, keeps the stored rate and
+	// does not stop the B3 side: the step reports failed, the error names US only.
+	e.deps.PolicyUS = fakePolicy{fail: true}
+	e.deps.SelicTarget = fakeSelic{}
+	res, err := NewRunner(e.conn, e.alerts, DailySteps(e.deps), func() time.Time { return now }).Run(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	st := stepStatus(res)
+	if st["risk_free"] != StepFailed || st["evaluate"] != StepOK || st["tesouro_selic"] != StepOK {
+		t.Fatalf("steps = %+v", res.Steps)
+	}
+	if us, err := q.LatestRiskFreeRate(ctx, RiskFreeUS); err != nil || us.Rate != "0.0412" {
+		t.Fatalf("stale US = %+v, %v", us, err)
+	}
+	for _, s := range res.Steps {
+		if s.Name == "risk_free" && (!strings.Contains(s.Error, "US:") || strings.Contains(s.Error, "B3:") || !strings.Contains(s.Note, "B3")) {
+			t.Fatalf("risk_free step = %+v", s)
+		}
+	}
+	// And the reverse: a failing Selic fetch keeps B3 stale and US fresh.
+	e.deps.PolicyUS = fakePolicy{}
+	e.deps.SelicTarget = fakeSelic{fail: true}
+	res, err = NewRunner(e.conn, e.alerts, DailySteps(e.deps), func() time.Time { return now }).Run(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stepStatus(res)["risk_free"] != StepFailed {
+		t.Fatalf("steps = %+v", res.Steps)
+	}
+	if b3, err := q.LatestRiskFreeRate(ctx, RiskFreeB3); err != nil || b3.Rate != "0.15" {
+		t.Fatalf("stale B3 = %+v, %v", b3, err)
+	}
+}
+
+func TestFillMissingRiskFree(t *testing.T) {
+	ctx := context.Background()
+	e := setup(t)
+	q := db.New(e.conn)
+	// Empty table: both markets are fetched.
+	note, err := FillMissingRiskFree(ctx, e.deps)
+	if err != nil || !strings.Contains(note, "US") || !strings.Contains(note, "B3") {
+		t.Fatalf("note = %q, %v", note, err)
+	}
+	if b3, err := q.LatestRiskFreeRate(ctx, RiskFreeB3); err != nil || b3.Rate != "0.15" {
+		t.Fatalf("B3 = %+v, %v", b3, err)
+	}
+	// Everything present: nothing is fetched, even with failing sources.
+	e.deps.PolicyUS = fakePolicy{fail: true}
+	e.deps.SelicTarget = fakeSelic{fail: true}
+	if _, err := FillMissingRiskFree(ctx, e.deps); !errors.Is(err, ErrSkipped) {
+		t.Fatalf("err = %v, want ErrSkipped", err)
+	}
+	// Only B3 missing: US is not touched (its failing source is not called).
+	if _, err := e.conn.Exec(`DELETE FROM risk_free_rates WHERE code = 'B3'`); err != nil {
+		t.Fatal(err)
+	}
+	e.deps.SelicTarget = fakeSelic{}
+	if note, err := FillMissingRiskFree(ctx, e.deps); err != nil || strings.Contains(note, "US") || !strings.Contains(note, "B3") {
+		t.Fatalf("note = %q, %v", note, err)
+	}
+	if b3, err := q.LatestRiskFreeRate(ctx, RiskFreeB3); err != nil || b3.Rate != "0.15" {
+		t.Fatalf("B3 = %+v, %v", b3, err)
 	}
 }
 

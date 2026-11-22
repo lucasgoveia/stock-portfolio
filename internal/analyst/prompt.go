@@ -3,6 +3,8 @@ package analyst
 import (
 	"fmt"
 	"strings"
+
+	"github.com/lucasgoveia/stock-portfolio/internal/capm"
 )
 
 // Mode says where an analysis runs: the in-app API analyst, or the user's own
@@ -36,7 +38,7 @@ const rulesSourcesMCP = `- Start from the data the app serves through its tools:
 - Finish by calling the submit tool (submit_analysis for an asset the app holds, submit_candidate for a new ticker) with the structured result. Nothing is saved until you do, and the investor reviews it in the app before anything is applied.`
 
 // rulesAnalysis are the rules for the analysis itself, shared by both modes.
-const rulesAnalysis = `- Scenarios: exactly bear, base and bull. revenue_growth has exactly 5 yearly rates as fractions (0.08 means 8%). State the basis of each scenario explicitly: "ebit_ev" means terminal_margin and start_margin are EBIT margins, exit_multiple is EV/EBIT and the net debt given below is subtracted; "net_pe" means they are net margins, exit_multiple is P/E and net debt is NOT subtracted. Never mix them (a net margin with an EV/EBIT multiple, or an EBIT margin with a P/E, is wrong); use the same basis in the three scenarios unless there is a reason not to. start_margin is the margin today on that basis, taken from the reported fundamentals; the margin moves linearly to terminal_margin over the 5 years. terminal_margin is a fraction between 0 and 1, exit_multiple and discount_rate are positive (discount_rate a fraction, for example 0.12). cash_conversion is the fraction between 0 and 1 of each year's earnings that the company returns or accumulates for shareholders (dividends, buybacks, free cash flow), based on its payout history; use 0 only for companies that retain everything and that you value on the exit alone. tax_rate is a fraction in [0, 1) (about 0.34 for Brazil, 0.21 for the US) used for ebit_ev. The three probabilities are fractions that sum to exactly 1. Explain the assumptions in "rationale", tied to the documents and the reported fundamentals.
+const rulesAnalysis = `- Scenarios: exactly bear, base and bull. revenue_growth has exactly 5 yearly rates as fractions (0.08 means 8%). State the basis of each scenario explicitly: "ebit_ev" means terminal_margin and start_margin are EBIT margins, exit_multiple is EV/EBIT and the net debt given below is subtracted; "net_pe" means they are net margins, exit_multiple is P/E and net debt is NOT subtracted. Never mix them (a net margin with an EV/EBIT multiple, or an EBIT margin with a P/E, is wrong); use the same basis in the three scenarios unless there is a reason not to. start_margin is the margin today on that basis, taken from the reported fundamentals; the margin moves linearly to terminal_margin over the 5 years. terminal_margin is a fraction between 0 and 1, exit_multiple and discount_rate are positive. discount_rate is a fraction: start from the CAPM cost of equity provided with the asset (the "Cost of equity (CAPM)" section, or cost_of_equity in the asset context), use it for all three scenarios unless you can justify a different rate, and explain any deviation in "rationale" (for example a higher rate for a bear case or for company-specific risk). If no CAPM rate is provided, choose a rate and justify it. cash_conversion is the fraction between 0 and 1 of each year's earnings that the company returns or accumulates for shareholders (dividends, buybacks, free cash flow), based on its payout history; use 0 only for companies that retain everything and that you value on the exit alone. tax_rate is a fraction in [0, 1) (about 0.34 for Brazil, 0.21 for the US) used for ebit_ev. The three probabilities are fractions that sum to exactly 1. Explain the assumptions in "rationale", tied to the documents and the reported fundamentals.
 - initiatives: look in the filings and announcements for innovations that the historical revenue does not reflect: new products, new segments, R&D programs, capex programs, market entries, guidance. Each initiative has a name, a rationale, the URLs of the provided documents that support it ("sources"), start_year (1 to 5), revenue_year5 (its revenue in year 5 if it succeeds, in the asset's currency; it ramps linearly from start_year), margin (fraction in [0, 1], on the same basis as the scenarios) and a success_probability for each of bear, base and bull (fractions in [0, 1]; usually lower in bear and higher in bull). Only include initiatives that the documents support; an empty list is the right answer when there are none. Do not also count the same growth in revenue_growth: revenue_growth is the existing business only. At most 10.
 - fair_value_range is per share, in the asset's currency, with 0 < low <= high, consistent with the scenarios and the share count given.
 - thesis_check: one entry for each break condition, copying the condition text. holds = no evidence it is triggered; at_risk = evidence that it is deteriorating; broken = evidence it has occurred. If the documents say nothing, answer holds and state that there was no evidence either way.
@@ -93,6 +95,8 @@ func userPrompt(in Inputs) string {
 		fmt.Fprintf(&b, "\nThe scenario DCF will be computed on base revenue %s, net debt %s and %s shares outstanding; size your scenarios and fair value range accordingly.\n",
 			in.DCFBase.BaseRevenue, in.DCFBase.NetDebt, in.DCFBase.Shares)
 	}
+	b.WriteString("\n## Cost of equity (CAPM)\n")
+	b.WriteString(capmText(in.CAPM))
 	b.WriteString("\n## Documents\n")
 	if len(in.Documents) == 0 {
 		b.WriteString("No documents could be fetched. Base the answer on the thesis and fundamentals only, and say that no filings were available.\n")
@@ -106,4 +110,17 @@ func userPrompt(in Inputs) string {
 		b.WriteString("Text:\n" + d.Text + "\n")
 	}
 	return b.String()
+}
+
+// capmText renders the CAPM breakdown, all rates as fractions like discount_rate.
+func capmText(c *capm.CostOfEquity) string {
+	if c == nil {
+		return "Not available: the asset has no stored beta or its market no risk-free rate. Choose a discount rate and justify it.\n"
+	}
+	floor := ""
+	if c.Floored {
+		floor = fmt.Sprintf(" The CAPM result was below the floor, so the rate is risk-free + %s minimum premium.", c.MinPremium)
+	}
+	return fmt.Sprintf("Cost of equity %s = risk-free %s (as of %s) + adjusted beta %s x equity risk premium %s. Adjusted beta = 0.67 x raw beta %s (%s weekly, as of %s) + 0.33.%s\n",
+		c.Rate, c.RiskFree, c.RiskFreeDate, c.AdjBeta, c.ERP, c.RawBeta, c.BetaIndex, c.BetaDate, floor)
 }

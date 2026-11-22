@@ -856,6 +856,29 @@
         ],
         "type": "object"
       },
+      "CAPMInputs": {
+        "additionalProperties": false,
+        "properties": {
+          "erp_b3": {
+            "description": "Equity risk premium for B3 stocks (fraction)",
+            "type": "string"
+          },
+          "erp_us": {
+            "description": "Equity risk premium for US stocks (fraction)",
+            "type": "string"
+          },
+          "min_equity_premium": {
+            "description": "Lowest premium of the cost of equity over the risk-free rate (fraction)",
+            "type": "string"
+          }
+        },
+        "required": [
+          "erp_us",
+          "erp_b3",
+          "min_equity_premium"
+        ],
+        "type": "object"
+      },
       "Candidate": {
         "additionalProperties": false,
         "properties": {
@@ -1159,6 +1182,62 @@
           "unallocated",
           "pending_us_after",
           "skipped"
+        ],
+        "type": "object"
+      },
+      "CostOfEquity": {
+        "additionalProperties": false,
+        "properties": {
+          "adj_beta": {
+            "description": "0.67 x raw beta + 0.33",
+            "type": "string"
+          },
+          "beta_date": {
+            "description": "Day the beta was computed",
+            "type": "string"
+          },
+          "beta_index": {
+            "description": "Benchmark the beta was computed against",
+            "type": "string"
+          },
+          "erp": {
+            "description": "Equity risk premium",
+            "type": "string"
+          },
+          "floored": {
+            "description": "True when the floor rf + min premium set the rate",
+            "type": "boolean"
+          },
+          "min_premium": {
+            "description": "Floor of the premium over the risk-free rate",
+            "type": "string"
+          },
+          "rate": {
+            "description": "Cost of equity, annual fraction",
+            "type": "string"
+          },
+          "raw_beta": {
+            "type": "string"
+          },
+          "risk_free": {
+            "type": "string"
+          },
+          "risk_free_date": {
+            "description": "Date of the risk-free observation",
+            "type": "string"
+          }
+        },
+        "required": [
+          "rate",
+          "risk_free",
+          "risk_free_date",
+          "raw_beta",
+          "adj_beta",
+          "beta_date",
+          "beta_index",
+          "erp",
+          "min_premium",
+          "floored"
         ],
         "type": "object"
       },
@@ -1852,6 +1931,9 @@
             "format": "int64",
             "type": "integer"
           },
+          "capm": {
+            "$ref": "#/components/schemas/CostOfEquity"
+          },
           "currency": {
             "enum": [
               "BRL",
@@ -2037,6 +2119,22 @@
           },
           "values": {
             "$ref": "#/components/schemas/Allocation"
+          }
+        },
+        "required": [
+          "values",
+          "defaults"
+        ],
+        "type": "object"
+      },
+      "GroupCAPMInputs": {
+        "additionalProperties": false,
+        "properties": {
+          "defaults": {
+            "$ref": "#/components/schemas/CAPMInputs"
+          },
+          "values": {
+            "$ref": "#/components/schemas/CAPMInputs"
           }
         },
         "required": [
@@ -2322,6 +2420,10 @@
       "Inputs": {
         "additionalProperties": false,
         "properties": {
+          "cost_of_equity": {
+            "$ref": "#/components/schemas/CostOfEquity",
+            "description": "CAPM cost of equity with its breakdown, the starting point for discount_rate"
+          },
           "currency": {
             "type": "string"
           },
@@ -2882,6 +2984,9 @@
           },
           "tax": {
             "$ref": "#/components/schemas/GroupTax"
+          },
+          "valuation": {
+            "$ref": "#/components/schemas/GroupCAPMInputs"
           }
         },
         "required": [
@@ -2891,7 +2996,8 @@
           "tactical",
           "ai",
           "expectations",
-          "mcp"
+          "mcp",
+          "valuation"
         ],
         "type": "object"
       },
@@ -3476,6 +3582,15 @@
           "discount_rate": {
             "type": "string"
           },
+          "discount_source": {
+            "description": "custom when passed in the request, capm when derived from the asset's beta, default when no beta or risk-free rate is stored",
+            "enum": [
+              "custom",
+              "capm",
+              "default"
+            ],
+            "type": "string"
+          },
           "exit_multiple": {
             "type": "string"
           },
@@ -3505,6 +3620,7 @@
           "terminal_margin",
           "exit_multiple",
           "discount_rate",
+          "discount_source",
           "note"
         ],
         "type": "object"
@@ -9698,6 +9814,47 @@
         ]
       }
     },
+    "/api/settings/valuation": {
+      "put": {
+        "operationId": "setValuationSettings",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CAPMInputs"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CAPMInputs"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            },
+            "description": "Error"
+          }
+        },
+        "summary": "Replace the valuation settings",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
     "/api/settings/{group}/reset": {
       "post": {
         "operationId": "resetSettings",
@@ -9716,7 +9873,8 @@
                 "tactical",
                 "ai",
                 "expectations",
-                "mcp"
+                "mcp",
+                "valuation"
               ],
               "type": "string"
             }

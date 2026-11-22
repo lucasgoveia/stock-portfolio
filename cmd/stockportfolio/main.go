@@ -24,6 +24,7 @@ import (
 	"github.com/lucasgoveia/stock-portfolio/internal/api"
 	"github.com/lucasgoveia/stock-portfolio/internal/assets"
 	"github.com/lucasgoveia/stock-portfolio/internal/candidates"
+	"github.com/lucasgoveia/stock-portfolio/internal/capm"
 	"github.com/lucasgoveia/stock-portfolio/internal/cash"
 	"github.com/lucasgoveia/stock-portfolio/internal/config"
 	"github.com/lucasgoveia/stock-portfolio/internal/corpactions"
@@ -121,6 +122,7 @@ func run() error {
 		US:        edgar,
 		Dividends: marketdata.NewBrapi(nil, "", cfg.BrapiToken),
 	}, nil)
+	fundSvc.UseCAPM(capm.New(conn, settingsSvc))
 	deps.Fundamentals = fundSvc
 	var aiClient analyst.Client // nil without a key: runs are refused with a clear message
 	if cfg.AnthropicAPIKey != "" {
@@ -174,6 +176,19 @@ func run() error {
 		}
 		return err
 	}
+
+	// Risk-free rates missing from the table (first run, or after a migration
+	// emptied it) are fetched once in the background; failures only log.
+	go func() {
+		note, err := jobs.FillMissingRiskFree(ctx, deps)
+		switch {
+		case errors.Is(err, jobs.ErrSkipped):
+		case err != nil:
+			slog.Warn("startup risk-free fetch", "note", note, "err", err)
+		default:
+			slog.Info("startup risk-free fetch", "note", note)
+		}
+	}()
 
 	runner := jobs.NewRunner(conn, alertSvc, jobs.DailySteps(deps), nil)
 	if !cfg.DisableScheduler {
@@ -235,6 +250,10 @@ func marketDeps(cfg config.Config, conn *sql.DB, a *assets.Service, rates *cash.
 		Cotahist:     marketdata.NewCotahist(nil, ""),
 		IBOV:         marketdata.NewB3Index(nil, "", "IBOV"),
 		SP500:        marketdata.NewFRED(nil, "", "SP500"),
+		// Risk-free rates are policy rates: effective fed funds (US) and the
+		// Selic target (B3).
+		PolicyUS:    marketdata.NewFRED(nil, "", "DFF"),
+		SelicTarget: marketdata.NewSGS(nil, ""),
 	}
 	if cfg.TiingoToken != "" {
 		d.US = marketdata.NewTiingo(nil, "", cfg.TiingoToken)

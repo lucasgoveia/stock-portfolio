@@ -10,6 +10,7 @@ import (
 	"github.com/shopspring/decimal"
 
 	"github.com/lucasgoveia/stock-portfolio/internal/assets"
+	"github.com/lucasgoveia/stock-portfolio/internal/capm"
 	"github.com/lucasgoveia/stock-portfolio/internal/marketdata"
 	"github.com/lucasgoveia/stock-portfolio/internal/money"
 	"github.com/lucasgoveia/stock-portfolio/internal/store"
@@ -433,5 +434,50 @@ func TestShortPriceHistoryShowsCurrentOnly(t *testing.T) {
 	pe := r.Ranges.PE
 	if pe == nil || pe.Current == nil || pe.Min != nil || pe.Max != nil || len(pe.Points) != 1 {
 		t.Errorf("expected current only: %+v", pe)
+	}
+}
+
+type fakeCAPM struct{ rate string }
+
+func (f fakeCAPM) ForAsset(context.Context, db.Asset) (capm.CostOfEquity, bool, error) {
+	if f.rate == "" {
+		return capm.CostOfEquity{}, false, nil
+	}
+	return capm.CostOfEquity{Rate: money.New(dec(f.rate)), RiskFreeDate: "2026-11-17"}, true, nil
+}
+
+func TestReverseDCFDiscountRateSource(t *testing.T) {
+	ctx := context.Background()
+	e := setup(t)
+	a := e.asset(t, "PETR4", "B3", "stock", petrobrasCNPJ)
+	e.price(t, a.ID, "2026-11-17", "cotahist", "20")
+	if _, err := e.svc.Refresh(ctx, a.ID); err != nil {
+		t.Fatal(err)
+	}
+	rd := func(p Params) (*ReverseDCF, FundamentalsPanel) {
+		r, err := e.svc.Get(ctx, a.ID, p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return r.Helpers.ReverseDCF, r
+	}
+	// No CAPM source: the fixed market default.
+	if r, p := rd(Params{}); r.DiscountSource != "default" || !r.DiscountRate.Equal(dec("0.14")) || p.CAPM != nil {
+		t.Fatalf("default: %+v capm=%v", r, p.CAPM)
+	}
+	// CAPM not available (no beta or rf): still the default.
+	e.svc.UseCAPM(fakeCAPM{})
+	if r, p := rd(Params{}); r.DiscountSource != "default" || p.CAPM != nil {
+		t.Fatalf("unavailable: %+v", r)
+	}
+	e.svc.UseCAPM(fakeCAPM{rate: "0.0770"})
+	r, p := rd(Params{})
+	if r.DiscountSource != "capm" || !r.DiscountRate.Equal(dec("0.077")) || p.CAPM == nil || p.CAPM.RiskFreeDate != "2026-11-17" {
+		t.Fatalf("capm: %+v capm=%v", r, p.CAPM)
+	}
+	// An explicit rate in the request wins.
+	c := dec("0.12")
+	if r, _ := rd(Params{DiscountRate: &c}); r.DiscountSource != "custom" || !r.DiscountRate.Equal(c) {
+		t.Fatalf("custom: %+v", r)
 	}
 }

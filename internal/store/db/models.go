@@ -281,6 +281,12 @@ type ResearchNote struct {
 	UpdatedAt            string
 }
 
+type RiskFreeRate struct {
+	Code    string
+	RefDate string
+	Rate    string
+}
+
 type Setting struct {
 	Key   string
 	Value string

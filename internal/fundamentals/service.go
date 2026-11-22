@@ -17,6 +17,7 @@ import (
 	"github.com/shopspring/decimal"
 
 	"github.com/lucasgoveia/stock-portfolio/internal/assets"
+	"github.com/lucasgoveia/stock-portfolio/internal/capm"
 	"github.com/lucasgoveia/stock-portfolio/internal/marketdata"
 	"github.com/lucasgoveia/stock-portfolio/internal/money"
 	"github.com/lucasgoveia/stock-portfolio/internal/store/db"
@@ -78,7 +79,18 @@ type Service struct {
 	now    func() time.Time
 	// afterRefresh runs after facts were stored (expected vs actual evaluation).
 	afterRefresh func(ctx context.Context) error
+	// capm supplies the per-asset default discount rate; nil keeps the fixed defaults.
+	capm CAPMSource
 }
+
+// CAPMSource returns an asset's CAPM cost of equity; ok is false when the
+// asset has no beta or its market no risk-free rate (capm.Service).
+type CAPMSource interface {
+	ForAsset(ctx context.Context, a db.Asset) (capm.CostOfEquity, bool, error)
+}
+
+// UseCAPM sets where the default discount rate comes from.
+func (s *Service) UseCAPM(c CAPMSource) { s.capm = c }
 
 // OnRefresh sets a hook that runs after every successful refresh. A failing
 // hook does not fail the refresh; its error is only logged.
@@ -137,6 +149,16 @@ func (s *Service) Get(ctx context.Context, assetID int64, p Params) (Fundamental
 		r.Message = "Fundamentals cover stocks only (not ETFs or BDRs)."
 		return r, nil
 	}
+	var capmRate *decimal.Decimal
+	if s.capm != nil {
+		b, ok, err := s.capm.ForAsset(ctx, a)
+		if err != nil {
+			slog.Warn("fundamentals: CAPM rate unavailable", "asset", a.ID, "err", err)
+		} else if ok {
+			r.CAPM = &b
+			capmRate = &b.Rate.Decimal
+		}
+	}
 	sync, serr := s.q.GetFundamentalSync(ctx, a.ID)
 	hasSync := serr == nil
 	if serr != nil && !errors.Is(serr, sql.ErrNoRows) {
@@ -170,7 +192,7 @@ func (s *Service) Get(ctx context.Context, assetID int64, p Params) (Fundamental
 		r.SourceName = sourceName(r.Source)
 	}
 
-	in := computeInput{Market: a.Market, Periods: periods, Params: p}
+	in := computeInput{Market: a.Market, Periods: periods, Params: p, CAPMRate: capmRate}
 	if row, err := s.q.LatestAssetPrice(ctx, a.ID); err == nil {
 		if v, err := decimal.NewFromString(row.Close); err == nil {
 			in.Price = &pricePoint{Date: row.RefDate, Close: v}
