@@ -366,7 +366,9 @@ func (p *pipeline) corporateActions(ctx context.Context, day time.Time) (string,
 	return gatedResult(note, "corporate actions", gated, len(held), failed)
 }
 
-// cotahist stores raw closes from the latest published daily file.
+// cotahist stores raw closes from the latest published daily file, then
+// backfills two years of history for assets that have none yet. A failing
+// backfill never undoes the daily update; it is reported after it.
 func (p *pipeline) cotahist(ctx context.Context, day time.Time) (string, error) {
 	if p.d.Cotahist == nil {
 		return "", ErrSkipped
@@ -378,6 +380,18 @@ func (p *pipeline) cotahist(ctx context.Context, day time.Time) (string, error) 
 	if len(list) == 0 {
 		return "no B3 assets", ErrSkipped
 	}
+	note, err := p.cotahistDaily(ctx, day, list)
+	n, berr := p.cotahistBackfill(ctx, day, list)
+	if n > 0 {
+		note += fmt.Sprintf(" (%d backfilled)", n)
+	}
+	if berr != nil {
+		err = errors.Join(err, fmt.Errorf("history backfill: %w", berr))
+	}
+	return note, err
+}
+
+func (p *pipeline) cotahistDaily(ctx context.Context, day time.Time, list []db.Asset) (string, error) {
 	ids := map[string]int64{}
 	tickers := make([]string, 0, len(list))
 	for _, a := range list {
@@ -416,27 +430,52 @@ func (p *pipeline) usPrices(ctx context.Context, day time.Time) (string, error) 
 	if len(list) == 0 {
 		return "no US assets", ErrSkipped
 	}
+	done, err := p.backfilled(ctx, "tiingo")
+	if err != nil {
+		return "", err
+	}
 	var failed []string
+	backfilled := 0
 	for _, a := range list {
-		bars, err := p.d.US.DailyPrices(ctx, a.Ticker, day.AddDate(0, 0, -7), day)
+		// One request per ticker either way (Tiingo's hourly quota): a
+		// ticker not yet backfilled just asks for the longer window.
+		from, backfill := day.AddDate(0, 0, -7), !done[assetSubject(a.ID)]
+		if backfill {
+			from = historyStart(day)
+		}
+		bars, err := p.d.US.DailyPrices(ctx, a.Ticker, from, day)
 		for _, b := range bars {
 			if err != nil {
 				break
 			}
 			err = p.upsertPrice(ctx, a.ID, b.Date, "tiingo", b.Close.String(), b.AdjClose.String())
 		}
+		if err == nil && backfill {
+			err = p.markBackfilled(ctx, assetSubject(a.ID), "tiingo", from)
+			backfilled++
+		}
 		if err != nil {
 			failed = append(failed, fmt.Sprintf("%s: %v", a.Ticker, err))
 		}
 	}
 	note := fmt.Sprintf("%d/%d tickers", len(list)-len(failed), len(list))
+	if backfilled > 0 {
+		note += fmt.Sprintf(" (%d backfilled)", backfilled)
+	}
 	if len(failed) > 0 {
 		return note, errors.New(strings.Join(failed, "; "))
 	}
 	return note, nil
 }
 
+// indices stores recent index closes, loading two years once for an index
+// whose history is short.
 func (p *pipeline) indices(ctx context.Context, day time.Time) (string, error) {
+	return p.syncIndices(ctx, func(code string) (time.Time, bool, error) { return p.indexFrom(ctx, day, code) })
+}
+
+// syncIndices fetches each configured index from the date plan returns.
+func (p *pipeline) syncIndices(ctx context.Context, plan func(code string) (time.Time, bool, error)) (string, error) {
 	var notes, failed []string
 	for _, ix := range []struct {
 		code string
@@ -445,18 +484,29 @@ func (p *pipeline) indices(ctx context.Context, day time.Time) (string, error) {
 		if ix.src == nil {
 			continue
 		}
-		pts, err := ix.src.Closes(ctx, day.AddDate(0, 0, -14))
+		from, backfill, err := plan(ix.code)
+		var pts []marketdata.IndexPoint
+		if err == nil {
+			pts, err = ix.src.Closes(ctx, from)
+		}
 		for _, pt := range pts {
 			if err != nil {
 				break
 			}
 			err = p.q.UpsertIndexPoint(ctx, db.UpsertIndexPointParams{IndexCode: ix.code, RefDate: pt.Date.Format(dateLayout), Close: pt.Close.String()})
 		}
+		if err == nil && backfill {
+			err = p.markBackfilled(ctx, "index:"+ix.code, "index", from)
+		}
 		if err != nil {
 			failed = append(failed, fmt.Sprintf("%s: %v", ix.code, err))
 			continue
 		}
-		notes = append(notes, fmt.Sprintf("%s %d", ix.code, len(pts)))
+		note := fmt.Sprintf("%s %d", ix.code, len(pts))
+		if backfill {
+			note += " (backfilled)"
+		}
+		notes = append(notes, note)
 	}
 	if len(notes) == 0 && len(failed) == 0 {
 		return "", ErrSkipped

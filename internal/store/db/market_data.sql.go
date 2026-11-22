@@ -95,6 +95,17 @@ func (q *Queries) CreateJobRun(ctx context.Context, arg CreateJobRunParams) (Job
 	return i, err
 }
 
+const earliestIndexDate = `-- name: EarliestIndexDate :one
+SELECT CAST(COALESCE(MIN(ref_date), '') AS TEXT) FROM index_points WHERE index_code = ?
+`
+
+func (q *Queries) EarliestIndexDate(ctx context.Context, indexCode string) (string, error) {
+	row := q.db.QueryRowContext(ctx, earliestIndexDate, indexCode)
+	var column_1 string
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const finishJobRun = `-- name: FinishJobRun :exec
 UPDATE job_runs SET finished_at = ?, status = ?, steps = ? WHERE id = ?
 `
@@ -224,6 +235,33 @@ func (q *Queries) LatestIndexDate(ctx context.Context, indexCode string) (string
 	return column_1, err
 }
 
+const listHistoryBackfills = `-- name: ListHistoryBackfills :many
+SELECT subject FROM history_backfills WHERE source = ?
+`
+
+func (q *Queries) ListHistoryBackfills(ctx context.Context, source string) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, listHistoryBackfills, source)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var subject string
+		if err := rows.Scan(&subject); err != nil {
+			return nil, err
+		}
+		items = append(items, subject)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const upsertAssetPrice = `-- name: UpsertAssetPrice :exec
 INSERT INTO asset_prices (asset_id, ref_date, source, close, adj_close, fetched_at)
 VALUES (?, ?, ?, ?, ?, ?)
@@ -248,6 +286,28 @@ func (q *Queries) UpsertAssetPrice(ctx context.Context, arg UpsertAssetPricePara
 		arg.Close,
 		arg.AdjClose,
 		arg.FetchedAt,
+	)
+	return err
+}
+
+const upsertHistoryBackfill = `-- name: UpsertHistoryBackfill :exec
+INSERT INTO history_backfills (subject, source, from_date, done_at) VALUES (?, ?, ?, ?)
+ON CONFLICT (subject, source) DO UPDATE SET from_date = excluded.from_date, done_at = excluded.done_at
+`
+
+type UpsertHistoryBackfillParams struct {
+	Subject  string
+	Source   string
+	FromDate string
+	DoneAt   string
+}
+
+func (q *Queries) UpsertHistoryBackfill(ctx context.Context, arg UpsertHistoryBackfillParams) error {
+	_, err := q.db.ExecContext(ctx, upsertHistoryBackfill,
+		arg.Subject,
+		arg.Source,
+		arg.FromDate,
+		arg.DoneAt,
 	)
 	return err
 }

@@ -45,3 +45,13 @@ UPDATE job_runs SET finished_at = ?, status = ?, steps = ? WHERE id = ?;
 
 -- name: LastJobRun :one
 SELECT * FROM job_runs WHERE job = ? ORDER BY id DESC LIMIT 1;
+
+-- name: EarliestIndexDate :one
+SELECT CAST(COALESCE(MIN(ref_date), '') AS TEXT) FROM index_points WHERE index_code = ?;
+
+-- name: ListHistoryBackfills :many
+SELECT subject FROM history_backfills WHERE source = ?;
+
+-- name: UpsertHistoryBackfill :exec
+INSERT INTO history_backfills (subject, source, from_date, done_at) VALUES (?, ?, ?, ?)
+ON CONFLICT (subject, source) DO UPDATE SET from_date = excluded.from_date, done_at = excluded.done_at;

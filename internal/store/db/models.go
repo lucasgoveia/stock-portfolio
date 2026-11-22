@@ -213,6 +213,13 @@ type FxRate struct {
 	Rate    string
 }
 
+type HistoryBackfill struct {
+	Subject  string
+	Source   string
+	FromDate string
+	DoneAt   string
+}
+
 type IndexPoint struct {
 	IndexCode string
 	RefDate   string
