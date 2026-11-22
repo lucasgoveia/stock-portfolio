@@ -50,7 +50,7 @@ function Page() {
                   {p.fair_value ? ` / FV ${money(p.fair_value, p.currency)}` : ''}
                 </span>
               </header>
-              <GateChecklist gate={p.gate} error={p.gate_error} />
+              <GateChecklist gate={p.gate} error={p.gate_error} thesisStatus={p.thesis_status} />
             </article>
           ))}
         </div>

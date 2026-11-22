@@ -10,11 +10,13 @@ import (
 	"github.com/lucasgoveia/stock-portfolio/internal/engine"
 	"github.com/lucasgoveia/stock-portfolio/internal/store/db"
 	"github.com/lucasgoveia/stock-portfolio/internal/tactical"
+	"github.com/lucasgoveia/stock-portfolio/internal/thesis"
 )
 
 // Promote moves a tactical asset into the core sleeve (spec §10.2). It must
-// pass the core buy gate: the full score (horizon included), a thesis with a
-// break condition and a fresh fair value at or above the price. The tactical
+// pass the core buy gate: the full score (horizon included), a thesis that is
+// not broken (none is fine) and a fresh fair value with the price at most the
+// tolerance above it. The tactical
 // setup is removed; the asset then joins core target math.
 func (s *Service) Promote(ctx context.Context, assetID int64) (db.Asset, error) {
 	a, err := s.d.Assets.Get(ctx, assetID)
@@ -43,7 +45,7 @@ func (s *Service) Promote(ctx context.Context, assetID int64) (db.Asset, error) 
 		return db.Asset{}, err
 	}
 	g, err := p.EvaluateGate(engine.GateInput{
-		Ratings: *x.factors, BreakConditions: x.breaks, FairValue: x.FairValue, FairValueDate: x.fvDate,
+		Ratings: *x.factors, ThesisBroken: x.ThesisStatus == thesis.StatusBroken, FairValue: x.FairValue, FairValueDate: x.fvDate,
 		Price: *x.Price, Now: s.d.Now(),
 	})
 	if err != nil {
@@ -56,9 +58,9 @@ func (s *Service) Promote(ctx context.Context, assetID int64) (db.Asset, error) 
 			name string
 		}{
 			{g.ScoreOK, "core score below " + p.MinScore.String()},
-			{g.ThesisOK, "no break condition"},
+			{g.ThesisOK, "thesis broken"},
 			{g.FairValueFresh, "no fresh fair value"},
-			{g.PriceOK, "price above fair value"},
+			{g.PriceOK, "price above " + g.BuyUpTo.StringFixed(2) + " (fair value plus tolerance)"},
 		} {
 			if !c.ok {
 				failed = append(failed, c.name)

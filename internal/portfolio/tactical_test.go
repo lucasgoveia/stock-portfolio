@@ -3,12 +3,14 @@ package portfolio
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/lucasgoveia/stock-portfolio/internal/alerts"
 	"github.com/lucasgoveia/stock-portfolio/internal/assets"
 	"github.com/lucasgoveia/stock-portfolio/internal/research"
 	"github.com/lucasgoveia/stock-portfolio/internal/tactical"
+	"github.com/lucasgoveia/stock-portfolio/internal/thesis"
 	"github.com/lucasgoveia/stock-portfolio/internal/trades"
 )
 
@@ -85,12 +87,26 @@ func TestTacticalLifecycle(t *testing.T) {
 		t.Fatalf("target alert = %+v %v", open, err)
 	}
 
-	// Promotion fails the core gate at 37 (fair value 35) ...
+	// Promotion fails the core gate at 37 (fair value 35, tolerance limit 36.75) ...
 	if _, err := e.svc.Promote(ctx, itub); !errors.Is(err, ErrValidation) {
 		t.Fatalf("promote above fair value: %v", err)
 	}
-	// ... and passes once the price is back under the fair value.
-	if _, err := e.conn.Exec(`INSERT INTO asset_prices (asset_id, ref_date, source, close, fetched_at) VALUES (?, '2026-11-20', 'cotahist', '33', 'x')`, itub); err != nil {
+	// ... and a price slightly above the fair value (36 <= 36.75) is tolerated by the gate.
+	if _, err := e.conn.Exec(`INSERT INTO asset_prices (asset_id, ref_date, source, close, fetched_at) VALUES (?, '2026-11-20', 'cotahist', '36', 'x')`, itub); err != nil {
+		t.Fatal(err)
+	}
+	// Within tolerance the price check passes, but a broken thesis still blocks.
+	if _, err := e.conn.Exec(`UPDATE asset_prices SET close = '36' WHERE asset_id = ? AND ref_date = '2026-11-20'`, itub); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.svc.d.Thesis.SetStatus(ctx, itub, thesis.StatusBroken); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.svc.Promote(ctx, itub); !errors.Is(err, ErrValidation) || !strings.Contains(err.Error(), "thesis broken") {
+		t.Fatalf("promote with broken thesis: %v", err)
+	}
+	// A thesis under review does not block.
+	if _, err := e.svc.d.Thesis.SetStatus(ctx, itub, thesis.StatusUnderReview); err != nil {
 		t.Fatal(err)
 	}
 	a, err := e.svc.Promote(ctx, itub)

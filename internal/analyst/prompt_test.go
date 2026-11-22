@@ -24,6 +24,14 @@ func TestRulesAnchorDiscountRateOnCAPM(t *testing.T) {
 	}
 }
 
+func TestRulesStateFairValueTolerance(t *testing.T) {
+	for _, m := range []Mode{ModeAPI, ModeMCP} {
+		if r := Rules(m); !strings.Contains(r, "small fixed tolerance") || !strings.Contains(r, "must already reflect company-specific risks") {
+			t.Errorf("mode %d: fair value tolerance rule missing", m)
+		}
+	}
+}
+
 func TestUserPromptCostOfEquity(t *testing.T) {
 	in := Inputs{Ticker: "AMD", Market: "US", Currency: "USD"}
 	if p := userPrompt(in); !strings.Contains(p, "## Cost of equity (CAPM)\nNot available") {

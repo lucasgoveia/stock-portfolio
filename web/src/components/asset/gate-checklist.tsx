@@ -7,25 +7,26 @@ import { cn } from '@/lib/utils'
 type Gate = Schemas['GateResult']
 
 /** The buy gate (spec 8.1): every check must pass before a buy is suggested. */
-function gateChecks(g: Gate): { label: string; ok: boolean; detail?: string }[] {
+function gateChecks(g: Gate, thesisStatus?: string): { label: string; ok: boolean; detail?: string }[] {
+  const tolerance = Number(g.tolerance)
   return [
     { label: 'Score at least 2.5', ok: g.score_ok, detail: Number(g.score) ? Number(g.score).toFixed(2) : 'not rated' },
-    { label: 'Thesis with a break condition', ok: g.thesis_ok },
+    { label: 'Thesis not broken', ok: g.thesis_ok, detail: thesisStatus ? thesisStatus.replace('_', ' ') : 'no thesis' },
     { label: 'Fair value set', ok: g.fair_value_set },
     { label: 'Fair value under 12 months old', ok: g.fair_value_fresh },
     {
-      label: 'Price at or below fair value',
+      label: tolerance > 0 ? `Price at most ${pct(g.tolerance, 0)} above fair value` : 'Price at or below fair value',
       ok: g.price_ok,
       detail: !g.fair_value_set
         ? undefined
-        : g.discount.startsWith('-')
-          ? `${pct(g.discount.slice(1), 1)} above fair value`
-          : `${pct(g.discount, 1)} below fair value`,
+        : `${
+            g.discount.startsWith('-') ? `${pct(g.discount.slice(1), 1)} above fair value` : `${pct(g.discount, 1)} below fair value`
+          }; buy up to ${Number(g.buy_up_to).toFixed(2)}`,
     },
   ]
 }
 
-export function GateChecklist({ gate, error }: { gate?: Gate; error?: string }) {
+export function GateChecklist({ gate, error, thesisStatus }: { gate?: Gate; error?: string; thesisStatus?: string }) {
   if (!gate) {
     return <p className="text-muted-foreground text-sm">{error ? `Buy gate unavailable: ${error}` : 'No price yet: run the daily job.'}</p>
   }
@@ -47,7 +48,7 @@ export function GateChecklist({ gate, error }: { gate?: Gate; error?: string }) 
         )}
       </div>
       <ul className="space-y-1.5 text-sm">
-        {gateChecks(gate).map((c) => (
+        {gateChecks(gate, thesisStatus).map((c) => (
           <li key={c.label} className="flex items-center gap-2">
             {c.ok ? (
               <Check className="text-jade size-4 shrink-0" aria-label="passes" />

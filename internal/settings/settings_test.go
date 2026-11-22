@@ -113,6 +113,27 @@ func TestValidation(t *testing.T) {
 	if got, _ := s.Allocation(ctx); got.ClampMax.String() != "0.1" {
 		t.Fatalf("stored despite error: %s", got.ClampMax)
 	}
+	for _, bad := range []string{"-0.01", "0.51"} {
+		m := DefaultAllocation()
+		m.FairValueTolerance = d(bad)
+		if _, err := s.SetAllocation(ctx, m); !errors.Is(err, ErrValidation) || !strings.Contains(err.Error(), "fair_value_tolerance:") {
+			t.Fatalf("tolerance %s: %v", bad, err)
+		}
+	}
+	ok := DefaultAllocation()
+	ok.FairValueTolerance = d("0")
+	if _, err := s.SetAllocation(ctx, ok); err != nil {
+		t.Fatalf("tolerance 0 is allowed: %v", err)
+	}
+	if p, _ := s.Params(ctx); !p.FairValueTolerance.IsZero() {
+		t.Fatalf("params tolerance = %s", p.FairValueTolerance)
+	}
+	if err := s.Reset(ctx, GroupAllocation); err != nil {
+		t.Fatal(err)
+	}
+	if p, _ := s.Params(ctx); p.FairValueTolerance.String() != "0.05" {
+		t.Fatalf("tolerance after reset = %s", p.FairValueTolerance)
+	}
 	pl := DefaultPlanner()
 	pl.MinOrderB3 = d("-1")
 	if _, err := s.SetPlanner(ctx, pl); !errors.Is(err, ErrValidation) {

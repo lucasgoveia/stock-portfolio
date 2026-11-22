@@ -74,7 +74,7 @@ func TestEvaluateGate(t *testing.T) {
 	now := day(2026, 11, 18)
 	base := func() GateInput {
 		return GateInput{
-			Ratings: Factors{3, 3, 3, 3, 3}, BreakConditions: 1,
+			Ratings: Factors{3, 3, 3, 3, 3},
 			FairValue: dp("100"), FairValueDate: day(2026, 1, 1), Price: d("90"), Now: now,
 		}
 	}
@@ -89,10 +89,10 @@ func TestEvaluateGate(t *testing.T) {
 		{name: "deep discount at exactly FV x 0.8", mod: func(g *GateInput) { g.Price = d("80") }, passed: true, opp: true, deep: true,
 			check: func(t *testing.T, r GateResult) { nearD(t, "upside", r.Upside, d("0.25")) }},
 		{name: "catalyst-only opportunity", mod: func(g *GateInput) { g.Price = d("95"); g.ActiveCatalyst = true }, passed: true, opp: true, cat: true},
-		{name: "catalyst does not bypass gate", mod: func(g *GateInput) { g.Price = d("101"); g.ActiveCatalyst = true },
+		{name: "catalyst does not bypass gate", mod: func(g *GateInput) { g.Price = d("106"); g.ActiveCatalyst = true },
 			check: func(t *testing.T, r GateResult) {
 				if r.PriceOK {
-					t.Error("price above FV must fail")
+					t.Error("price above FV tolerance must fail")
 				}
 			}},
 		{name: "low score", mod: func(g *GateInput) { g.Ratings = Factors{2, 2, 2, 2, 2} },
@@ -102,11 +102,34 @@ func TestEvaluateGate(t *testing.T) {
 				}
 			}},
 		{name: "score exactly 2.5 passes", mod: func(g *GateInput) { g.Ratings = Factors{3, 3, 2, 2, 3} }, passed: true},
-		{name: "no break conditions", mod: func(g *GateInput) { g.BreakConditions = 0 },
+		{name: "no thesis passes", mod: func(g *GateInput) { g.ThesisBroken = false }, passed: true,
 			check: func(t *testing.T, r GateResult) {
-				if r.ThesisOK {
-					t.Error("thesis must fail")
+				if !r.ThesisOK {
+					t.Error("no thesis must pass")
 				}
+			}},
+		{name: "broken thesis fails", mod: func(g *GateInput) { g.ThesisBroken = true },
+			check: func(t *testing.T, r GateResult) {
+				if r.ThesisOK || r.Passed {
+					t.Error("broken thesis must fail")
+				}
+			}},
+		{name: "price exactly at FV x 1.05 passes", mod: func(g *GateInput) { g.Price = d("105") }, passed: true,
+			check: func(t *testing.T, r GateResult) {
+				nearD(t, "buy_up_to", r.BuyUpTo, d("105"))
+				nearD(t, "tolerance", r.Tolerance, d("0.05"))
+			}},
+		{name: "price just above FV x 1.05 fails", mod: func(g *GateInput) { g.Price = d("105.01") },
+			check: func(t *testing.T, r GateResult) {
+				if r.PriceOK || r.Passed {
+					t.Error("price above buy-up-to must fail")
+				}
+			}},
+		{name: "price slightly above FV passes", mod: func(g *GateInput) { g.Price = d("103") }, passed: true},
+		{name: "tactical has no tolerance", mod: func(g *GateInput) { g.Tactical = true; g.Price = d("100") }, passed: true,
+			check: func(t *testing.T, r GateResult) {
+				nearD(t, "buy_up_to", r.BuyUpTo, d("100"))
+				nearD(t, "tolerance", r.Tolerance, d("0"))
 			}},
 		{name: "fair value exactly 12 months old is fresh", mod: func(g *GateInput) { g.FairValueDate = day(2025, 11, 18) }, passed: true},
 		{name: "fair value older than 12 months is stale", mod: func(g *GateInput) { g.FairValueDate = day(2025, 11, 17) },

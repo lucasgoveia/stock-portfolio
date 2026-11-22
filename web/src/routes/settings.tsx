@@ -46,6 +46,7 @@ const ALLOCATION_FIELDS: FieldDef[] = [
   { key: 'overvalued_mult', label: 'Overvalued above (× fair value)', kind: 'decimal', unit: '×', group: 'Buy gate and opportunities' },
   { key: 'min_score', label: 'Buy gate minimum score', kind: 'decimal', unit: 'pts' },
   { key: 'fair_value_max_months', label: 'Fair value max age (months)', kind: 'int' },
+  { key: 'fair_value_tolerance', label: 'Fair value tolerance (above fair value)', kind: 'percent', hint: 'The buy gate still passes while the price is up to this much above fair value.' },
   { key: 'opportunity_mult', label: 'Opportunity at or below (× fair value)', kind: 'decimal', unit: '×' },
   { key: 'ramp_stages', label: 'Ramp tranches', kind: 'int', hint: 'Tranches a new position is built in.' },
   { key: 'trim_fraction', label: 'Trim step', kind: 'percent', group: 'Trims' },

@@ -1615,6 +1615,8 @@ export interface components {
              * @description Buy gate: fair value older than this blocks buys
              */
             fair_value_max_months: number;
+            /** @description Buy gate: core price may be up to this far above fair value (fraction, 0 to 50%) */
+            fair_value_tolerance: string;
             /** @description Weight above which a position is flagged (fraction) */
             hard_cap: string;
             /** @description Weight under which a position is flagged (fraction) */
@@ -2132,6 +2134,7 @@ export interface components {
             ticker: string;
         };
         GateResult: {
+            buy_up_to: string;
             catalyst_only: boolean;
             deep_discount: boolean;
             discount: string;
@@ -2143,6 +2146,7 @@ export interface components {
             score: string;
             score_ok: boolean;
             thesis_ok: boolean;
+            tolerance: string;
             upside: string;
         };
         GroupAI: {

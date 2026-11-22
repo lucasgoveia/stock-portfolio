@@ -201,7 +201,7 @@ function Overview({ asset: a, position: p, snapshotError }: { asset: Asset; posi
         {snapshotError ? (
           <ErrorBlock error={snapshotError} />
         ) : (
-          <GateChecklist gate={p?.gate} error={p?.gate_error} />
+          <GateChecklist gate={p?.gate} error={p?.gate_error} thesisStatus={p?.thesis_status} />
         )}
         <p className="text-muted-foreground mt-3 text-xs">
           Fix a failing check on its tab: <Link to="." search={{ tab: 'ratings' }} className="underline">ratings</Link>,{' '}

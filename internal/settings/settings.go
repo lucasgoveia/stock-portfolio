@@ -88,6 +88,7 @@ type Allocation struct {
 	CashBandMax        Dec `json:"cash_band_max" doc:"Highest cash target (fraction)"`
 	MinScore           Dec `json:"min_score" doc:"Buy gate: minimum weighted score"`
 	FairValueMaxMonths int `json:"fair_value_max_months" doc:"Buy gate: fair value older than this blocks buys"`
+	FairValueTolerance Dec `json:"fair_value_tolerance" doc:"Buy gate: core price may be up to this far above fair value (fraction, 0 to 50%)"`
 	OpportunityMult    Dec `json:"opportunity_mult" doc:"Price / fair value at or below which an opportunity opens"`
 	RampStages         int `json:"ramp_stages" doc:"Tranches a new position is built in"`
 	TrimFraction       Dec `json:"trim_fraction" doc:"Share of the excess sold per trim step (fraction)"`
@@ -202,7 +203,7 @@ func DefaultAllocation() Allocation {
 		BandUpperCap: money.New(p.BandUpperCap), HardFloor: money.New(p.HardFloor), HardCap: money.New(p.HardCap),
 		CashBase: money.New(p.CashBase), CashSpan: money.New(p.CashSpan), OvervaluedMult: money.New(p.OvervaluedMult),
 		CashBandMin: money.New(p.CashBandMin), CashBandMax: money.New(p.CashBandMax), MinScore: money.New(p.MinScore),
-		FairValueMaxMonths: p.FairValueMaxMonths, OpportunityMult: money.New(p.OpportunityMult), RampStages: p.RampStages,
+		FairValueMaxMonths: p.FairValueMaxMonths, OpportunityMult: money.New(p.OpportunityMult), FairValueTolerance: money.New(p.FairValueTolerance), RampStages: p.RampStages,
 		TrimFraction: money.New(p.TrimFraction), CooldownDays: p.CooldownDays, BetterScoreDelta: money.New(p.BetterScoreDelta),
 		BetterUpsideDelta: money.New(p.BetterUpsideDelta),
 	}
@@ -309,6 +310,9 @@ func (a Allocation) Validate() error {
 	c.atLeast("overvalued_mult", a.OvervaluedMult.Decimal, one)
 	if !a.OpportunityMult.IsPositive() || a.OpportunityMult.GreaterThan(one) {
 		c.add("opportunity_mult", "must be above 0 and at most 1")
+	}
+	if a.FairValueTolerance.LessThan(zero) || a.FairValueTolerance.GreaterThan(decimal.RequireFromString("0.5")) {
+		c.add("fair_value_tolerance", "must be between 0%% and 50%%")
 	}
 	if a.MinScore.LessThan(one) || a.MinScore.GreaterThan(decimal.NewFromInt(5)) {
 		c.add("min_score", "must be between 1 and 5")
@@ -534,7 +538,7 @@ func (s *Service) Params(ctx context.Context) (engine.Params, error) {
 		HardFloor: a.HardFloor.Decimal, HardCap: a.HardCap.Decimal, BootstrapBelow: pl.BootstrapBelow.Decimal,
 		CashBase: a.CashBase.Decimal, CashSpan: a.CashSpan.Decimal, OvervaluedMult: a.OvervaluedMult.Decimal,
 		CashBandMin: a.CashBandMin.Decimal, CashBandMax: a.CashBandMax.Decimal,
-		MinScore: a.MinScore.Decimal, FairValueMaxMonths: a.FairValueMaxMonths, OpportunityMult: a.OpportunityMult.Decimal,
+		MinScore: a.MinScore.Decimal, FairValueMaxMonths: a.FairValueMaxMonths, OpportunityMult: a.OpportunityMult.Decimal, FairValueTolerance: a.FairValueTolerance.Decimal,
 		MinOrderB3: pl.MinOrderB3.Decimal, USBatchMin: pl.USBatchMin.Decimal, RampStages: a.RampStages,
 		TrimFraction: a.TrimFraction.Decimal, CooldownDays: a.CooldownDays,
 		BetterScoreDelta: a.BetterScoreDelta.Decimal, BetterUpsideDelta: a.BetterUpsideDelta.Decimal,
