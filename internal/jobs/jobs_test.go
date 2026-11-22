@@ -184,8 +184,10 @@ func TestDailyRunPersistsAndIsIdempotent(t *testing.T) {
 		}
 	}
 	first := counts()
-	// 2 B3 assets x (brapi + cotahist) = 4 prices; 2 fx; 1 cdi; 1 tesouro date; 2 indices.
-	if first != [5]int{4, 2, 1, 1, 2} {
+	// 2 B3 assets x (brapi + cotahist) = 4 prices, plus the 2-year backfill:
+	// 2 assets x (2025-01-05, 2025-06-05, 2026-01-05, 2026-06-05); 2 fx; 1 cdi;
+	// 1 tesouro date; 2 indices.
+	if first != [5]int{12, 2, 1, 1, 2} {
 		t.Fatalf("counts = %v", first)
 	}
 	var pu string
@@ -531,4 +533,181 @@ func TestStepErrorsAreSummarized(t *testing.T) {
 	if got := summarize(errors.New("a\n  b")); got != "a b" {
 		t.Fatalf("got %q", got)
 	}
+}
+
+type fakeUS struct{ froms map[string][]time.Time }
+
+func (f *fakeUS) DailyPrices(_ context.Context, tk string, from, _ time.Time) ([]marketdata.DailyBar, error) {
+	f.froms[tk] = append(f.froms[tk], from)
+	return []marketdata.DailyBar{{Date: date(2026, 11, 17), Close: m("400"), AdjClose: m("399")}}, nil
+}
+
+type recIndex struct{ froms []time.Time }
+
+func (r *recIndex) Closes(_ context.Context, from time.Time) ([]marketdata.IndexPoint, error) {
+	r.froms = append(r.froms, from)
+	return []marketdata.IndexPoint{{Date: date(2026, 11, 17), Close: m("150000")}}, nil
+}
+
+func TestUSPricesBackfillOnceThenShortWindow(t *testing.T) {
+	ctx := context.Background()
+	e := setup(t)
+	us := &fakeUS{froms: map[string][]time.Time{}}
+	e.deps.US = us
+	r := NewRunner(e.conn, e.alerts, DailySteps(e.deps), func() time.Time { return now })
+	day := date(2026, 11, 18)
+	res, err := r.Run(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := res.Steps[5]; got.Name != "us_prices" || got.Note != "1/1 tickers (1 backfilled)" {
+		t.Fatalf("step = %+v", got)
+	}
+	if got := us.froms["MSFT"]; len(got) != 1 || !got[0].Equal(day.AddDate(-2, 0, 0)) {
+		t.Fatalf("first run from = %v, want 2y window in one request", got)
+	}
+	if n := e.count(t, `SELECT COUNT(*) FROM history_backfills WHERE subject = 'asset:3' AND source = 'tiingo'`); n != 1 {
+		t.Fatalf("marker rows = %d", n)
+	}
+	res, err = r.Run(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := res.Steps[5].Note; got != "1/1 tickers" {
+		t.Fatalf("second note = %q", got)
+	}
+	if got := us.froms["MSFT"]; len(got) != 2 || !got[1].Equal(day.AddDate(0, 0, -7)) {
+		t.Fatalf("second run from = %v, want short window", got)
+	}
+}
+
+func TestIndexBackfillOnce(t *testing.T) {
+	ctx := context.Background()
+	e := setup(t)
+	ibov, sp := &recIndex{}, &recIndex{}
+	e.deps.IBOV, e.deps.SP500 = ibov, sp
+	// SP500 already holds 2 years of history; IBOV does not.
+	if _, err := e.conn.Exec(`INSERT INTO index_points (index_code, ref_date, close) VALUES ('SP500', '2024-11-20', '4500')`); err != nil {
+		t.Fatal(err)
+	}
+	r := NewRunner(e.conn, e.alerts, DailySteps(e.deps), func() time.Time { return now })
+	day := date(2026, 11, 18)
+	for i := 0; i < 2; i++ {
+		if _, err := r.Run(ctx); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(ibov.froms) != 2 || !ibov.froms[0].Equal(day.AddDate(-2, 0, 0)) || !ibov.froms[1].Equal(day.AddDate(0, 0, -14)) {
+		t.Fatalf("IBOV froms = %v", ibov.froms)
+	}
+	for _, f := range sp.froms {
+		if !f.Equal(day.AddDate(0, 0, -14)) {
+			t.Fatalf("SP500 with full history must use the short window: %v", sp.froms)
+		}
+	}
+	if n := e.count(t, `SELECT COUNT(*) FROM history_backfills WHERE source = 'index'`); n != 1 {
+		t.Fatalf("index markers = %d", n)
+	}
+}
+
+type histCotahist struct {
+	yearly    map[int][]string
+	monthly   []time.Time
+	noYearly  map[int]bool
+	published map[string]bool
+}
+
+func (f *histCotahist) Scan(_ context.Context, kind marketdata.CotahistFileKind, t time.Time, flt marketdata.CotahistFilter, fn func(marketdata.CotahistRecord) error) error {
+	notFound := &marketdata.HTTPError{Source: "cotahist", Status: http.StatusNotFound}
+	switch kind {
+	case marketdata.CotahistYearly:
+		if f.noYearly[t.Year()] {
+			return notFound
+		}
+		f.yearly[t.Year()] = flt.Tickers
+	case marketdata.CotahistMonthly:
+		f.monthly = append(f.monthly, t)
+		if t.Month() != time.March {
+			return notFound
+		}
+	default:
+		if !f.published[t.Format(dateLayout)] {
+			return notFound
+		}
+	}
+	for _, tk := range flt.Tickers {
+		if err := fn(marketdata.CotahistRecord{Date: date(t.Year(), t.Month(), 10), Ticker: tk, Market: "010", Close: m("12")}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func TestCotahistBackfillScansShortHistoryTickersOnly(t *testing.T) {
+	ctx := context.Background()
+	e := setup(t)
+	// WEGE3 (asset 1) was backfilled before.
+	if _, err := e.conn.Exec(`INSERT INTO history_backfills (subject, source, from_date, done_at) VALUES ('asset:1', 'cotahist', '2024-11-18', 'x')`); err != nil {
+		t.Fatal(err)
+	}
+	hc := &histCotahist{yearly: map[int][]string{}, noYearly: map[int]bool{2026: true}, published: map[string]bool{"2026-11-17": true}}
+	e.deps.Cotahist = hc
+	r := NewRunner(e.conn, e.alerts, DailySteps(e.deps), func() time.Time { return now })
+	res, err := r.Run(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := res.Steps[4]; got.Name != "cotahist" || got.Status != StepOK || !strings.HasSuffix(got.Note, "(1 backfilled)") {
+		t.Fatalf("step = %+v", got)
+	}
+	for _, y := range []int{2024, 2025} {
+		if tk := hc.yearly[y]; len(tk) != 1 || tk[0] != "ITUB4" {
+			t.Fatalf("year %d tickers = %v", y, tk)
+		}
+	}
+	// 2026 yearly is missing: monthly files Jan..Nov are tried, missing ones skipped.
+	if len(hc.monthly) != 11 {
+		t.Fatalf("monthly scans = %d", len(hc.monthly))
+	}
+	var n int
+	if err := e.conn.QueryRow(`SELECT COUNT(*) FROM asset_prices WHERE asset_id = 2 AND source = 'cotahist' AND ref_date = '2026-03-10'`).Scan(&n); err != nil || n != 1 {
+		t.Fatalf("march close = %d, %v", n, err)
+	}
+	if n := e.count(t, `SELECT COUNT(*) FROM asset_prices WHERE asset_id = 1 AND source = 'cotahist' AND ref_date < '2026-11-01'`); n != 0 {
+		t.Fatalf("backfilled asset must not be rescanned: %d rows", n)
+	}
+	// Second run: everything is marked, no yearly scan happens.
+	hc.yearly = map[int][]string{}
+	if _, err := r.Run(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if len(hc.yearly) != 0 {
+		t.Fatalf("second run rescanned years: %v", hc.yearly)
+	}
+}
+
+func TestCotahistBackfillFailureKeepsDailyClose(t *testing.T) {
+	ctx := context.Background()
+	e := setup(t)
+	e.deps.Cotahist = failYearly{e.cot}
+	r := NewRunner(e.conn, e.alerts, DailySteps(e.deps), func() time.Time { return now })
+	res, _ := r.Run(ctx)
+	if stepStatus(res)["cotahist"] != StepFailed {
+		t.Fatalf("steps = %+v", res.Steps)
+	}
+	if n := e.count(t, `SELECT COUNT(*) FROM asset_prices WHERE source = 'cotahist' AND ref_date = '2026-11-17'`); n != 2 {
+		t.Fatalf("daily closes = %d", n)
+	}
+	if n := e.count(t, `SELECT COUNT(*) FROM history_backfills WHERE source = 'cotahist'`); n != 0 {
+		t.Fatalf("failed backfill must not be marked: %d", n)
+	}
+}
+
+type failYearly struct{ *fakeCotahist }
+
+func (f failYearly) Scan(ctx context.Context, kind marketdata.CotahistFileKind, t time.Time, flt marketdata.CotahistFilter, fn func(marketdata.CotahistRecord) error) error {
+	if kind == marketdata.CotahistYearly {
+		return errors.New("boom")
+	}
+	return f.fakeCotahist.Scan(ctx, kind, t, flt, fn)
 }

@@ -30,3 +30,14 @@ CREATE TABLE job_runs (
     steps       TEXT NOT NULL DEFAULT '[]'
 );
 CREATE INDEX job_runs_job ON job_runs (job, id);
+
+-- Marks that the daily job already tried to load 2 years of history for a
+-- subject ('asset:<id>' or 'index:<code>') from a source, so a recently listed
+-- asset with a shorter history is not refetched every day.
+CREATE TABLE history_backfills (
+    subject   TEXT NOT NULL,
+    source    TEXT NOT NULL,
+    from_date TEXT NOT NULL,
+    done_at   TEXT NOT NULL,
+    PRIMARY KEY (subject, source)
+);
