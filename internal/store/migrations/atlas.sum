@@ -1,4 +1,4 @@
-h1:Mx+hr0HaL8t56r9FVLnFZj/ld4dVD4cSW7dK5Qt4V48=
+h1:kZh5oosJhlgiv4l6Q0oWnZFir1jc9wuGcQDlT6VhZwM=
 20261118165232_initial.sql h1:ZXu5XTRwCHs7CecKzuH43X0QjUu0KnTJJdzBLZRsYGE=
 20261118165233_market_data.sql h1:JIwEJ5MvzfZ5gDN5FZw4d0G/7TtR6uqlZslar7lkhbk=
 20261118165843_ratings_beta.sql h1:bJLn8ygkYAPkoeh0ALV034I26RLDVKgY7VeMepXyIOE=
@@ -14,3 +14,4 @@ h1:Mx+hr0HaL8t56r9FVLnFZj/ld4dVD4cSW7dK5Qt4V48=
 20261122145354_history_backfills.sql h1:vws74Ov4v6DD7rmKESMpnHa15aVsS3TDajQ4AGE6CR4=
 20261122150645_risk_free_rates.sql h1:6rRDMzfMvRw2C8ZhFSnltQQ8qw6HkkfUv4wXAXgrEX0=
 20261122151834_clear_risk_free_rates.sql h1:bPpOzFIQ8aQrX7DlEPX7vSzFn0iX0gmS9UdDHzGOA4g=
+20261122194605_bdr_underlying.sql h1:5biS+0Z6pdd1jmCQHnTpW/pA6GUoMDN5y+agUd2SMQE=

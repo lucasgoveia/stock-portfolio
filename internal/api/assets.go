@@ -23,12 +23,21 @@ type Asset struct {
 	Benchmark string `json:"benchmark"`
 	CNPJ      string `json:"cnpj" doc:"B3 company CNPJ used by fundamentals; empty when unset"`
 	CIK       string `json:"cik" doc:"SEC CIK (10 digits) used by fundamentals; empty when unset"`
-	CreatedAt string `json:"created_at"`
-	UpdatedAt string `json:"updated_at"`
+	// UnderlyingAssetID is the US asset a BDR represents.
+	UnderlyingAssetID *int64 `json:"underlying_asset_id" doc:"US asset this BDR represents; its rating, thesis and fair value apply; null when not linked"`
+	BDRRatio          string `json:"bdr_ratio" doc:"BDRs per underlying share; empty when not linked"`
+	CreatedAt         string `json:"created_at"`
+	UpdatedAt         string `json:"updated_at"`
 }
 
 func toAsset(a db.Asset) Asset {
-	return Asset{a.ID, a.Ticker, a.Name, a.Market, a.Currency, a.Kind, a.Sleeve, a.Status, a.Benchmark, a.Cnpj, a.Cik, a.CreatedAt, a.UpdatedAt}
+	out := Asset{ID: a.ID, Ticker: a.Ticker, Name: a.Name, Market: a.Market, Currency: a.Currency, Kind: a.Kind, Sleeve: a.Sleeve,
+		Status: a.Status, Benchmark: a.Benchmark, CNPJ: a.Cnpj, CIK: a.Cik, BDRRatio: a.BdrRatio, CreatedAt: a.CreatedAt, UpdatedAt: a.UpdatedAt}
+	if a.UnderlyingAssetID.Valid {
+		v := a.UnderlyingAssetID.Int64
+		out.UnderlyingAssetID = &v
+	}
+	return out
 }
 
 func okAsset(a db.Asset, err error) (*Body[Asset], error) {
@@ -49,6 +58,9 @@ type AssetCreate struct {
 	Benchmark string `json:"benchmark" required:"false" doc:"Defaults from market"`
 	CNPJ      string `json:"cnpj" required:"false" doc:"B3 company CNPJ (fundamentals)"`
 	CIK       string `json:"cik" required:"false" doc:"SEC CIK (fundamentals); resolved from the ticker when empty"`
+	// BDR link.
+	UnderlyingAssetID *int64 `json:"underlying_asset_id,omitempty" required:"false" doc:"For a bdr: the US asset it represents (needs bdr_ratio)"`
+	BDRRatio          string `json:"bdr_ratio" required:"false" doc:"For a bdr: BDRs per underlying share, for example 1 or 0.1"`
 }
 
 // AssetUpdate is the body of PATCH /api/assets/{id}.
@@ -58,6 +70,9 @@ type AssetUpdate struct {
 	Benchmark *string `json:"benchmark,omitempty"`
 	CNPJ      *string `json:"cnpj,omitempty" doc:"Empty string clears"`
 	CIK       *string `json:"cik,omitempty" doc:"Empty string clears"`
+	// BDR link (kind bdr only).
+	UnderlyingAssetID *int64  `json:"underlying_asset_id,omitempty" doc:"US asset the bdr represents; 0 clears the link"`
+	BDRRatio          *string `json:"bdr_ratio,omitempty" doc:"BDRs per underlying share"`
 }
 
 // StatusChange is a body carrying only a status.
@@ -95,7 +110,7 @@ func WithAssets(svc *assets.Service) Option {
 			func(ctx context.Context, in *IDPath) (*Body[Asset], error) {
 				return okAsset(svc.Get(ctx, in.ID))
 			})
-		huma.Register(s.api, op(http.MethodPatch, "/api/assets/{id}", "updateAsset", "Update name, sleeve, benchmark, CNPJ or CIK", tag),
+		huma.Register(s.api, op(http.MethodPatch, "/api/assets/{id}", "updateAsset", "Update name, sleeve, benchmark, CNPJ, CIK or the BDR underlying link", tag),
 			func(ctx context.Context, in *BodyIn[AssetUpdate]) (*Body[Asset], error) {
 				return okAsset(svc.Update(ctx, in.ID, assets.UpdateInput(in.Body)))
 			})

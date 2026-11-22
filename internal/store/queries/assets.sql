@@ -1,6 +1,6 @@
 -- name: CreateAsset :one
-INSERT INTO assets (ticker, name, market, currency, kind, sleeve, status, benchmark, cnpj, cik)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO assets (ticker, name, market, currency, kind, sleeve, status, benchmark, cnpj, cik, underlying_asset_id, bdr_ratio)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 RETURNING *;
 
 -- name: GetAsset :one
@@ -27,4 +27,10 @@ RETURNING *;
 -- name: UpdateAssetStatus :one
 UPDATE assets SET status = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
 WHERE id = ?
+RETURNING *;
+
+-- name: SetAssetUnderlying :one
+UPDATE assets SET underlying_asset_id = sqlc.narg('underlying_asset_id'), bdr_ratio = sqlc.arg('bdr_ratio'),
+    updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+WHERE id = sqlc.arg('id')
 RETURNING *;

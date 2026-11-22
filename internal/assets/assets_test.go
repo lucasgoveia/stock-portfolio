@@ -60,3 +60,47 @@ func TestTransitionLifecycle(t *testing.T) {
 		t.Fatalf("bogus: %v", err)
 	}
 }
+
+func TestBDRUnderlyingLink(t *testing.T) {
+	svc := newSvc(t)
+	ctx := context.Background()
+	us, err := svc.Create(ctx, CreateInput{Ticker: "MSFT", Market: "US", Kind: "stock"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b3, err := svc.Create(ctx, CreateInput{Ticker: "WEGE3", Market: "B3", Kind: "stock"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Create with a link.
+	bdr, err := svc.Create(ctx, CreateInput{Ticker: "MSFT34", Market: "B3", Kind: "bdr", UnderlyingAssetID: &us.ID, BDRRatio: "20"})
+	if err != nil || !bdr.UnderlyingAssetID.Valid || bdr.UnderlyingAssetID.Int64 != us.ID || bdr.BdrRatio != "20" {
+		t.Fatalf("create: %+v %v", bdr, err)
+	}
+	bad := []CreateInput{
+		{Ticker: "X1", Market: "B3", Kind: "stock", UnderlyingAssetID: &us.ID, BDRRatio: "1"}, // not a bdr
+		{Ticker: "X2", Market: "B3", Kind: "bdr", UnderlyingAssetID: &b3.ID, BDRRatio: "1"},   // underlying not US
+		{Ticker: "X3", Market: "B3", Kind: "bdr", UnderlyingAssetID: &us.ID, BDRRatio: "0"},   // bad ratio
+		{Ticker: "X4", Market: "B3", Kind: "bdr", UnderlyingAssetID: &us.ID},                  // ratio missing
+		{Ticker: "X5", Market: "B3", Kind: "bdr", BDRRatio: "2"},                              // ratio without underlying
+	}
+	for _, in := range bad {
+		if _, err := svc.Create(ctx, in); !errors.Is(err, ErrValidation) {
+			t.Errorf("%s: err = %v, want validation error", in.Ticker, err)
+		}
+	}
+	// Update: change the ratio, then clear the link.
+	r := "10"
+	u, err := svc.Update(ctx, bdr.ID, UpdateInput{BDRRatio: &r})
+	if err != nil || u.BdrRatio != "10" || !u.UnderlyingAssetID.Valid {
+		t.Fatalf("update ratio: %+v %v", u, err)
+	}
+	zero := int64(0)
+	u, err = svc.Update(ctx, bdr.ID, UpdateInput{UnderlyingAssetID: &zero})
+	if err != nil || u.UnderlyingAssetID.Valid || u.BdrRatio != "" {
+		t.Fatalf("clear: %+v %v", u, err)
+	}
+	if _, err := svc.Update(ctx, b3.ID, UpdateInput{UnderlyingAssetID: &us.ID, BDRRatio: &r}); !errors.Is(err, ErrValidation) {
+		t.Errorf("stock link: %v", err)
+	}
+}

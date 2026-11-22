@@ -26,7 +26,7 @@ func TestSettingsAPI(t *testing.T) {
 		t.Fatalf("get: %d %v", code, r)
 	}
 
-	body := `{"bootstrap_below":"10000","min_order_b3":"450","us_batch_min":"2000"}`
+	body := `{"bootstrap_below":"10000","min_order_b3":"450","us_batch_min":"2000","max_new_positions":2,"us_vehicle":"bdr"}`
 	if code, r, _ = do(t, h, "PUT", "/api/settings/planner", body); code != 200 || r["min_order_b3"] != "450" {
 		t.Fatalf("put: %d %v", code, r)
 	}
@@ -35,9 +35,16 @@ func TestSettingsAPI(t *testing.T) {
 		t.Fatalf("not persisted: %v", got)
 	}
 
-	code, r, _ = do(t, h, "PUT", "/api/settings/planner", `{"bootstrap_below":"10000","min_order_b3":"-5","us_batch_min":"2000"}`)
+	code, r, _ = do(t, h, "PUT", "/api/settings/planner", `{"bootstrap_below":"10000","min_order_b3":"-5","us_batch_min":"2000","max_new_positions":2,"us_vehicle":"bdr"}`)
 	if msg, _ := r["error"].(string); code != 400 || !strings.Contains(msg, "min_order_b3:") {
 		t.Fatalf("validation: %d %v", code, r)
+	}
+	code, r, _ = do(t, h, "PUT", "/api/settings/planner", `{"bootstrap_below":"10000","min_order_b3":"300","us_batch_min":"2000","max_new_positions":2,"us_vehicle":"adr"}`)
+	if msg, _ := r["error"].(string); code != 400 || !strings.Contains(msg, "us_vehicle:") {
+		t.Fatalf("vehicle validation: %d %v", code, r)
+	}
+	if d := planner["defaults"].(map[string]any); d["us_vehicle"] != "bdr" || d["max_new_positions"] != float64(2) {
+		t.Fatalf("planner defaults: %v", d)
 	}
 
 	if code, _, _ = do(t, h, "POST", "/api/settings/planner/reset", ""); code != 204 {

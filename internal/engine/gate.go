@@ -10,14 +10,14 @@ import (
 // Tactical, put the target price in FairValue (and its date in FairValueDate)
 // and the score is computed without the horizon factor.
 type GateInput struct {
-	Ratings         Factors
-	Tactical        bool
-	ThesisBroken    bool // the asset has a thesis whose status is broken; no thesis is fine
-	FairValue       *decimal.Decimal
-	FairValueDate   time.Time
-	Price           decimal.Decimal
-	ActiveCatalyst  bool // non-expired research note flagged opportunity
-	Now             time.Time
+	Ratings        Factors
+	Tactical       bool
+	ThesisBroken   bool // the asset has a thesis whose status is broken; no thesis is fine
+	FairValue      *decimal.Decimal
+	FairValueDate  time.Time
+	Price          decimal.Decimal
+	ActiveCatalyst bool // non-expired research note flagged opportunity
+	Now            time.Time
 }
 
 // GateResult reports each check individually for the UI checklist.

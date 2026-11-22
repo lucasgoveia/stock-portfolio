@@ -189,7 +189,7 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** Update name, sleeve, benchmark, CNPJ or CIK */
+        /** Update name, sleeve, benchmark, CNPJ, CIK or the BDR underlying link */
         patch: operations["updateAsset"];
         trace?: never;
     };
@@ -1715,6 +1715,8 @@ export interface components {
             thesis_check?: boolean;
         };
         Asset: {
+            /** @description BDRs per underlying share; empty when not linked */
+            bdr_ratio: string;
             benchmark: string;
             /** @description SEC CIK (10 digits) used by fundamentals; empty when unset */
             cik: string;
@@ -1734,9 +1736,16 @@ export interface components {
             /** @enum {string} */
             status: "watchlist" | "holding" | "exited";
             ticker: string;
+            /**
+             * Format: int64
+             * @description US asset this BDR represents; its rating, thesis and fair value apply; null when not linked
+             */
+            underlying_asset_id: number | null;
             updated_at: string;
         };
         AssetCreate: {
+            /** @description For a bdr: BDRs per underlying share, for example 1 or 0.1 */
+            bdr_ratio?: string;
             /** @description Defaults from market */
             benchmark?: string;
             /** @description SEC CIK (fundamentals); resolved from the ticker when empty */
@@ -1753,8 +1762,15 @@ export interface components {
             /** @description core (default) or tactical */
             sleeve?: string;
             ticker: string;
+            /**
+             * Format: int64
+             * @description For a bdr: the US asset it represents (needs bdr_ratio)
+             */
+            underlying_asset_id?: number;
         };
         AssetUpdate: {
+            /** @description BDRs per underlying share */
+            bdr_ratio?: string;
             benchmark?: string;
             /** @description Empty string clears */
             cik?: string;
@@ -1762,6 +1778,11 @@ export interface components {
             cnpj?: string;
             name?: string;
             sleeve?: string;
+            /**
+             * Format: int64
+             * @description US asset the bdr represents; 0 clears the link
+             */
+            underlying_asset_id?: number;
         };
         B3Taxes: {
             months: components["schemas"]["TaxMonth"][] | null;
@@ -1874,6 +1895,7 @@ export interface components {
             amount: string;
             dividends: string;
             new_money: string;
+            notes: components["schemas"]["PlanNote"][] | null;
             orders: components["schemas"]["Order"][] | null;
             pending_us_after: string;
             skipped: components["schemas"]["Skip"][] | null;
@@ -2346,6 +2368,7 @@ export interface components {
             text?: string;
         };
         Order: {
+            allocations?: components["schemas"]["USAllocation"][] | null;
             amount: string;
             asset_id: string;
             kind: string;
@@ -2410,13 +2433,28 @@ export interface components {
             /** Format: int64 */
             total: number;
         };
+        PlanNote: {
+            amount: string;
+            code: string;
+            message: string;
+        };
         Planner: {
             /** @description Portfolio value (BRL) below which bootstrap mode applies */
             bootstrap_below: string;
+            /**
+             * Format: int64
+             * @description Most new positions one plan opens (0 for no limit)
+             */
+            max_new_positions: number;
             /** @description Smallest B3 order (BRL); smaller ones are skipped */
             min_order_b3: string;
             /** @description BRL accumulated before a US purchase is proposed */
             us_batch_min: string;
+            /**
+             * @description How US exposure is bought: bdr (the linked BDR on B3 when one exists) or direct (US shares, batched remittance)
+             * @enum {string}
+             */
+            us_vehicle: "bdr" | "direct";
         };
         PortfolioPosition: {
             /** Format: int64 */
@@ -2424,6 +2462,7 @@ export interface components {
             avg_cost: string;
             band: components["schemas"]["PositionStatus"];
             benchmark: string;
+            buy_vehicle: boolean;
             catalyst: boolean;
             cost_brl: string;
             currency: string;
@@ -2432,6 +2471,10 @@ export interface components {
             fair_value_date?: string;
             gate?: components["schemas"]["GateResult"];
             gate_error?: string;
+            /** Format: int64 */
+            group_id: number;
+            group_value_brl: string;
+            group_weight: string;
             kind: string;
             last_sell?: string;
             market: string;
@@ -2449,6 +2492,8 @@ export interface components {
             target?: components["schemas"]["Target"];
             thesis_status?: string;
             ticker: string;
+            /** Format: int64 */
+            underlying_asset_id?: number;
             value_brl: string;
             weight: string;
             yield_on_cost: string;
@@ -2708,6 +2753,7 @@ export interface components {
             updated_at: string;
         };
         Skip: {
+            amount: string;
             asset_id: string;
             reason: string;
         };
@@ -2997,6 +3043,10 @@ export interface components {
             tickers: {
                 [key: string]: string;
             };
+        };
+        USAllocation: {
+            amount: string;
+            asset_id: string;
         };
         Valuation: {
             balance: string;

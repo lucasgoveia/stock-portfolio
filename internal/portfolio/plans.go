@@ -75,13 +75,18 @@ func (s *Service) PlanContribution(ctx context.Context, amount decimal.Decimal) 
 		CashTarget: snap.CashTarget, UndeployedWeight: snap.Undeployed, PendingUS: snap.PendingUS, Bootstrap: snap.Bootstrap,
 	}
 	for _, x := range append(append([]Position(nil), snap.Holdings...), snap.Watchlist...) {
-		if x.Target == nil || x.Price == nil {
+		// One buy candidate per position: the underlying or its BDR (us_vehicle);
+		// the position's value counts both.
+		if x.Target == nil || x.Price == nil || !x.BuyVehicle {
 			continue
 		}
 		pa := engine.PlanAsset{
-			ID: key(x.AssetID), Market: engine.Market(x.Market), Price: x.PriceBRL, ActualValue: x.ValueBRL,
+			ID: key(x.AssetID), Market: engine.Market(x.Market), Price: x.PriceBRL, ActualValue: x.GroupValueBRL,
 			Target: x.Target.Weight, Upper: x.Target.Upper, RampStage: x.RampStage,
 			Tactical: x.Sleeve == assets.SleeveTactical,
+		}
+		if x.Score != nil {
+			pa.Score = *x.Score
 		}
 		if x.Gate != nil {
 			pa.Eligible, pa.Opportunity, pa.Discount, pa.CatalystOnly = x.Gate.Passed, x.Gate.Opportunity, x.Gate.Discount, x.Gate.CatalystOnly
@@ -172,12 +177,25 @@ func (s *Service) trimInput(snap Snapshot, p engine.Params) engine.TrimInput {
 		}
 		return decimal.NewFromInt(1)
 	}
+	// A position held through both an underlying and its BDR is trimmed once:
+	// the larger holding carries the group's weight; the other only exits on a
+	// broken thesis.
+	lead := map[int64]int64{}
+	for _, x := range snap.Holdings {
+		if l, ok := lead[x.GroupID]; !ok || x.ValueBRL.GreaterThan(valueOf(snap.Holdings, l)) {
+			lead[x.GroupID] = x.AssetID
+		}
+	}
 	for _, x := range snap.Holdings {
 		if x.Price == nil || !x.Quantity.IsPositive() {
 			continue
 		}
 		h := engine.TrimHolding{ID: key(x.AssetID), Market: engine.Market(x.Market), Tactical: x.Sleeve == assets.SleeveTactical,
-			Quantity: x.Quantity, Price: x.PriceBRL, ThesisBroken: x.ThesisStatus == thesis.StatusBroken, Score: decimal.Zero}
+			Quantity: x.Quantity, Price: x.PriceBRL, ThesisBroken: x.ThesisStatus == thesis.StatusBroken, Score: decimal.Zero,
+			OtherValue: x.GroupValueBRL.Sub(x.ValueBRL)}
+		if lead[x.GroupID] != x.AssetID && !h.ThesisBroken {
+			continue
+		}
 		if x.Score != nil {
 			h.Score = *x.Score
 		}
@@ -198,7 +216,7 @@ func (s *Service) trimInput(snap Snapshot, p engine.Params) engine.TrimInput {
 		in.Holdings = append(in.Holdings, h)
 	}
 	for _, x := range snap.Watchlist {
-		if x.Gate == nil || !x.Gate.Passed || x.Score == nil || x.Target == nil {
+		if x.Gate == nil || !x.Gate.Passed || x.Score == nil || x.Target == nil || !x.BuyVehicle {
 			continue
 		}
 		stages := decimal.NewFromInt(int64(p.RampStages))
@@ -206,6 +224,15 @@ func (s *Service) trimInput(snap Snapshot, p engine.Params) engine.TrimInput {
 			Upside: x.Gate.Upside, FirstTranche: x.Target.Weight.Mul(snap.TotalValue).Div(stages)})
 	}
 	return in
+}
+
+func valueOf(ps []Position, id int64) decimal.Decimal {
+	for _, x := range ps {
+		if x.AssetID == id {
+			return x.ValueBRL
+		}
+	}
+	return decimal.Zero
 }
 
 // SetPendingUS records the BRL held for the next US remittance.
@@ -311,7 +338,7 @@ func (s *Service) Evaluate(ctx context.Context) error {
 	}
 	for _, x := range append(append([]Position(nil), snap.Holdings...), snap.Watchlist...) {
 		id := x.AssetID
-		if x.Gate != nil && x.Gate.Opportunity {
+		if x.Gate != nil && x.Gate.Opportunity && x.BuyVehicle {
 			if err := up("opportunity", &id, map[string]any{"ticker": x.Ticker, "discount": x.Gate.Discount,
 				"catalyst_only": x.Gate.CatalystOnly}); err != nil {
 				return err

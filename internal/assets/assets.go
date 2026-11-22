@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/shopspring/decimal"
+
 	"github.com/lucasgoveia/stock-portfolio/internal/marketdata"
 	"github.com/lucasgoveia/stock-portfolio/internal/store/db"
 )
@@ -93,6 +95,9 @@ type CreateInput struct {
 	Benchmark string
 	CNPJ      string // optional, B3 companies
 	CIK       string // optional, US companies
+	// UnderlyingAssetID and BDRRatio link a BDR to its US asset (both or neither).
+	UnderlyingAssetID *int64
+	BDRRatio          string
 }
 
 // UpdateInput holds optional field changes. An empty CNPJ or CIK clears it.
@@ -102,6 +107,10 @@ type UpdateInput struct {
 	Benchmark *string
 	CNPJ      *string
 	CIK       *string
+	// UnderlyingAssetID links a BDR to a US asset (0 clears the link). It needs
+	// BDRRatio unless one is already stored.
+	UnderlyingAssetID *int64
+	BDRRatio          *string
 }
 
 // Filter restricts List results; empty fields are ignored.
@@ -174,10 +183,25 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (db.Asset, error) 
 	if err != nil {
 		return db.Asset{}, err
 	}
+	var under sql.NullInt64
+	ratio := ""
+	if in.UnderlyingAssetID != nil && *in.UnderlyingAssetID != 0 || strings.TrimSpace(in.BDRRatio) != "" {
+		var id int64
+		if in.UnderlyingAssetID != nil {
+			id = *in.UnderlyingAssetID
+		}
+		if in.Kind != KindBDR {
+			return db.Asset{}, validationf("only a bdr can have an underlying asset")
+		}
+		if id, ratio, err = s.checkUnderlying(ctx, 0, id, in.BDRRatio); err != nil {
+			return db.Asset{}, err
+		}
+		under = sql.NullInt64{Int64: id, Valid: true}
+	}
 	a, err := s.q.CreateAsset(ctx, db.CreateAssetParams{
 		Ticker: in.Ticker, Name: in.Name, Market: in.Market, Currency: in.Currency,
 		Kind: in.Kind, Sleeve: in.Sleeve, Status: StatusWatchlist, Benchmark: in.Benchmark,
-		Cnpj: cnpj, Cik: cik,
+		Cnpj: cnpj, Cik: cik, UnderlyingAssetID: under, BdrRatio: ratio,
 	})
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
@@ -186,6 +210,33 @@ func (s *Service) Create(ctx context.Context, in CreateInput) (db.Asset, error) 
 		return db.Asset{}, fmt.Errorf("create asset: %w", err)
 	}
 	return a, nil
+}
+
+// checkUnderlying validates a BDR link: the underlying must be another US
+// asset and the ratio a positive decimal (BDRs per underlying share). It
+// returns the id and the normalized ratio.
+func (s *Service) checkUnderlying(ctx context.Context, self, id int64, ratio string) (int64, string, error) {
+	if id <= 0 {
+		return 0, "", validationf("underlying_asset_id is required with bdr_ratio")
+	}
+	if id == self {
+		return 0, "", validationf("an asset cannot be its own underlying")
+	}
+	u, err := s.q.GetAsset(ctx, id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, "", validationf("underlying asset %d does not exist", id)
+	}
+	if err != nil {
+		return 0, "", fmt.Errorf("get underlying: %w", err)
+	}
+	if u.Market != MarketUS {
+		return 0, "", validationf("the underlying of a bdr must be a US asset")
+	}
+	r, err := decimal.NewFromString(strings.TrimSpace(ratio))
+	if err != nil || !r.IsPositive() {
+		return 0, "", validationf("bdr_ratio must be a positive number (BDRs per underlying share)")
+	}
+	return id, r.String(), nil
 }
 
 // Get returns one asset.
@@ -292,6 +343,35 @@ func (s *Service) Update(ctx context.Context, id int64, in UpdateInput) (db.Asse
 			return db.Asset{}, err
 		}
 		cik = &v
+	}
+	link := in.UnderlyingAssetID != nil || in.BDRRatio != nil
+	if link {
+		cur, err := s.Get(ctx, id)
+		if err != nil {
+			return db.Asset{}, err
+		}
+		if cur.Kind != KindBDR {
+			return db.Asset{}, validationf("only a bdr can have an underlying asset")
+		}
+		under, ratio := cur.UnderlyingAssetID, cur.BdrRatio
+		if in.UnderlyingAssetID != nil {
+			under = sql.NullInt64{Int64: *in.UnderlyingAssetID, Valid: *in.UnderlyingAssetID != 0}
+		}
+		if in.BDRRatio != nil {
+			ratio = strings.TrimSpace(*in.BDRRatio)
+		}
+		if under.Valid {
+			uid, r, err := s.checkUnderlying(ctx, id, under.Int64, ratio)
+			if err != nil {
+				return db.Asset{}, err
+			}
+			under, ratio = sql.NullInt64{Int64: uid, Valid: true}, r
+		} else {
+			ratio = ""
+		}
+		if _, err := s.q.SetAssetUnderlying(ctx, db.SetAssetUnderlyingParams{UnderlyingAssetID: under, BdrRatio: ratio, ID: id}); err != nil {
+			return db.Asset{}, fmt.Errorf("link underlying: %w", err)
+		}
 	}
 	a, err := s.q.UpdateAsset(ctx, db.UpdateAssetParams{
 		Name: nullStr(in.Name), Sleeve: nullStr(in.Sleeve), Benchmark: nullStr(in.Benchmark),

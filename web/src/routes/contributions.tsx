@@ -178,6 +178,7 @@ const SKIP_REASON: Record<string, string> = {
   below_min_order: 'below the minimum order',
   below_one_share: 'not enough for one share',
   no_room: 'no room under its target',
+  max_new_positions: 'waits: only a few new positions open per contribution',
 }
 
 function PlanView({ c }: { c: Contribution }) {
@@ -246,10 +247,19 @@ function PlanView({ c }: { c: Contribution }) {
               order={o}
               state={states.get(o.seq)}
               ticker={tickers[o.asset_id] ?? o.asset_id}
+              tickers={tickers}
               editable={editable}
             />
           ))}
         </ol>
+      )}
+
+      {(plan.notes ?? []).length > 0 && (
+        <ul className="text-muted-foreground mt-4 space-y-1 text-sm">
+          {(plan.notes ?? []).map((n) => (
+            <li key={n.code}>{n.message}</li>
+          ))}
+        </ul>
       )}
 
       {(plan.skipped ?? []).length > 0 && (
@@ -273,12 +283,14 @@ function OrderRow({
   order: o,
   state,
   ticker,
+  tickers,
   editable,
 }: {
   c: Contribution
   order: Order
   state?: OrderState
   ticker: string
+  tickers: Record<string, string>
   editable: boolean
 }) {
   const qc = useQueryClient()
@@ -337,6 +349,11 @@ function OrderRow({
             )}
             {o.step && <span className="text-muted-foreground text-xs">{o.step === 'opportunity' ? 'opportunity' : 'underweight'}</span>}
           </div>
+          {(o.allocations ?? []).length > 0 && (
+            <div className="text-muted-foreground text-xs">
+              {(o.allocations ?? []).map((x) => `${tickers[x.asset_id] ?? x.asset_id} ${money(x.amount)}`).join(', ')}
+            </div>
+          )}
           <div className="num text-sm">
             {isBuy ? (
               <>

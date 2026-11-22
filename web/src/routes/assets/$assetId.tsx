@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { createFileRoute, Link, useNavigate } from '@tanstack/react-router'
 import { toast } from 'sonner'
 
+import { BdrPanel } from '@/components/asset/bdr-panel'
 import { AnalystTab } from '@/components/asset/analyst-tab'
 import { FundamentalsTab } from '@/components/asset/fundamentals-tab'
 import { GateChecklist } from '@/components/asset/gate-checklist'
@@ -209,6 +210,7 @@ function Overview({ asset: a, position: p, snapshotError }: { asset: Asset; posi
           <Link to="." search={{ tab: 'valuation' }} className="underline">fair value</Link>.
         </p>
       </Panel>
+      {a.kind === 'bdr' && <BdrPanel asset={a} />}
       {a.sleeve === 'tactical' && <TacticalPanel asset={a} view={p?.tactical} />}
       <Panel title="Position">
         {!p || Number(p.quantity) === 0 ? (

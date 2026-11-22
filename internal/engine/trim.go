@@ -31,6 +31,9 @@ type TrimHolding struct {
 	FairValue    *decimal.Decimal
 	ThesisBroken bool
 	LastSell     *time.Time // most recent sell of this asset
+	// OtherValue is BRL held in the same position through another vehicle (a
+	// US asset and its BDR count as one position); it adds to the weight.
+	OtherValue decimal.Decimal
 }
 
 // Value is quantity x price.
@@ -124,7 +127,7 @@ func fullExit(h TrimHolding, r TrimReason) TrimSuggestion {
 }
 
 func (p Params) weightOf(h TrimHolding, v decimal.Decimal) decimal.Decimal {
-	return h.Value().Div(v)
+	return h.Value().Add(h.OtherValue).Div(v)
 }
 
 // overweightExcess returns the amount basis for an overweight trigger

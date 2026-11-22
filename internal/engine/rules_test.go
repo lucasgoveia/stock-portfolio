@@ -74,7 +74,7 @@ func TestEvaluateGate(t *testing.T) {
 	now := day(2026, 11, 18)
 	base := func() GateInput {
 		return GateInput{
-			Ratings: Factors{3, 3, 3, 3, 3},
+			Ratings:   Factors{3, 3, 3, 3, 3},
 			FairValue: dp("100"), FairValueDate: day(2026, 1, 1), Price: d("90"), Now: now,
 		}
 	}
@@ -241,8 +241,12 @@ func TestPlanMinOrderRollover(t *testing.T) {
 	}
 	pl := p.PlanContribution(in)
 	assertPlanBounded(t, in, pl)
-	if len(pl.Skipped) != 1 || pl.Skipped[0] != (Skip{"Y", "below_min_order"}) {
+	if len(pl.Skipped) != 1 || pl.Skipped[0].AssetID != "Y" || pl.Skipped[0].Reason != ReasonBelowMinOrder {
 		t.Fatalf("skipped = %+v", pl.Skipped)
+	}
+	eqD(t, "skipped amount", pl.Skipped[0].Amount, d("200"))
+	if len(pl.Notes) != 1 || pl.Notes[0].Code != ReasonBelowMinOrder {
+		t.Fatalf("notes = %+v", pl.Notes)
 	}
 	// X 600 + cash 40; Y's 200 is below R$300 and rolls on, nothing else wants it.
 	eqD(t, "placed", orderSum(pl), d("640"))
