@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -540,6 +541,61 @@ func TestSubmitAnalysisDraftFromMCP(t *testing.T) {
 	h.fail("submit_analysis", unknown)
 	if runs, _ := h.an.List(ctx, h.petr.ID); len(runs) != 1 {
 		t.Errorf("runs = %d, only the valid draft should exist", len(runs))
+	}
+}
+
+func TestSubmitAnalysisDCFBase(t *testing.T) {
+	h := newHarness(t)
+	ctx := context.Background()
+	// The schema carries an optional dcf_base object.
+	tools, err := h.cs.ListTools(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tl := range tools.Tools {
+		if tl.Name != "submit_analysis" && tl.Name != "submit_candidate" {
+			continue
+		}
+		raw, _ := json.Marshal(tl.InputSchema)
+		var sch struct {
+			Properties map[string]struct {
+				Properties map[string]any `json:"properties"`
+				Required   []string       `json:"required"`
+			} `json:"properties"`
+			Required []string `json:"required"`
+		}
+		if err := json.Unmarshal(raw, &sch); err != nil {
+			t.Fatal(err)
+		}
+		b, ok := sch.Properties["dcf_base"]
+		if !ok || len(b.Properties) != 3 || len(b.Required) != 3 {
+			t.Errorf("%s dcf_base schema = %+v", tl.Name, b)
+		}
+		if slices.Contains(sch.Required, "dcf_base") {
+			t.Errorf("%s: dcf_base must be optional", tl.Name)
+		}
+	}
+	earnings := func() map[string]any {
+		args := sampleOutput()
+		args["asset"], args["model"] = "PETR4", "m"
+		for _, k := range []string{"bear", "base", "bull"} {
+			sc := args["scenarios"].(map[string]any)[k].(map[string]any)
+			sc["basis"], sc["start_margin"], sc["terminal_margin"] = "net_pe", 1, 1
+		}
+		return args
+	}
+	if msg := h.fail("submit_analysis", earnings()); !strings.Contains(msg, "dcf_base") || !strings.Contains(msg, "net income") {
+		t.Errorf("margin 1 without dcf_base: %s", msg)
+	}
+	args := earnings()
+	args["dcf_base"] = map[string]any{"base_revenue": 40, "net_debt": 0, "shares": 13}
+	out := jsonMap(t, h.ok("submit_analysis", args)[0])
+	run, err := h.an.Get(ctx, int64(out["run_id"].(float64)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if run.Output.DCFBase == nil || run.Output.DCFBase.BaseRevenue.String() != "40" || run.Output.DCFBase.Shares.String() != "13" {
+		t.Errorf("stored dcf_base = %+v", run.Output.DCFBase)
 	}
 }
 

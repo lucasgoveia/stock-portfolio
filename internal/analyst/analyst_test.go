@@ -433,9 +433,21 @@ func TestApproveToFairValues(t *testing.T) {
 	if srcs := stored.DCF.Initiatives[0].Sources; len(srcs) != 1 || srcs[0] != "https://sec.test/10k.htm" {
 		t.Errorf("initiative sources = %v (the unprovided URL must be dropped)", srcs)
 	}
-	man, err := e.vals.Get(ctx, *got.Approvals.RangeFairValue)
-	if err != nil || man.Method != valuation.MethodManual || man.ValuePerShare.String() != "180" || man.Currency != "USD" {
-		t.Fatalf("range fv = %+v %v", man, err)
+	// One version only: the range lives in the DCF version's inputs.
+	if *got.Approvals.RangeFairValue != *got.Approvals.DCFFairValueID {
+		t.Errorf("range fv id %d != dcf id %d", *got.Approvals.RangeFairValue, *got.Approvals.DCFFairValueID)
+	}
+	var rng struct {
+		R struct{ Low, High, Currency string } `json:"fair_value_range"`
+	}
+	if err := json.Unmarshal(dcf.Inputs, &rng); err != nil || rng.R.Low != "150" || rng.R.High != "210" || rng.R.Currency != "USD" {
+		t.Errorf("range in inputs = %+v %v", rng, err)
+	}
+	if !strings.Contains(dcf.Note, "150") {
+		t.Errorf("note = %q", dcf.Note)
+	}
+	if list, _ := e.vals.List(ctx, e.us); len(list) != 1 {
+		t.Errorf("versions = %d, want 1", len(list))
 	}
 	if _, err := e.svc.Approve(ctx, run.ID, ApproveInput{Scenarios: true}); !errors.Is(err, ErrConflict) {
 		t.Errorf("second dcf approve err = %v", err)
@@ -503,5 +515,121 @@ func TestExcerptKeepsMDA(t *testing.T) {
 	got := excerpt(toc + body)
 	if !strings.Contains(got, "REAL MDA CONTENT") || !strings.Contains(got, "[...]") {
 		t.Errorf("MD&A section lost: %d chars", len(got))
+	}
+}
+
+// submitJSON stores an MCP-style draft built from goodOutput with edits.
+func (e *env) submitJSON(t *testing.T, asset int64, edit func(m map[string]any)) (Run, error) {
+	t.Helper()
+	var m map[string]any
+	if err := json.Unmarshal([]byte(goodOutput), &m); err != nil {
+		t.Fatal(err)
+	}
+	if edit != nil {
+		edit(m)
+	}
+	raw, _ := json.Marshal(m)
+	var out Output
+	if err := json.Unmarshal(raw, &out); err != nil {
+		t.Fatal(err)
+	}
+	return e.svc.Submit(context.Background(), asset, out, Provenance{MCP: MCPProvenance{Model: "m"}}, m["scenarios"] == nil)
+}
+
+func earningsMode(m map[string]any) {
+	for _, k := range []string{"bear", "base", "bull"} {
+		sc := m["scenarios"].(map[string]any)[k].(map[string]any)
+		sc["start_margin"], sc["terminal_margin"] = 1, 1
+	}
+}
+
+func TestSubmitRejectsFullMarginWithoutDCFBase(t *testing.T) {
+	e := setup(t, true)
+	_, err := e.submitJSON(t, e.us, earningsMode)
+	if !errors.Is(err, ErrValidation) || !strings.Contains(err.Error(), "dcf_base") {
+		t.Fatalf("err = %v", err)
+	}
+	// Only the start margin at 1 is enough to ask for it.
+	_, err = e.submitJSON(t, e.us, func(m map[string]any) {
+		m["scenarios"].(map[string]any)["base"].(map[string]any)["start_margin"] = 0.96
+	})
+	if !errors.Is(err, ErrValidation) {
+		t.Errorf("start margin err = %v", err)
+	}
+	// Margins above 1 stay invalid.
+	_, err = e.submitJSON(t, e.us, func(m map[string]any) {
+		earningsMode(m)
+		m["dcf_base"] = map[string]any{"base_revenue": 100, "net_debt": 0, "shares": 10}
+		m["scenarios"].(map[string]any)["bull"].(map[string]any)["terminal_margin"] = 1.2
+	})
+	if !errors.Is(err, ErrValidation) {
+		t.Errorf("margin > 1 err = %v", err)
+	}
+	// With dcf_base it is accepted.
+	if _, err := e.submitJSON(t, e.us, func(m map[string]any) {
+		earningsMode(m)
+		m["dcf_base"] = map[string]any{"base_revenue": 100, "net_debt": 0, "shares": 10}
+	}); err != nil {
+		t.Fatalf("with dcf_base: %v", err)
+	}
+	// A non-positive base is refused.
+	if _, err := e.submitJSON(t, e.us, func(m map[string]any) {
+		m["dcf_base"] = map[string]any{"base_revenue": 0, "net_debt": 0, "shares": 10}
+	}); !errors.Is(err, ErrValidation) {
+		t.Errorf("zero base err = %v", err)
+	}
+}
+
+func TestApproveUsesDCFBase(t *testing.T) {
+	ctx := context.Background()
+	e := setup(t, true)
+	run, err := e.submitJSON(t, e.us, func(m map[string]any) {
+		earningsMode(m)
+		m["initiatives"] = []any{}
+		m["dcf_base"] = map[string]any{"base_revenue": 1000, "net_debt": 5, "shares": 100}
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := e.svc.Approve(ctx, run.ID, ApproveInput{Scenarios: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fv, err := e.vals.Get(ctx, *got.Approvals.DCFFairValueID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var stored struct {
+		DCF engine.DCFInput `json:"dcf"`
+	}
+	if err := json.Unmarshal(fv.Inputs, &stored); err != nil {
+		t.Fatal(err)
+	}
+	d := stored.DCF
+	if d.BaseRevenue.String() != "1000" || d.NetDebt.String() != "5" || d.Shares.String() != "100" {
+		t.Errorf("stored base = %s %s %s (the stored fundamentals are 400000 / 15000)", d.BaseRevenue, d.NetDebt, d.Shares)
+	}
+}
+
+func TestApproveRangeOnlyWithoutScenarios(t *testing.T) {
+	ctx := context.Background()
+	e := setup(t, true)
+	run, err := e.submitJSON(t, e.us, func(m map[string]any) {
+		m["scenarios"] = nil
+		m["initiatives"] = []any{}
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := e.svc.Approve(ctx, run.ID, ApproveInput{FairValueRange: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Approvals.DCFFairValueID != nil || got.Approvals.RangeFairValue == nil {
+		t.Fatalf("approvals = %+v", got.Approvals)
+	}
+	man, err := e.vals.Get(ctx, *got.Approvals.RangeFairValue)
+	if err != nil || man.Method != valuation.MethodManual || man.ValuePerShare.String() != "180" || man.Currency != "USD" {
+		t.Fatalf("range fv = %+v %v", man, err)
 	}
 }

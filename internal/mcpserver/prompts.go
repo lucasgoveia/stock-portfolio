@@ -36,8 +36,8 @@ Workflow:
 1. get_asset_context(ticker=%[1]q): the position, rating, thesis and break conditions, fair value versions, fundamentals, expected versus actual and notes.
 2. list_filings(ticker=%[1]q) and read_filing for the latest annual report, the latest quarterly reports and the recent announcements. Read in pages (offset/length) and stop when you have what you need.
 3. Use your own web search and fetch for what the app does not serve (investor relations pages, earnings-call transcripts, news, industry data). Cite every URL you rely on.
-4. Test your scenarios with preview_scenario_dcf(asset=%[1]q, ...) and check what the market already prices in with reverse_dcf(asset=%[1]q, ...). Adjust until they are consistent.
-5. Call submit_analysis with the structured result (asset=%[1]q and your model name). Tell the investor the draft id and where to review it: the AI analyst tab of %[1]s.`, ticker, rules())), nil
+4. Test your scenarios with preview_scenario_dcf(asset=%[1]q, ...) and check what the market already prices in with reverse_dcf(asset=%[1]q, ...). Adjust until they are consistent. If you model earnings directly (margin 1, e.g. a holding company or a bank), pass base_revenue = the net income to preview_scenario_dcf and send the same figures as dcf_base {base_revenue, net_debt, shares} in the submission.
+5. Call submit_analysis with the structured result (asset=%[1]q, your model name and dcf_base when you did not use the stored revenue). Tell the investor the draft id and where to review it: the AI analyst tab of %[1]s.`, ticker, rules())), nil
 	})
 	s.srv.AddPrompt(&mcp.Prompt{
 		Name: "research_ticker", Title: "Research a new ticker",
@@ -73,7 +73,7 @@ Workflow:
 Workflow:
 1. lookup_company(ticker=%[1]q, market=%[2]q) to confirm the identity. The app limits how many new symbols can be looked up per day.
 2. get_financials, list_filings and read_filing (the latest annual report and quarterlies) for the company, using the same ticker, market and cnpj. Use your own web search and fetch for the business model, competitors, market size, earnings calls and news. Cite every URL.
-3. Draft bear/base/bull scenarios and test them with preview_scenario_dcf (pass base_revenue, net_debt and shares from the financials) and reverse_dcf.
+3. Draft bear/base/bull scenarios and test them with preview_scenario_dcf (pass base_revenue, net_debt and shares from the financials; when you model earnings directly with margin 1, base_revenue is the net income and you also send it as dcf_base) and reverse_dcf.
 4. Call submit_candidate with the ticker, market, CNPJ or CIK, a research note and, when you can support them, the scenarios, initiatives and fair value range (and your model name). The investor accepts or rejects it on the Watchlist page.`, ticker, market, id, rules())), nil
 	})
 	s.srv.AddPrompt(&mcp.Prompt{

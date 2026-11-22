@@ -596,7 +596,7 @@
             ]
           },
           "fair_value_range": {
-            "description": "Create a manual fair value version at the range midpoint",
+            "description": "Keep the fair value range: stored with the scenario DCF version when the run has scenarios, otherwise a manual version at the midpoint",
             "type": "boolean"
           },
           "market_size": {
@@ -1250,6 +1250,7 @@
         "additionalProperties": false,
         "properties": {
           "base_revenue": {
+            "description": "Year-0 base the margins apply to; the net income when earnings are modeled directly (margin 1)",
             "type": "string"
           },
           "net_debt": {
@@ -2923,6 +2924,9 @@
               "array",
               "null"
             ]
+          },
+          "dcf_base": {
+            "$ref": "#/components/schemas/DCFBase"
           },
           "fair_value_range": {
             "$ref": "#/components/schemas/FairValueRange"

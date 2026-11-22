@@ -17,6 +17,10 @@ func obj(props map[string]any, required ...string) map[string]any {
 
 func str(desc string) map[string]any { return map[string]any{"type": "string", "description": desc} }
 func num(desc string) map[string]any { return map[string]any{"type": "number", "description": desc} }
+func withDesc(m map[string]any, desc string) map[string]any {
+	m["description"] = desc
+	return m
+}
 func arr(items any, desc string) map[string]any {
 	return map[string]any{"type": "array", "items": items, "description": desc}
 }
@@ -76,6 +80,11 @@ func outputSchema() map[string]any {
 			"high":     num("High fair value per share, not below low"),
 			"currency": map[string]any{"type": "string", "enum": []string{"BRL", "USD"}},
 		}, "low", "high", "currency"),
+		"dcf_base": withDesc(obj(map[string]any{
+			"base_revenue": num("The year-0 figure the margins apply to, in the asset's currency, positive. Use the net income when you model earnings directly with a margin of 1; must equal the base_revenue passed to preview_scenario_dcf"),
+			"net_debt":     num("Net debt, subtracted for ebit_ev scenarios (0 when none); same as passed to preview_scenario_dcf"),
+			"shares":       num("Shares outstanding, positive; same as passed to preview_scenario_dcf"),
+		}, "base_revenue", "net_debt", "shares"), "Optional. The base the scenarios were modeled on (what you passed to preview_scenario_dcf); when omitted the app uses its stored revenue, net debt and shares. REQUIRED when any margin is 0.95 or more (earnings modeled directly, base_revenue = net income)"),
 		"thesis_check": arr(obj(map[string]any{
 			"condition": str("The break condition, copied from the input"),
 			"status":    map[string]any{"type": "string", "enum": []string{CheckHolds, CheckAtRisk, CheckBroken}},
@@ -123,6 +132,25 @@ func (o *Output) hasScenarios() bool {
 	return len(o.Scenarios.Bear.RevenueGrowth)+len(o.Scenarios.Base.RevenueGrowth)+len(o.Scenarios.Bull.RevenueGrowth) > 0
 }
 
+// earningsMarginThreshold is the margin from which a scenario is read as
+// modeling earnings directly (margin 1 on a net income "revenue" line).
+var earningsMarginThreshold = decimal.RequireFromString("0.95")
+
+// earningsMargin returns the first scenario whose start or terminal margin is
+// at or above the threshold.
+func (o *Output) earningsMargin() (string, bool) {
+	for _, p := range []struct {
+		name string
+		s    ScenarioDraft
+	}{{engine.ScenarioBear, o.Scenarios.Bear}, {engine.ScenarioBase, o.Scenarios.Base}, {engine.ScenarioBull, o.Scenarios.Bull}} {
+		if p.s.TerminalMargin.GreaterThanOrEqual(earningsMarginThreshold) ||
+			p.s.StartMargin != nil && p.s.StartMargin.GreaterThanOrEqual(earningsMarginThreshold) {
+			return p.name, true
+		}
+	}
+	return "", false
+}
+
 func (o *Output) hasRange() bool {
 	r := o.FairValueRange
 	return !r.Low.IsZero() || !r.High.IsZero() || r.Currency != ""
@@ -156,6 +184,13 @@ func (o *Output) check(full bool) error {
 		dcf.Initiatives = o.Initiatives
 		if err := dcf.Validate(); err != nil {
 			return invalidf("%v", err)
+		}
+		if o.DCFBase != nil {
+			if !o.DCFBase.BaseRevenue.IsPositive() || !o.DCFBase.Shares.IsPositive() {
+				return invalidf("dcf_base needs a positive base_revenue and shares")
+			}
+		} else if name, ok := o.earningsMargin(); ok {
+			return invalidf("%s has a margin of %s or more, which means earnings are modeled directly: pass dcf_base {base_revenue, net_debt, shares} with base_revenue = the net income used (the same figures given to preview_scenario_dcf), otherwise the stored revenue would be used and the fair value overstated", name, earningsMarginThreshold)
 		}
 		for i, sc := range dcf.Scenarios {
 			if sc.Basis == "" {
