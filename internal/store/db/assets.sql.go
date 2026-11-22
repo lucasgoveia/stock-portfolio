@@ -11,22 +11,24 @@ import (
 )
 
 const createAsset = `-- name: CreateAsset :one
-INSERT INTO assets (ticker, name, market, currency, kind, sleeve, status, benchmark, cnpj, cik)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-RETURNING id, ticker, name, market, currency, kind, sleeve, status, benchmark, cnpj, cik, created_at, updated_at
+INSERT INTO assets (ticker, name, market, currency, kind, sleeve, status, benchmark, cnpj, cik, underlying_asset_id, bdr_ratio)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+RETURNING id, ticker, name, market, currency, kind, sleeve, status, benchmark, cnpj, cik, underlying_asset_id, bdr_ratio, created_at, updated_at
 `
 
 type CreateAssetParams struct {
-	Ticker    string
-	Name      string
-	Market    string
-	Currency  string
-	Kind      string
-	Sleeve    string
-	Status    string
-	Benchmark string
-	Cnpj      string
-	Cik       string
+	Ticker            string
+	Name              string
+	Market            string
+	Currency          string
+	Kind              string
+	Sleeve            string
+	Status            string
+	Benchmark         string
+	Cnpj              string
+	Cik               string
+	UnderlyingAssetID sql.NullInt64
+	BdrRatio          string
 }
 
 func (q *Queries) CreateAsset(ctx context.Context, arg CreateAssetParams) (Asset, error) {
@@ -41,6 +43,8 @@ func (q *Queries) CreateAsset(ctx context.Context, arg CreateAssetParams) (Asset
 		arg.Benchmark,
 		arg.Cnpj,
 		arg.Cik,
+		arg.UnderlyingAssetID,
+		arg.BdrRatio,
 	)
 	var i Asset
 	err := row.Scan(
@@ -55,6 +59,8 @@ func (q *Queries) CreateAsset(ctx context.Context, arg CreateAssetParams) (Asset
 		&i.Benchmark,
 		&i.Cnpj,
 		&i.Cik,
+		&i.UnderlyingAssetID,
+		&i.BdrRatio,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -62,7 +68,7 @@ func (q *Queries) CreateAsset(ctx context.Context, arg CreateAssetParams) (Asset
 }
 
 const getAsset = `-- name: GetAsset :one
-SELECT id, ticker, name, market, currency, kind, sleeve, status, benchmark, cnpj, cik, created_at, updated_at FROM assets WHERE id = ?
+SELECT id, ticker, name, market, currency, kind, sleeve, status, benchmark, cnpj, cik, underlying_asset_id, bdr_ratio, created_at, updated_at FROM assets WHERE id = ?
 `
 
 func (q *Queries) GetAsset(ctx context.Context, id int64) (Asset, error) {
@@ -80,6 +86,8 @@ func (q *Queries) GetAsset(ctx context.Context, id int64) (Asset, error) {
 		&i.Benchmark,
 		&i.Cnpj,
 		&i.Cik,
+		&i.UnderlyingAssetID,
+		&i.BdrRatio,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -87,7 +95,7 @@ func (q *Queries) GetAsset(ctx context.Context, id int64) (Asset, error) {
 }
 
 const listAssets = `-- name: ListAssets :many
-SELECT id, ticker, name, market, currency, kind, sleeve, status, benchmark, cnpj, cik, created_at, updated_at FROM assets
+SELECT id, ticker, name, market, currency, kind, sleeve, status, benchmark, cnpj, cik, underlying_asset_id, bdr_ratio, created_at, updated_at FROM assets
 WHERE (?1 IS NULL OR status = ?1)
   AND (?2 IS NULL OR sleeve = ?2)
   AND (?3 IS NULL OR market = ?3)
@@ -121,6 +129,8 @@ func (q *Queries) ListAssets(ctx context.Context, arg ListAssetsParams) ([]Asset
 			&i.Benchmark,
 			&i.Cnpj,
 			&i.Cik,
+			&i.UnderlyingAssetID,
+			&i.BdrRatio,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -137,6 +147,42 @@ func (q *Queries) ListAssets(ctx context.Context, arg ListAssetsParams) ([]Asset
 	return items, nil
 }
 
+const setAssetUnderlying = `-- name: SetAssetUnderlying :one
+UPDATE assets SET underlying_asset_id = ?1, bdr_ratio = ?2,
+    updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+WHERE id = ?3
+RETURNING id, ticker, name, market, currency, kind, sleeve, status, benchmark, cnpj, cik, underlying_asset_id, bdr_ratio, created_at, updated_at
+`
+
+type SetAssetUnderlyingParams struct {
+	UnderlyingAssetID sql.NullInt64
+	BdrRatio          string
+	ID                int64
+}
+
+func (q *Queries) SetAssetUnderlying(ctx context.Context, arg SetAssetUnderlyingParams) (Asset, error) {
+	row := q.db.QueryRowContext(ctx, setAssetUnderlying, arg.UnderlyingAssetID, arg.BdrRatio, arg.ID)
+	var i Asset
+	err := row.Scan(
+		&i.ID,
+		&i.Ticker,
+		&i.Name,
+		&i.Market,
+		&i.Currency,
+		&i.Kind,
+		&i.Sleeve,
+		&i.Status,
+		&i.Benchmark,
+		&i.Cnpj,
+		&i.Cik,
+		&i.UnderlyingAssetID,
+		&i.BdrRatio,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const updateAsset = `-- name: UpdateAsset :one
 UPDATE assets SET
     name = COALESCE(?1, name),
@@ -146,7 +192,7 @@ UPDATE assets SET
     cik = COALESCE(?5, cik),
     updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
 WHERE id = ?6
-RETURNING id, ticker, name, market, currency, kind, sleeve, status, benchmark, cnpj, cik, created_at, updated_at
+RETURNING id, ticker, name, market, currency, kind, sleeve, status, benchmark, cnpj, cik, underlying_asset_id, bdr_ratio, created_at, updated_at
 `
 
 type UpdateAssetParams struct {
@@ -180,6 +226,8 @@ func (q *Queries) UpdateAsset(ctx context.Context, arg UpdateAssetParams) (Asset
 		&i.Benchmark,
 		&i.Cnpj,
 		&i.Cik,
+		&i.UnderlyingAssetID,
+		&i.BdrRatio,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -189,7 +237,7 @@ func (q *Queries) UpdateAsset(ctx context.Context, arg UpdateAssetParams) (Asset
 const updateAssetStatus = `-- name: UpdateAssetStatus :one
 UPDATE assets SET status = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
 WHERE id = ?
-RETURNING id, ticker, name, market, currency, kind, sleeve, status, benchmark, cnpj, cik, created_at, updated_at
+RETURNING id, ticker, name, market, currency, kind, sleeve, status, benchmark, cnpj, cik, underlying_asset_id, bdr_ratio, created_at, updated_at
 `
 
 type UpdateAssetStatusParams struct {
@@ -212,6 +260,8 @@ func (q *Queries) UpdateAssetStatus(ctx context.Context, arg UpdateAssetStatusPa
 		&i.Benchmark,
 		&i.Cnpj,
 		&i.Cik,
+		&i.UnderlyingAssetID,
+		&i.BdrRatio,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

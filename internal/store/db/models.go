@@ -38,19 +38,21 @@ type AnalystRun struct {
 }
 
 type Asset struct {
-	ID        int64
-	Ticker    string
-	Name      string
-	Market    string
-	Currency  string
-	Kind      string
-	Sleeve    string
-	Status    string
-	Benchmark string
-	Cnpj      string
-	Cik       string
-	CreatedAt string
-	UpdatedAt string
+	ID                int64
+	Ticker            string
+	Name              string
+	Market            string
+	Currency          string
+	Kind              string
+	Sleeve            string
+	Status            string
+	Benchmark         string
+	Cnpj              string
+	Cik               string
+	UnderlyingAssetID sql.NullInt64
+	BdrRatio          string
+	CreatedAt         string
+	UpdatedAt         string
 }
 
 type AssetBeta struct {

@@ -33,6 +33,7 @@ func roundSnapshot(s *Snapshot) {
 			r2(&p.CostBRL)
 			r2(&p.DividendsTTM)
 			r2(&p.ValueBRL)
+			r2(&p.GroupValueBRL)
 			if p.Tactical != nil {
 				r2(&p.Tactical.SuggestedValueBRL)
 			}

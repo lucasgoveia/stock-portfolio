@@ -59,6 +59,8 @@ const PLANNER_FIELDS: FieldDef[] = [
   { key: 'bootstrap_below', label: 'Bootstrap below', kind: 'decimal', unit: 'R$', hint: 'Portfolio value under which bootstrap rules apply.' },
   { key: 'min_order_b3', label: 'Minimum B3 order', kind: 'decimal', unit: 'R$', hint: 'Smaller orders are skipped and the money rolls on.' },
   { key: 'us_batch_min', label: 'US batch', kind: 'decimal', unit: 'R$', hint: 'BRL accumulated before a US purchase is proposed.' },
+  { key: 'max_new_positions', label: 'New positions per plan', kind: 'int', hint: 'Most positions one contribution opens (0 for no limit).' },
+  { key: 'us_vehicle', label: 'US vehicle', kind: 'text', hint: 'bdr buys the linked BDR on B3 when one exists; direct buys US shares through a batched remittance.' },
 ]
 
 const TAX_FIELDS: FieldDef[] = [

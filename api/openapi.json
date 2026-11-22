@@ -621,6 +621,10 @@
       "Asset": {
         "additionalProperties": false,
         "properties": {
+          "bdr_ratio": {
+            "description": "BDRs per underlying share; empty when not linked",
+            "type": "string"
+          },
           "benchmark": {
             "type": "string"
           },
@@ -677,6 +681,14 @@
           "ticker": {
             "type": "string"
           },
+          "underlying_asset_id": {
+            "description": "US asset this BDR represents; its rating, thesis and fair value apply; null when not linked",
+            "format": "int64",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
           "updated_at": {
             "type": "string"
           }
@@ -693,6 +705,8 @@
           "benchmark",
           "cnpj",
           "cik",
+          "underlying_asset_id",
+          "bdr_ratio",
           "created_at",
           "updated_at"
         ],
@@ -701,6 +715,10 @@
       "AssetCreate": {
         "additionalProperties": false,
         "properties": {
+          "bdr_ratio": {
+            "description": "For a bdr: BDRs per underlying share, for example 1 or 0.1",
+            "type": "string"
+          },
           "benchmark": {
             "description": "Defaults from market",
             "type": "string"
@@ -734,6 +752,11 @@
           },
           "ticker": {
             "type": "string"
+          },
+          "underlying_asset_id": {
+            "description": "For a bdr: the US asset it represents (needs bdr_ratio)",
+            "format": "int64",
+            "type": "integer"
           }
         },
         "required": [
@@ -746,6 +769,10 @@
       "AssetUpdate": {
         "additionalProperties": false,
         "properties": {
+          "bdr_ratio": {
+            "description": "BDRs per underlying share",
+            "type": "string"
+          },
           "benchmark": {
             "type": "string"
           },
@@ -762,6 +789,11 @@
           },
           "sleeve": {
             "type": "string"
+          },
+          "underlying_asset_id": {
+            "description": "US asset the bdr represents; 0 clears the link",
+            "format": "int64",
+            "type": "integer"
           }
         },
         "type": "object"
@@ -1147,6 +1179,15 @@
           "new_money": {
             "type": "string"
           },
+          "notes": {
+            "items": {
+              "$ref": "#/components/schemas/PlanNote"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
           "orders": {
             "items": {
               "$ref": "#/components/schemas/Order"
@@ -1186,7 +1227,8 @@
           "new_money",
           "unallocated",
           "pending_us_after",
-          "skipped"
+          "skipped",
+          "notes"
         ],
         "type": "object"
       },
@@ -2818,6 +2860,15 @@
       "Order": {
         "additionalProperties": false,
         "properties": {
+          "allocations": {
+            "items": {
+              "$ref": "#/components/schemas/USAllocation"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
           "amount": {
             "type": "string"
           },
@@ -3043,12 +3094,37 @@
         ],
         "type": "object"
       },
+      "PlanNote": {
+        "additionalProperties": false,
+        "properties": {
+          "amount": {
+            "type": "string"
+          },
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message",
+          "amount"
+        ],
+        "type": "object"
+      },
       "Planner": {
         "additionalProperties": false,
         "properties": {
           "bootstrap_below": {
             "description": "Portfolio value (BRL) below which bootstrap mode applies",
             "type": "string"
+          },
+          "max_new_positions": {
+            "description": "Most new positions one plan opens (0 for no limit)",
+            "format": "int64",
+            "type": "integer"
           },
           "min_order_b3": {
             "description": "Smallest B3 order (BRL); smaller ones are skipped",
@@ -3057,12 +3133,22 @@
           "us_batch_min": {
             "description": "BRL accumulated before a US purchase is proposed",
             "type": "string"
+          },
+          "us_vehicle": {
+            "description": "How US exposure is bought: bdr (the linked BDR on B3 when one exists) or direct (US shares, batched remittance)",
+            "enum": [
+              "bdr",
+              "direct"
+            ],
+            "type": "string"
           }
         },
         "required": [
           "bootstrap_below",
           "min_order_b3",
-          "us_batch_min"
+          "us_batch_min",
+          "max_new_positions",
+          "us_vehicle"
         ],
         "type": "object"
       },
@@ -3081,6 +3167,9 @@
           },
           "benchmark": {
             "type": "string"
+          },
+          "buy_vehicle": {
+            "type": "boolean"
           },
           "catalyst": {
             "type": "boolean"
@@ -3107,6 +3196,16 @@
             "$ref": "#/components/schemas/GateResult"
           },
           "gate_error": {
+            "type": "string"
+          },
+          "group_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "group_value_brl": {
+            "type": "string"
+          },
+          "group_weight": {
             "type": "string"
           },
           "kind": {
@@ -3164,6 +3263,10 @@
           "ticker": {
             "type": "string"
           },
+          "underlying_asset_id": {
+            "format": "int64",
+            "type": "integer"
+          },
           "value_brl": {
             "type": "string"
           },
@@ -3192,6 +3295,10 @@
           "price_brl",
           "value_brl",
           "weight",
+          "group_id",
+          "group_value_brl",
+          "group_weight",
+          "buy_vehicle",
           "score",
           "fair_value",
           "overvalued",
@@ -4084,6 +4191,9 @@
       "Skip": {
         "additionalProperties": false,
         "properties": {
+          "amount": {
+            "type": "string"
+          },
           "asset_id": {
             "type": "string"
           },
@@ -4093,7 +4203,8 @@
         },
         "required": [
           "asset_id",
-          "reason"
+          "reason",
+          "amount"
         ],
         "type": "object"
       },
@@ -5188,6 +5299,22 @@
         ],
         "type": "object"
       },
+      "USAllocation": {
+        "additionalProperties": false,
+        "properties": {
+          "amount": {
+            "type": "string"
+          },
+          "asset_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "asset_id",
+          "amount"
+        ],
+        "type": "object"
+      },
       "Valuation": {
         "additionalProperties": false,
         "properties": {
@@ -5923,7 +6050,7 @@
             "description": "Error"
           }
         },
-        "summary": "Update name, sleeve, benchmark, CNPJ or CIK",
+        "summary": "Update name, sleeve, benchmark, CNPJ, CIK or the BDR underlying link",
         "tags": [
           "assets"
         ]

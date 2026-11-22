@@ -212,3 +212,19 @@ func TestScanCotahistZipWithoutTxt(t *testing.T) {
 }
 
 var _ = time.UTC
+
+// BDRs trade in the lot market (010) under BDI 34, so the ticker filter picks
+// them up like any stock: a linked BDR gets its price with no special case.
+func TestParseCotahistBDR(t *testing.T) {
+	recs, err := ParseCotahist(context.Background(), bytes.NewReader(fixture(t, "cotahist", "COTAHIST_sample.TXT")), LotFilter("MACY34"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(recs) != 1 {
+		t.Fatalf("got %d records, want 1", len(recs))
+	}
+	if r := recs[0]; r.Ticker != "MACY34" || r.Market != MarketLot || r.BDI != "34" {
+		t.Errorf("bad BDR record: %+v", r)
+	}
+	dec(t, recs[0].Close, "136.77")
+}

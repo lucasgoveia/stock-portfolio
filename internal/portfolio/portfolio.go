@@ -112,6 +112,20 @@ type Position struct {
 	ValueBRL     decimal.Decimal  `json:"value_brl"`
 	Weight       decimal.Decimal  `json:"weight"`
 
+	// UnderlyingAssetID is set on a BDR linked to a US asset: its rating,
+	// thesis, fair value (converted with the ratio and USD/BRL) and catalyst
+	// come from that asset. GroupID is the position both belong to (the
+	// underlying's id, or the asset's own); targets, bands and weights count
+	// the whole group as one position.
+	UnderlyingAssetID *int64 `json:"underlying_asset_id,omitempty"`
+	GroupID           int64  `json:"group_id"`
+	// GroupValueBRL and GroupWeight add up the underlying and its BDR.
+	GroupValueBRL decimal.Decimal `json:"group_value_brl"`
+	GroupWeight   decimal.Decimal `json:"group_weight"`
+	// BuyVehicle marks the asset the planner buys for its group, following the
+	// us_vehicle setting.
+	BuyVehicle bool `json:"buy_vehicle"`
+
 	Score         *decimal.Decimal `json:"score"`
 	FairValue     *decimal.Decimal `json:"fair_value"`
 	FairValueDate string           `json:"fair_value_date,omitempty"`
@@ -263,7 +277,7 @@ func (s *Service) Snapshot(ctx context.Context) (Snapshot, error) {
 
 	needFX := !cs.USDBalance.IsZero()
 	for _, a := range list {
-		if a.Currency == "USD" {
+		if a.Currency == "USD" || a.UnderlyingAssetID.Valid {
 			needFX = true
 		}
 	}
@@ -284,9 +298,17 @@ func (s *Service) Snapshot(ctx context.Context) (Snapshot, error) {
 
 	all := make([]*Position, 0, len(list))
 	for _, a := range list {
+		// A linked BDR reads rating, thesis, fair value and catalyst from its underlying.
+		src, ratio := a.ID, decimal.NewFromInt(1)
+		if a.UnderlyingAssetID.Valid {
+			src = a.UnderlyingAssetID.Int64
+			if r, err := decimal.NewFromString(a.BdrRatio); err == nil && r.IsPositive() {
+				ratio = r
+			}
+		}
 		x := &Position{AssetID: a.ID, Ticker: a.Ticker, Market: a.Market, Kind: a.Kind, Currency: a.Currency, Sleeve: a.Sleeve,
 			Status: a.Status, Benchmark: a.Benchmark, Quantity: decimal.Zero, AvgCost: decimal.Zero,
-			PriceBRL: decimal.Zero, ValueBRL: decimal.Zero, Weight: decimal.Zero, Catalyst: catalyst[a.ID],
+			PriceBRL: decimal.Zero, ValueBRL: decimal.Zero, Weight: decimal.Zero, Catalyst: catalyst[src],
 			CostBRL: decimal.Zero, DividendsTTM: ttm[a.ID], YieldOnCost: decimal.Zero}
 		if ps, ok := pos[a.ID]; ok {
 			x.Quantity, x.AvgCost, x.CostBRL = ps.Quantity, ps.AvgCost, ps.TotalCostBRL
@@ -302,9 +324,11 @@ func (s *Service) Snapshot(ctx context.Context) (Snapshot, error) {
 		if x.Price == nil {
 			snap.Unpriced = append(snap.Unpriced, a.Ticker)
 		}
-		if fv, ok := fvs[a.ID]; ok {
+		if fv, ok := fvs[src]; ok {
 			v := fv.ValuePerShare.Decimal
-			if fv.Currency != a.Currency { // convert to the asset's currency
+			if src != a.ID { // BDR: underlying fair value in BRL per BDR
+				v = toBRL(fv.Currency, v).Div(ratio)
+			} else if fv.Currency != a.Currency { // convert to the asset's currency
 				if fv.Currency == "USD" {
 					v = v.Mul(snap.USDBRL)
 				} else if !snap.USDBRL.IsZero() {
@@ -314,7 +338,7 @@ func (s *Service) Snapshot(ctx context.Context) (Snapshot, error) {
 			x.FairValue, x.FairValueDate = &v, fv.AsOf
 			x.fvDate, _ = time.Parse(dateLayout, fv.AsOf)
 		}
-		if r, err := s.d.Ratings.Latest(ctx, a.ID); err == nil {
+		if r, err := s.d.Ratings.Latest(ctx, src); err == nil {
 			f := r.Factors()
 			x.factors = &f
 			if sc, err := p.Score(f); err == nil {
@@ -326,7 +350,7 @@ func (s *Service) Snapshot(ctx context.Context) (Snapshot, error) {
 		if x.factors == nil {
 			snap.Unrated = append(snap.Unrated, a.Ticker)
 		}
-		if th, err := s.d.Thesis.Get(ctx, a.ID); err == nil {
+		if th, err := s.d.Thesis.Get(ctx, src); err == nil {
 			x.ThesisStatus = th.Status
 		} else if !errors.Is(err, thesis.ErrNotFound) {
 			return snap, err
@@ -339,6 +363,10 @@ func (s *Service) Snapshot(ctx context.Context) (Snapshot, error) {
 		if x.Price != nil && x.FairValue != nil {
 			x.Overvalued = p.Overvalued(*x.Price, x.FairValue)
 		}
+		if src != a.ID {
+			u := src
+			x.UnderlyingAssetID = &u
+		}
 		all = append(all, x)
 		snap.EquityValue = snap.EquityValue.Add(x.ValueBRL)
 	}
@@ -350,6 +378,8 @@ func (s *Service) Snapshot(ctx context.Context) (Snapshot, error) {
 			x.Weight = x.ValueBRL.Div(snap.TotalValue)
 		}
 	}
+
+	groupPositions(all, snap.TotalValue, p.USVehicle)
 
 	// Gate for every rated asset.
 	now := s.d.Now()
@@ -400,14 +430,17 @@ func (s *Service) Snapshot(ctx context.Context) (Snapshot, error) {
 	snap.CashTarget, snap.OvervaluedShare = cr.Target, cr.OvervaluedShare
 	snap.CashSignal = cashSignal(p.CashBand(snap.CashWeight, snap.Bootstrap))
 
-	// Targets: rated core holdings plus watchlist names that pass the gate.
+	// Targets: rated core holdings plus watchlist names that pass the gate. An
+	// underlying and its BDR are one position and get one target.
 	var targeted []engine.CoreHolding
+	seenGroup := map[int64]bool{}
 	for _, x := range all {
-		if x.Sleeve != assets.SleeveCore || x.Score == nil {
+		if x.Sleeve != assets.SleeveCore || x.Score == nil || seenGroup[x.GroupID] {
 			continue
 		}
 		if x.Status == assets.StatusHolding || (x.Gate != nil && x.Gate.Passed) {
-			targeted = append(targeted, engine.CoreHolding{ID: key(x.AssetID), Score: *x.Score})
+			seenGroup[x.GroupID] = true
+			targeted = append(targeted, engine.CoreHolding{ID: key(x.GroupID), Score: *x.Score})
 		}
 	}
 	tr := p.ComputeTargets(engine.TargetInput{Holdings: targeted, PortfolioValue: snap.TotalValue,
@@ -418,11 +451,11 @@ func (s *Service) Snapshot(ctx context.Context) (Snapshot, error) {
 		byID[t.ID] = t
 	}
 	for _, x := range all {
-		if t, ok := byID[key(x.AssetID)]; ok {
+		if t, ok := byID[key(x.GroupID)]; ok {
 			tt := t
 			x.Target = &tt
 			if x.Status == assets.StatusHolding {
-				x.Band = p.Status(x.Weight, tt, snap.Bootstrap)
+				x.Band = p.Status(x.GroupWeight, tt, snap.Bootstrap)
 			}
 		}
 		if x.Status == assets.StatusHolding {
@@ -433,6 +466,64 @@ func (s *Service) Snapshot(ctx context.Context) (Snapshot, error) {
 	}
 	roundSnapshot(&snap)
 	return snap, nil
+}
+
+// groupPositions sets each position's group (a BDR joins its underlying), the
+// group's value and weight, the group's ramp stage (the furthest of its
+// members) and which member the planner buys.
+func groupPositions(all []*Position, total decimal.Decimal, vehicle string) {
+	members := map[int64][]*Position{}
+	value := map[int64]decimal.Decimal{}
+	ramp := map[int64]int{}
+	for _, x := range all {
+		g := x.AssetID
+		if x.UnderlyingAssetID != nil {
+			g = *x.UnderlyingAssetID
+		}
+		x.GroupID = g
+		members[g] = append(members[g], x)
+		value[g] = value[g].Add(x.ValueBRL)
+		ramp[g] = max(ramp[g], x.RampStage)
+	}
+	for _, x := range all {
+		x.GroupValueBRL = value[x.GroupID]
+		x.RampStage = ramp[x.GroupID]
+		if total.IsPositive() {
+			x.GroupWeight = x.GroupValueBRL.Div(total)
+		}
+	}
+	for _, ms := range members {
+		if v := buyVehicle(ms, vehicle); v != nil {
+			v.BuyVehicle = true
+		}
+	}
+}
+
+// buyVehicle picks the member of a group the planner buys: the linked BDR when
+// vehicle is bdr and one is priced, otherwise the direct asset; the other kind
+// when the preferred one is missing.
+func buyVehicle(ms []*Position, vehicle string) *Position {
+	var bdr, direct *Position
+	for _, m := range ms {
+		if m.Price == nil {
+			continue
+		}
+		if m.UnderlyingAssetID != nil {
+			if bdr == nil {
+				bdr = m
+			}
+		} else if direct == nil {
+			direct = m
+		}
+	}
+	first, second := direct, bdr
+	if vehicle != engine.USVehicleDirect {
+		first, second = bdr, direct
+	}
+	if first != nil {
+		return first
+	}
+	return second
 }
 
 func cashSignal(c engine.CashSignal) string {

@@ -102,6 +102,9 @@ type Planner struct {
 	BootstrapBelow Dec `json:"bootstrap_below" doc:"Portfolio value (BRL) below which bootstrap mode applies"`
 	MinOrderB3     Dec `json:"min_order_b3" doc:"Smallest B3 order (BRL); smaller ones are skipped"`
 	USBatchMin     Dec `json:"us_batch_min" doc:"BRL accumulated before a US purchase is proposed"`
+	// MaxNewPositions and USVehicle (spec §8.4).
+	MaxNewPositions int    `json:"max_new_positions" doc:"Most new positions one plan opens (0 for no limit)"`
+	USVehicle       string `json:"us_vehicle" doc:"How US exposure is bought: bdr (the linked BDR on B3 when one exists) or direct (US shares, batched remittance)" enum:"bdr,direct"`
 }
 
 // Tax holds the B3 tax and dividend withholding rules (spec §8.5, §11.2).
@@ -212,7 +215,8 @@ func DefaultAllocation() Allocation {
 // DefaultPlanner returns the spec defaults.
 func DefaultPlanner() Planner {
 	p := engine.DefaultParams()
-	return Planner{BootstrapBelow: money.New(p.BootstrapBelow), MinOrderB3: money.New(p.MinOrderB3), USBatchMin: money.New(p.USBatchMin)}
+	return Planner{BootstrapBelow: money.New(p.BootstrapBelow), MinOrderB3: money.New(p.MinOrderB3), USBatchMin: money.New(p.USBatchMin),
+		MaxNewPositions: p.MaxNewPositions, USVehicle: p.USVehicle}
 }
 
 // DefaultTax returns the spec defaults.
@@ -345,6 +349,10 @@ func (p Planner) Validate() error {
 	c.nonNeg("bootstrap_below", p.BootstrapBelow)
 	c.nonNeg("min_order_b3", p.MinOrderB3)
 	c.nonNeg("us_batch_min", p.USBatchMin)
+	c.intAtLeast("max_new_positions", p.MaxNewPositions, 0)
+	if p.USVehicle != engine.USVehicleBDR && p.USVehicle != engine.USVehicleDirect {
+		c.add("us_vehicle", "must be bdr or direct")
+	}
 	return c.err()
 }
 
@@ -540,6 +548,7 @@ func (s *Service) Params(ctx context.Context) (engine.Params, error) {
 		CashBandMin: a.CashBandMin.Decimal, CashBandMax: a.CashBandMax.Decimal,
 		MinScore: a.MinScore.Decimal, FairValueMaxMonths: a.FairValueMaxMonths, OpportunityMult: a.OpportunityMult.Decimal, FairValueTolerance: a.FairValueTolerance.Decimal,
 		MinOrderB3: pl.MinOrderB3.Decimal, USBatchMin: pl.USBatchMin.Decimal, RampStages: a.RampStages,
+		MaxNewPositions: pl.MaxNewPositions, USVehicle: pl.USVehicle,
 		TrimFraction: a.TrimFraction.Decimal, CooldownDays: a.CooldownDays,
 		BetterScoreDelta: a.BetterScoreDelta.Decimal, BetterUpsideDelta: a.BetterUpsideDelta.Decimal,
 		TacticalMaxLoss: t.MaxLoss.Decimal, TacticalMinSize: t.MinSize.Decimal, TacticalMaxSize: t.MaxSize.Decimal,

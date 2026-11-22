@@ -2,6 +2,12 @@ package engine
 
 import "github.com/shopspring/decimal"
 
+// How US exposure is bought (planner setting us_vehicle).
+const (
+	USVehicleDirect = "direct" // US shares through a remittance, batched
+	USVehicleBDR    = "bdr"    // the linked BDR on B3 when one exists
+)
+
 func mustDec(s string) decimal.Decimal { return decimal.RequireFromString(s) }
 
 // Params holds every threshold of the rules. Percentages are fractions.
@@ -37,6 +43,10 @@ type Params struct {
 	MinOrderB3 decimal.Decimal // R$300
 	USBatchMin decimal.Decimal // R$2,000
 	RampStages int             // 3
+	// MaxNewPositions bounds how many positions a single plan opens (0: no limit).
+	MaxNewPositions int // 2
+	// USVehicle is how US exposure is bought: USVehicleDirect or USVehicleBDR.
+	USVehicle string // bdr
 
 	// Trim (§9).
 	TrimFraction      decimal.Decimal // 25%
@@ -80,6 +90,9 @@ func DefaultParams() Params {
 		MinOrderB3: mustDec("300"),
 		USBatchMin: mustDec("2000"),
 		RampStages: 3,
+
+		MaxNewPositions: 2,
+		USVehicle:       USVehicleBDR,
 
 		TrimFraction:      mustDec("0.25"),
 		CooldownDays:      30,

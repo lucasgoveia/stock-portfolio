@@ -25,7 +25,7 @@ The system **suggests**; the user **executes** trades manually at the broker and
 | Kind | Market | Currency | Examples |
 |---|---|---|---|
 | Stock | B3 | BRL | WEGE3, ITUB4 |
-| BDR | B3 | BRL | GOGL34 |
+| BDR | B3 | BRL | GOGL34, MSFT34 (can be linked to its underlying US asset, §8.6) |
 | Stock / ETF | US (direct account) | USD | GOOGL, MSFT |
 | Tesouro Selic | Tesouro Direto | BRL | Tesouro Selic 2031 |
 | CDI instrument | Bank | BRL | CDB 100% CDI, liquidity daily |
@@ -129,7 +129,7 @@ Every change appends a row with date and reason. Targets recompute on change.
    - `n × 10% < core_budget` (too few stocks): all positions at 10%, the remainder is reported as **undeployed**; an alert suggests adding watchlist names; the undeployed share is routed to cash in contribution planning.
    - `n × 2% > core_budget` (too many stocks): all at 2%; alert "too many positions".
 
-Only core **holdings** (and watchlist names currently being bought, see §8.3) get targets.
+Only core **holdings** (and watchlist names currently being bought, see §8.3) get targets: a watchlist name that passes the buy gate (§8.1) counts as being bought, so an empty portfolio still has targets to start from. An underlying US asset and its linked BDR (§8.6) are one position and share one target.
 
 ### 6.3 Bands
 
@@ -144,6 +144,8 @@ While total portfolio value < **R$10,000** (configurable):
 - 2–10% clamps, bands, hard floor/cap and cash band alerts are **off**.
 - Core targets are pure score-proportional: `tᵢ = rawᵢ / Σ raw × core_budget`.
 - Contribution planning still uses these targets, so concentration is limited by relative score.
+- Ramp-in (§8.3) is not applied in bootstrap: a third of a tiny target would sit below the minimum order. A position is built in one go.
+- Because the planner opens only a few new positions per contribution (§8.4), the targets of the names left out are shared among the names being built, so R$1,000 fills one or two orders above the minimum instead of many slivers.
 
 Crossing the threshold switches to full rules automatically (alert notifies the switch).
 
@@ -183,17 +185,27 @@ New core positions are built in thirds: tranche targets `t/3`, `2t/3`, `t`. Each
 
 Input: contribution amount + undeployed cash from dividends and pending US bucket.
 
+0. **New positions are bounded.** At most `max_new_positions` (default 2) positions with nothing held are opened per plan, chosen opportunities first (discount order) and then by score. A pick that cannot be sized (below the minimum order or one share) is replaced by the next candidate. Positions already held are never limited.
 1. **Opportunities first**, sorted by discount to fair value (catalyst-flagged ones with no discount sort last among opportunities). Each may be funded up to its upper band, limited by its ramp tranche.
-2. **Underweights next:** compute relative gap `(target − actual) / target` for each core stock and for cash. Fund the largest gap first, up to its target (or ramp tranche); repeat until money runs out.
+2. **Underweights next:** compute relative gap `(target − actual) / target` for each core stock and for cash (ties go to the higher score). Fund the largest gap first, up to its target (or ramp tranche); repeat until money runs out.
 3. **Minimum order:** skip any B3 suggestion below R$300 (configurable); leftover rolls to the next item.
 4. **US batching:** money allocated to US assets goes into a "pending US" bucket held as cash until ≥ R$2,000 (configurable), then the planner suggests a remittance and a batched set of US buys.
 5. Tactical positions never receive contributions.
 
-Output: a plan (list of orders with quantity, estimated price, amount). The user executes at the broker, then records trades; the plan is marked executed (fully or partly).
+Output: a plan (list of orders with quantity, estimated price, amount). The plan also carries `skipped` (a reason per asset: `below_min_order`, `below_one_share`, `no_room`, `max_new_positions`, with the amount tried) and `notes` that say where US money is held in the pending bucket and why any amount is unallocated (`no_eligible_assets`, `below_min_order`, `max_new_positions`, `targets_reached`). The user executes at the broker, then records trades; the plan is marked executed (fully or partly).
 
 ### 8.5 Dividends and JCP
 
 Recorded net of withholding (JCP 17.5% IRRF per LC 224/2025; dividends above R$50k/month from one payer have 10% IRRF per Lei 15.270/2025; rates are settings), credited to cash, and treated as new money in the next contribution plan. Yield on cost tracked per position. The daily job may detect announced dividends from data sources and propose entries for confirmation.
+
+### 8.6 BDRs as a vehicle for US assets
+
+- A `bdr` asset (B3, BRL) can reference an **underlying** US asset (`underlying_asset_id`) and a **ratio** (BDRs per underlying share, decimal). Both are set when creating or editing the asset.
+- A linked BDR has no rating, thesis or fair value of its own: they come from the underlying. BDR fair value (BRL) = underlying fair value × USD/BRL (latest) ÷ ratio. The gate and opportunity test then compare that value with the BDR's B3 price.
+- Targets, bands, caps and weights count the underlying and its BDR as **one position** (combined value). Trims treat it as one position too (the larger holding carries the weight).
+- Planner setting `us_vehicle`: `bdr` (default) buys the linked BDR on B3 when one exists: a normal B3 order (whole shares, minimum order), no pending US bucket, no remittance. `direct` buys the US asset through the batched remittance (§8.4 step 4). Without a linked BDR the US asset is bought directly in both modes. Only one vehicle is a buy candidate per position.
+- BDR quotes come from the same B3 sources as stocks (COTAHIST lot market `010`, BDI `34`; matched by ticker).
+- Tax: BDR sales never use the monthly R$20,000 stock exemption (§11.2).
 
 ## 9. Trimming and selling
 
@@ -257,7 +269,7 @@ All rates and limits are settings; verify current law before release (see §17).
 
 ### 11.2 B3 stocks (swing trade)
 
-- Monthly sales of stocks ≤ R$20,000 → gains exempt.
+- Monthly sales of stocks ≤ R$20,000 → gains exempt. The exemption applies to the `stock` kind only: BDR and ETF sales neither count toward the R$20,000 nor get the exemption, and their gains are always taxed at the swing rate.
 - Above that, gains taxed 15%; DARF code 6015 due by last business day of the following month. Losses carried forward.
 - Trim planning: when a suggested trim would push the month's sales above R$20,000, the system offers (a) split across months, (b) proceed with estimated tax shown.
 - Core and tactical sales share the same monthly pool; warn when a tactical exit consumes room needed by planned core trims.
